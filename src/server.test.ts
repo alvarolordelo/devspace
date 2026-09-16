@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
@@ -14,7 +15,13 @@ import { buildLocalAgentProviderStatuses } from "./local-agent-catalog.js";
 import type { SubagentsConfig } from "./local-agent-config.js";
 import { createReviewCheckpointManager } from "./review-checkpoints.js";
 import { ProcessSessionManager } from "./process-sessions.js";
-import { createMcpServer, createServer } from "./server.js";
+import {
+  configureHttpServer,
+  createMcpServer,
+  createServer,
+  DEVSPACE_HTTP_HEADERS_TIMEOUT_MS,
+  DEVSPACE_HTTP_KEEP_ALIVE_TIMEOUT_MS,
+} from "./server.js";
 import { SqliteWorkspaceStore } from "./workspace-store.js";
 import { WorkspaceRegistry } from "./workspaces.js";
 import { writeTestDevspaceConfig } from "./test-support/config.test.js";
@@ -393,6 +400,43 @@ test("open_workspace scopes checkout reuse to OpenAI session metadata", async (t
   assert.ok(Array.isArray(structuredContent(unscoped).agents_files));
 });
 
+test("server trusts only loopback reverse proxies automatically", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "devspace-trust-proxy-test-"));
+  t.after(async () => rm(root, { recursive: true, force: true }));
+
+  const cases = [
+    { host: "127.0.0.1", trustProxy: false, expected: "loopback" },
+    { host: "localhost", trustProxy: false, expected: "loopback" },
+    { host: "0.0.0.0", trustProxy: false, expected: false },
+    { host: "0.0.0.0", trustProxy: true, expected: true },
+  ] as const;
+
+  for (const [index, testCase] of cases.entries()) {
+    const config = loadConfig(writeTestDevspaceConfig(join(root, `config-${index}`), {
+      server: {
+        host: testCase.host,
+        port: 1,
+        publicBaseUrl: "https://example.test",
+        trustProxy: testCase.trustProxy,
+      },
+      storage: { stateDir: join(root, `state-${index}`) },
+      workspaces: { allowedRoots: [root] },
+      logging: { level: "silent" },
+    }));
+    const running = createServer(config, { incomingArtifactAdapters: [] });
+    assert.equal(running.app.get("trust proxy"), testCase.expected);
+    await running.close();
+  }
+});
+
+test("HTTP listener uses a tunnel-safe keep-alive timeout", () => {
+  const httpServer = createHttpServer();
+  configureHttpServer(httpServer);
+
+  assert.equal(httpServer.keepAliveTimeout, DEVSPACE_HTTP_KEEP_ALIVE_TIMEOUT_MS);
+  assert.equal(httpServer.headersTimeout, DEVSPACE_HTTP_HEADERS_TIMEOUT_MS);
+});
+
 test("HTTP endpoint serves modern MCP and stateless legacy clients", async (t) => {
   const { root, localBaseUrl, accessToken } = await httpServerFixture(
     t,
@@ -426,6 +470,8 @@ test("HTTP endpoint serves modern MCP and stateless legacy clients", async (t) =
     {},
   );
   assert.equal(listed.status, 200, await listed.clone().text());
+  assert.ok(Number(listed.headers.get("content-length")) > 0);
+  assert.equal(listed.headers.get("transfer-encoding"), null);
   const listBody = await listed.json() as {
     result?: { tools?: Array<{ name?: string }> };
   };
@@ -594,6 +640,7 @@ interface HttpServerFixture {
   root: string;
   localBaseUrl: string;
   accessToken: string;
+  httpServer: ReturnType<typeof createHttpServer>;
   running: ReturnType<typeof createServer>;
 }
 
@@ -617,6 +664,7 @@ async function httpServerFixture(
   const running = createServer(config, { incomingArtifactAdapters: [] });
   const httpServer = running.app.listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => httpServer.once("listening", resolve));
+  configureHttpServer(httpServer);
 
   t.after(async () => {
     await new Promise<void>((resolve, reject) => {
@@ -634,7 +682,7 @@ async function httpServerFixture(
     config.publicBaseUrl,
     ownerToken,
   );
-  return { root, localBaseUrl, accessToken, running };
+  return { root, localBaseUrl, accessToken, httpServer, running };
 }
 
 async function fixture(
