@@ -58,6 +58,8 @@ import {
   type LocalAgentProviderStatus,
 } from "./local-agent-catalog.js";
 import { getToolSurface } from "./tool-surfaces/index.js";
+import { loadLaoConfig } from "./lao/config.js";
+import { registerLaoMcpTools } from "./lao/mcp-tools.js";
 import {
   contentText,
   logFailedToolResponse,
@@ -816,6 +818,8 @@ function registerMcpSurface(
     workspaces,
     processSessions,
   });
+
+  registerLaoMcpTools(registrationTarget, loadLaoConfig());
 
   registerAppTool(
     registrationTarget,
