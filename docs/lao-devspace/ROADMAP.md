@@ -32,6 +32,8 @@ Local Agent Orchestrator + DevSpace: supervisor ChatGPT, orquestrador DevSpace M
 
 MCP existente, OAuth, approved roots, sessões, worktrees e subagentes permanecem compatíveis. Nenhum merge automático; nenhuma edição no checkout principal pelo executor local sem revisão e autorização. Testes unitários, integração, smoke test real em worktree e rollback para cada versão.
 
-## Estado deste preparativo
+## Estado atual de implementacao
 
-Branch e worktree criados; ícones e tokens locais gerados. PNGs originais do pacote de referência aguardam importação usando `scripts/import-lao-assets.ps1`. Ainda sem instalação do serviço, execução de agente ou commit de assets.
+Branch e worktree foram criados e publicados na feature. Assets aprovados e motor de estado do monitor estao nos commits `3cca46b` e `0f31c0b`. O nucleo de contratos, persistencia, health, Ollama e ferramentas MCP opt-in estao em desenvolvimento. Para status por RF, evidencias, testes e commits, consultar [PROGRESS.md](PROGRESS.md).
+
+O servico Windows, tray e autostart nao foram instalados; dependerao de aprovacao explicita.
