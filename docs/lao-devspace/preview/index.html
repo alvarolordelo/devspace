@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LAO DevSpace — Monitor (demonstração)</title>
+<style>
+:root{font-family:"Segoe UI",Arial,sans-serif;color:#111827;background:#d9eafe;--green:#16a34a;--red:#ef3339;--yellow:#f4b400;--gray:#94a3b8}
+*{box-sizing:border-box}body{margin:0;padding:24px 24px 90px;min-height:100vh;background:radial-gradient(circle at 0 95%,#0568e8 0,transparent 42%),linear-gradient(130deg,#deedfd,#adcef2)}
+button{font:inherit;cursor:pointer}button:focus-visible{outline:3px solid #0b66ea;outline-offset:2px}
+.toolbar{margin:0 auto;max-width:1050px;background:#ffffffeb;border:1px solid #d7e1ee;border-radius:14px;padding:12px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.toolbar button{background:white;padding:9px 12px;border:1px solid #d3dfef;border-radius:9px}
+.toolbar button[aria-pressed=true]{background:#e8f2ff;border-color:#619efa;color:#075cc8}
+.caption{font-size:12px;color:#64748b}.popup{width:min(420px,100%);background:white;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 14px 44px #172d4b4a;margin:24px 9% 10px auto;padding:0 18px 12px}
+.head{display:flex;align-items:center;gap:14px;padding:20px 0 16px;border-bottom:1px solid #e2e8f0}.head img{width:52px;height:52px}.head b{font-size:21px}.head .sub{font-size:16px;margin-top:6px;color:var(--c);display:flex;align-items:center;gap:8px}
+.dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--c)}.item{display:flex;align-items:center;gap:13px;padding:12px 0;border-bottom:1px solid #e2e8f0;font-size:14px}
+.item .text{flex:1}.item .value{max-width:50%;text-align:right;color:#344256;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.task{margin:16px 0 5px;padding:17px;border-radius:12px;border:1px solid #e2e8f0;background:#fbfcfe}.task small{color:#667085}.task strong{display:block;margin:7px 0 9px}.task p{margin:7px 0;color:#58677b}.actions button{border:none;border-bottom:1px solid #e2e8f0;padding:12px 2px;width:100%;background:white;display:flex;justify-content:space-between;text-align:left}.actions button:last-child{border:0}
+.dashboard{display:none;margin:22px auto;max-width:1050px;padding:22px;background:#fff;border-radius:16px;box-shadow:0 16px 50px #172d4b3a}
+.dashboard.on{display:block}.dashboard h2{margin:0 0 18px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.card{padding:18px;border:1px solid #e2e8f0;border-radius:12px}.card b{display:block;margin:6px 0}.card span{color:#64748b}
+.taskrow{padding:14px 0;border-bottom:1px solid #e2e8f0}.taskrow:last-child{border:0}
+.tray{position:fixed;bottom:0;left:0;right:0;background:#f7fbff;padding:13px;display:flex;justify-content:end;gap:13px;align-items:center;border-top:1px solid #cbd8e5}.tray img{width:30px;height:30px}
+@media(max-width:600px){.popup{margin:22px auto}.toolbar{justify-content:center}}
+</style></head>
+<body>
+<div class="toolbar"><div><b>LAO DevSpace — prévia visual</b><div class="caption">Demonstração estática, sem controlar os serviços reais</div></div>
+<div><button id="active" onclick="selectState('active')">● Ativo</button>
+<button id="review" onclick="selectState('review')">● Revisão</button>
+<button id="offline" onclick="selectState('offline')">● Parado</button>
+<button id="idle" onclick="selectState('idle')">● Desligado</button></div></div>
+<div id="popup" class="popup"></div>
+<div id="dashboard" class="dashboard"><h2>LAO DevSpace — Painel de status</h2><div class="cards">
+<div class="card">LAO Service<b>Online</b><span>Última sondagem: agora</span></div>
+<div class="card">DevSpace MCP<b>Conectado</b><span>Integração MCP</span></div>
+<div class="card">Ollama<b>Online</b><span>Granite 4.2 8B</span></div>
+<div class="card">Recursos<b>GPU: 100%</b><span>VRAM: 5,7 / 6,0 GB</span></div>
+</div><h3>Tarefas</h3><div class="taskrow">Validar CPF no cadastro — Em avaliação</div><div class="taskrow">Gerar teste de integração — Concluída</div><div class="taskrow">Revisar fluxo do monitor — Aguardando revisão</div><p class="caption">Valores meramente ilustrativos para validação de layout.</p></div>
+<div class="tray"><span>LAO DevSpace</span><img id="trayIcon" alt="ícone da bandeja"><span>▾ ◉ ▥ 14:27</span></div>
+<script>
+const states={active:{label:'Ativo',color:'#16a34a',service:'Online',mcp:'Conectado',ollama:'Online',model:'Granite 4.2 8B',task:'Validar CPF no cadastro',phase:'Avaliação',actions:['Abrir painel','Ver logs','Reiniciar serviço','Configurações']},
+review:{label:'Aguardando revisão',color:'#f4b400',service:'Online',mcp:'Conectado',ollama:'Online',model:'Granite 4.2 8B',task:'Implementar validação de CPF',phase:'Revisão',actions:['Abrir painel','Ver revisão','Ver logs','Configurações']},
+offline:{label:'Serviço parado',color:'#ef3339',service:'Parado',mcp:'Desconectado',ollama:'Offline',model:'Indisponível',task:'O orquestrador não está operacional',phase:'Erro',actions:['Iniciar serviço','Tentar novamente','Ver logs','Configurações']},
+idle:{label:'Desconectado',color:'#94a3b8',service:'Não iniciado',mcp:'Não verificado',ollama:'Não verificado',model:'Indisponível',task:'Sem tarefa em execução',phase:'Parado',actions:['Iniciar serviço','Configurações']}};
+function selectState(key){
+let s=states[key];document.documentElement.style.setProperty('--c',s.color);
+let icon='../assets/icons/svg/lao-tray-'+key+'.svg';document.getElementById('trayIcon').src=icon;
+document.querySelectorAll('.toolbar button').forEach(b=>b.setAttribute('aria-pressed',String(b.id===key)));
+let rows=[['LAO Service',s.service],['DevSpace MCP',s.mcp],['Ollama',s.ollama],['Modelo ativo',s.model],['GPU',key==='offline'?'0%':'100%'],['VRAM',key==='offline'?'0,4 / 6,0 GB':'5,7 / 6,0 GB'],['Fila',key==='offline'?'0 tarefas':'2 tarefas'],['Última execução','há 3 min']];
+document.getElementById('popup').innerHTML='<header class="head"><img src="'+icon+'" alt=""><div><b>LAO DevSpace</b><div class="sub"><i class="dot"></i>'+s.label+'</div></div></header>'+rows.map(([a,b])=>'<div class="item"><i class="dot"></i><span class="text">'+a+'</span><span class="value">'+b+'</span></div>').join('')+'<div class="task"><small>Tarefa atual</small><strong>'+s.task+'</strong><p>Executor: '+s.model+'</p><p>Fase: '+s.phase+'</p><p>Tempo: 01:42</p></div><div class="actions">'+s.actions.map(a=>'<button onclick="action(\''+a+'\')">'+a+' <span>›</span></button>').join('')+'</div>';
+}
+function action(a){if(a==='Abrir painel'){document.getElementById('dashboard').classList.toggle('on')}else alert('Demonstração: '+a)}
+selectState('active');
+</script></body></html>

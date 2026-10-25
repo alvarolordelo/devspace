@@ -1,0 +1,40 @@
+{
+  "active": {
+    "label": "Ativo",
+    "color": "active",
+    "actions": [
+      "Abrir painel",
+      "Ver logs",
+      "Reiniciar serviço",
+      "Configurações"
+    ]
+  },
+  "review": {
+    "label": "Aguardando revisão",
+    "color": "review",
+    "actions": [
+      "Abrir painel",
+      "Ver revisão",
+      "Ver logs",
+      "Configurações"
+    ]
+  },
+  "offline": {
+    "label": "Serviço parado",
+    "color": "offline",
+    "actions": [
+      "Iniciar serviço",
+      "Tentar novamente",
+      "Ver logs",
+      "Configurações"
+    ]
+  },
+  "idle": {
+    "label": "Desconectado",
+    "color": "idle",
+    "actions": [
+      "Iniciar serviço",
+      "Configurações"
+    ]
+  }
+}
