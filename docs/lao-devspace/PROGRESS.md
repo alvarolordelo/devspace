@@ -10,12 +10,12 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 |---|---|---|
 | F0 Base segura | [x] | Branch e worktree separados, commits no fork, baseline e rollback documentados |
 | F1 Núcleo LAO | [~] | Contratos, feature flag OFF, SQLite, tarefas, execuções, eventos, estados, health e MCP opt-in |
-| F2 Ollama | [~] | Modelos reais e Granite validado em inferência read-only com persistência e reabertura SQLite; transporte MCP com modelo real ainda não verificado |
+| F2 Ollama | [~] | Granite executado via runner e handler `lao_delegate` real, com reabertura SQLite; canal MCP autenticado de ponta a ponta ainda não verificado |
 | F3 Escrita isolada | [~] | Guarda de worktree gerenciado e broker interno de patch com arquivos permitidos, diff e sem shell; delegação via modelo/MCP ainda pendente |
 | F4 Avaliação/revisão | [~] | Revisão explícita e `lao_retry` com até duas correções supervisionadas e feedback registrado; diff de worktree disponível, mas testes determinísticos e promoção pendentes |
 | F5 Serviço e tray | [~] | Daemon experimental em primeiro plano, health local, recovery e CLI validados; serviço SCM, tray e autostart pendentes |
 | F6 Painel | [ ] | Assets e layouts aprovados; painel funcional, notificações e histórico UI pendentes |
-| F7 Release | [~] | CI Windows expôs alias `RUNNER~1` diferente de `runneradmin` no TEMP; testes ajustados para realpath assíncrono e novo run pendente; instalador e release pendentes |
+| F7 Release | [~] | GitHub Actions Windows validado com sucesso no run `40254905076` (typecheck, build, testes LAO, regressão e opt-in); instalador, rollback testado e release pendentes |
 | F8 Multimodelo | [ ] | Benchmark de Granite vs Spark com cinco repetições e failover pendentes |
 
 ## Requisitos funcionais (RF)
@@ -27,7 +27,7 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-03 Criar tarefa | [x] | `contracts.ts`, `task-store.ts`, `lao_delegate`; objetivo, workspace, critérios, permissões, orçamento, ID e persistência testados em read-only |
 | RF-04 Escrita isolada | [~] | `write-boundary.ts` e `worktree-patch.ts` aplicam patch real apenas em worktree detached gerenciado e caminhos autorizados; criação do worktree por tarefa/MCP pendente |
 | RF-05 Política de ferramentas | [~] | Guardas para leitura seletiva e para patch de até 5 ações em arquivos explicitamente listados, shell negado; broker de comandos/execução do modelo pendente |
-| RF-06 Executar agente | [~] | `task-runner.ts`: execução real Granite somente-leitura (resultado persistido e reaberto); ferramentas supervisionadas e execução MCP real pendentes |
+| RF-06 Executar agente | [~] | `task-runner.ts`: Granite real via runner e handler MCP de teste, persistência e reconsulta; ferramentas supervisionadas e transporte MCP autenticado ainda pendentes |
 | RF-07 Avaliar com provas | [~] | Resposta entra em `awaiting_review` e revisão exige evidências; `review-evidence.ts` coleta diff real em worktree; faltam testes automatizados e critérios ponta a ponta |
 | RF-08 Correções limitadas | [~] | `lao_retry` reexecuta tarefa read-only somente após `needs_revision`, com feedback e limite de 2 correções; orquestração automática de correções de escrita pendente |
 | RF-09 Aprovação explícita | [~] | `lao_review` registra decisão; aprovações de tarefas com escrita são bloqueadas até existir pipeline determinístico completo |
@@ -67,12 +67,12 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F3-01 | `write-boundary.ts` e teste | Root de worktree, canonical path, managed/detached e shell negado | `30c2b2c` |
 | F4-02 | `review-evidence.ts`, `task-store.ts`, testes | Git diff, untracked, whitespace e HEAD coletados em worktree temporário; não declara testes/verificação e bloqueia aprovação de escrita | `3e65541` |
 | F2-03 | Granite real, `scripts/lao-live-smoke.mjs` | `/api/chat` real, `think: false`, tarefa `4b1d9a53-d1df-456e-93f3-821c8158ea1a`, estado `awaiting_review`, run `completed`, SQLite reaberto, hash SHA-256 e seis eventos; 2.027 ms. Sem MCP real ou critérios aprovados. | Evidência local 25/10/2026 |
-| F7-01 | Testes Windows em GitHub Actions | Runs `40252484850`, `40254006895` e `40254263498`: 3 falhas; log isolou TEMP `RUNNER~1` vs `runneradmin`; `realpathSync` mantém alias, corrigido com `await realpath()` como resolução de produção. | Nova execução remota pendente |
-| F4-03 | `lao_retry`, `task-runner.ts` e testes | Correção pelo supervisor com nota/evidência no novo prompt, até 2 reexecuções, workspace autorizado e estado exigido; saída sempre em revisão; 1 teste de integração MCP simulado adicionado. | Aguardando CI |
+| F7-01 | Testes Windows em GitHub Actions | Runs anteriores falharam por alias de TEMP `RUNNER~1` vs `runneradmin`; fixtures normalizadas via `await realpath()`. Run `40254905076` hospedado no Windows: **success**, todas as etapas aprovadas. | `cf0962d` (correção); run `40254905076` |
+| F4-03 | `lao_retry`, `task-runner.ts` e testes | Duas correções máximas com autorização e feedback; teste MCP simulado aprovado e handler real com Granite: tarefa `3ffdd197-a77c-4832-bfc3-c585ac3b0f09`, duas execuções `completed`, revisão obrigatória; **não comprova transporte autenticado**. | `38bc634`; CI `40254905076` |
 
 **Baseline original:** 160 testes, 153 aprovados, 7 ignorados; `pnpm build` e `pnpm typecheck` verdes.
 
-**Testes do LAO (rodada atual):** 64 casos, 63 aprovados, 1 ignorado (symlink sem privilégio), 0 falhas. Regressão completa: **214 testes, 206 aprovados, 8 ignorados, 0 falhas**. TypeScript e build aprovados localmente. Nova execução GitHub Actions Windows pendente após correção do alias de TEMP.
+**Testes do LAO (rodada atual):** 64 casos, 63 aprovados, 1 ignorado (symlink sem privilégio), 0 falhas. Regressão completa: **214 testes, 206 aprovados, 8 ignorados, 0 falhas**. TypeScript e build aprovados localmente. GitHub Actions Windows run `40254905076` **aprovado**.
 
 ## Limitações importantes
 
@@ -83,4 +83,4 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 - O daemon experimental é manual e opt-in. **Não** há serviço Windows SCM, tray nem autostart instalados.
 - Sem merge em `main`, sem serviços Windows, sem alterações no boot, sem execução em produção.
 
-**Próximos gates:** executar delegação real via transporte MCP da feature, implementar broker limitado, worktree por tarefa e evidências determinísticas; confirmar CI hospedada; depois serviço Windows e tray, sujeitos a testes e autorização operacional.
+**Próximos gates:** validar delegação real pelo transporte MCP autenticado da feature; implementar broker limitado, worktree por tarefa e evidências determinísticas; depois serviço Windows e tray, sujeitos a testes e autorização operacional.
