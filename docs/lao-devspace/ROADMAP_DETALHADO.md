@@ -407,3 +407,29 @@ forte em ambiente, painel responsivo, status do Ollama/DevSpace e historico
 SQLite. API somente-leitura \`/dashboard/api/status\` e
 \`/dashboard/api/tasks\` e protegida por Bearer. Esta entrega NAO equivale
 a tray/servico/autostart; veja \`DASHBOARD_MVP.md\`.
+
+### F2-07 - Caminho MCP autenticado (parcial)
+
+Adicionado teste E2E do listener HTTP e OAuth reais: lista de ferramentas,
+abertura do workspace, delegacao read-only, resultado persistido,
+negacao sem token e modelo Ollama simulado. Real Granite por transporte
+autenticado permanece como gate final de F2. Nenhum segredo de usuario
+foi coletado nem armazenado no repositorio.
+
+### Gate F2/F3 autenticado local aprovado
+
+Smoke opt-in confirmou via HTTP MCP autentico, OAuth temporario, workspace
+de feature real, delegado read-only e patch de escrita do Granite real em
+worktree isolado. Resultado com hash/sintaxe verificados e origem intacta;
+sem aprovacao ou merge. O teste repetivel e
+\`src/lao/mcp-http-e2e.test.ts\`; o modo live requer \`LAO_MCP_LIVE=true\`.
+Nao e prova de login do ChatGPT em producao. F4 continua com gates de testes
+de suite ampla, aceite deterministico e aprovacao manual.
+
+### F5-01 - Monitor da bandeja Windows (experimental)
+
+Entregue script WinForms/STA que usa icons ICO aprovados, evita duplicacao
+por SID e reflete health real via loopback (offline/idle/active).
+Acoes seguras: abrir painel, copiar diagnostico e sair somente do tray.
+Testes de parser/icon e modo CheckOnly aprovados. Nao e servico SCM nem
+autostart e nao foi iniciado em sessao grafica. Veja \`TRAY_MVP.md\`.
