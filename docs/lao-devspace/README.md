@@ -13,6 +13,10 @@ O monitor é uma extensão opcional do DevSpace. A versão estável deve permane
 
 Importe o pacote original pelo script `scripts/import-lao-assets.ps1`. PNGs de referência devem ser preservados exatamente; SVGs e ícones nativos são assets implementáveis produzidos com base no conceito.
 
+## Versao fixa do DevSpace
+
+O LAO usa o DevSpace **1.0.8** ancorado no commit `13c99ee`. Consulte [a politica de pin e atualizacoes](DEVSPACE_VERSION_POLICY.md) para a separacao entre atualizacoes LAO e upgrades expressos do DevSpace.
+
 ## Implementação
 
 - `design/design-tokens.json`: cores, tipografia e geometria do popup.

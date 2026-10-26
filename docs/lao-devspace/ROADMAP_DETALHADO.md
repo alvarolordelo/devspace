@@ -268,6 +268,8 @@ Sem datas arbitrárias: cada fase passa para a próxima apenas quando seus crit�
 
 ### Dependências críticas
 
+- **Gate transversal de versao fixa:** releases/atualizacoes do LAO nao devem atualizar DevSpace automaticamente. Fixar a base em `DEVSPACE_VERSION_PIN.json`, executar `scripts/lao-verify-devspace-pin.mjs` antes de instalar dependencias e manter o `pnpm-lock.yaml` congelado. Upgrade DevSpace exige aprovacao separada, nova baseline, testes e plano de rollback (ver `DEVSPACE_VERSION_POLICY.md`).
+
 - F0 precede qualquer alteração no fork ou instalação Windows.
 - F1 é base para F2 e para o health básico.
 - F2 precede F3; F3 precede correções automatizadas de F4.

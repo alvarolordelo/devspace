@@ -8,14 +8,14 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 
 | Fase | Estado | Situação comprovada |
 |---|---|---|
-| F0 Base segura | [x] | Branch e worktree separados, commits no fork, baseline e rollback documentados |
+| F0 Base segura | [x] | Branch/worktree separados; DevSpace base v1.0.8 fixado no commit `13c99ee` com lockfile imutavel, verificador `lao-verify-devspace-pin.mjs` e teste negativo de upgrade |
 | F1 Núcleo LAO | [~] | Contratos, feature flag OFF, SQLite, tarefas, execuções, eventos, estados, health e MCP opt-in |
 | F2 Ollama | [~] | Granite executado via runner e handler `lao_delegate` real, com reabertura SQLite; canal MCP autenticado de ponta a ponta ainda não verificado |
 | F3 Escrita isolada | [~] | `lao_write_prepare` cria worktree gerenciado de feature autorizada; `lao_write_run` recebe patch do modelo real sem tools e aplica pelo broker com allowlist, hashes e diff persistido; transporte MCP autenticado e teste determinístico ainda pendentes |
 | F4 Avaliação/revisão | [~] | `lao_result` inclui evidências e diff persistido do worktree; revisão explícita e até 2 correções read-only; aprovação de escrita bloqueada até testes/aceite determinísticos |
 | F5 Serviço e tray | [~] | Daemon experimental em primeiro plano, health local, recovery e CLI validados; serviço SCM, tray e autostart pendentes |
 | F6 Painel | [ ] | Assets e layouts aprovados; painel funcional, notificações e histórico UI pendentes |
-| F7 Release | [~] | GitHub Actions Windows validado com sucesso no run `40254905076` (typecheck, build, testes LAO, regressão e opt-in); instalador, rollback testado e release pendentes |
+| F7 Release | [~] | CI Windows anterior validado; adicionado gate de versao fixa ANTES de instalar dependencias e `pnpm install --frozen-lockfile`; CI atual ainda precisa ser verificado; instalador e rollback pendentes |
 | F8 Multimodelo | [ ] | Benchmark de Granite vs Spark com cinco repetições e failover pendentes |
 
 ## Requisitos funcionais (RF)
@@ -68,6 +68,7 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F4-02 | `review-evidence.ts`, `task-store.ts`, testes | Git diff, untracked, whitespace e HEAD coletados em worktree temporário; não declara testes/verificação e bloqueia aprovação de escrita | `3e65541` |
 | F2-03 | Granite real, `scripts/lao-live-smoke.mjs` | `/api/chat` real, `think: false`, tarefa `4b1d9a53-d1df-456e-93f3-821c8158ea1a`, estado `awaiting_review`, run `completed`, SQLite reaberto, hash SHA-256 e seis eventos; 2.027 ms. Sem MCP real ou critérios aprovados. | Evidência local 25/10/2026 |
 | F7-01 | Testes Windows em GitHub Actions | Runs anteriores falharam por alias de TEMP `RUNNER~1` vs `runneradmin`; fixtures normalizadas via `await realpath()`. Run `40254905076` hospedado no Windows: **success**, todas as etapas aprovadas. | `cf0962d` (correção); run `40254905076` |
+| F0-02 | `DEVSPACE_VERSION_PIN.json`, `lao-verify-devspace-pin.mjs`, teste e workflow | Travamento DevSpace v1.0.8 / `13c99ee`: fonte-base, package.json, pnpm lock e workspace, core server restrito a integracao LAO; testes negativos para versao, dependencias, lock e core; CI executa preflight antes do install. | Aguardando CI hospedada |
 | F4-03 | `lao_retry`, `task-runner.ts` e testes | Duas correções máximas com autorização e feedback; teste MCP simulado aprovado e handler real com Granite: tarefa `3ffdd197-a77c-4832-bfc3-c585ac3b0f09`, duas execuções `completed`, revisão obrigatória; **não comprova transporte autenticado**. | `38bc634`; CI `40254905076` |
 | F3-03 | `write-task-runner.ts`, `mcp-tools.ts`, `task-store.ts` e broker | Teste MCP com Git worktree real (simulou modelo), rejeição de paths, origem `main`, patch malicioso, alterações prévias e autoaprovação; reabertura de evidências; teste real Granite em repo temporário: tarefa `8ef03dca-9e2a-4ec6-b544-4be6fc19244a`, 2.356 ms, conteúdo correto, origem intacta; formatação de Add File normalizada com hashes separados. | Commit e CI desta rodada |
 
@@ -84,4 +85,4 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 - O daemon experimental é manual e opt-in. **Não** há serviço Windows SCM, tray nem autostart instalados.
 - Sem merge em `main`, sem serviços Windows, sem alterações no boot, sem execução em produção.
 
-**Próximos gates:** validar fluxo novo no MCP autenticado da feature, implementar executor de testes determinísticos autorizado e revisão com critérios verificáveis, manter aprovação de escrita bloqueada até o aceite; depois serviço Windows e tray, sujeitos a autorização operacional.
+**Próximos gates:** confirmar CI Windows com pin da base; validar fluxo novo no MCP autenticado da feature e implementar executor deterministico de testes autorizado; manter aprovacao de escrita bloqueada ate aceite. Servico Windows e tray dependem de autorizacao operacional.
