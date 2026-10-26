@@ -12,7 +12,7 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F1 Núcleo LAO | [~] | Contratos, feature flag OFF, SQLite, tarefas, execuções, eventos, estados, health e MCP opt-in |
 | F2 Ollama | [~] | Listagem real de modelos e inspeção Granite; execução read-only mockada, inferência real não validada |
 | F3 Escrita isolada | [~] | Guarda explícita de worktree gerenciado/desanexado; execução de patches por agente pendente |
-| F4 Avaliação/revisão | [~] | Revisões explícitas e limite de duas correções; ainda sem validação determinística de testes e diff |
+| F4 Avaliação/revisão | [~] | Revisões explícitas, evidência determinística do diff de worktree e limite de duas correções; execução de testes e promoção pendentes |
 | F5 Serviço e tray | [ ] | Serviço Windows, autostart e tray pendentes; instalação exige autorização explícita |
 | F6 Painel | [ ] | Assets e layouts aprovados; painel funcional, notificações e histórico UI pendentes |
 | F7 Release | [ ] | Instalação reversível, validações Windows, CI, rollback e release candidate pendentes |
@@ -28,9 +28,9 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-04 Escrita isolada | [~] | `write-boundary.ts` valida worktree gerenciado, detached e containment; patch real ainda não ligado |
 | RF-05 Política de ferramentas | [~] | Guardas de workspace e shell proibido no fluxo read-only; allowlist/broker real pendente |
 | RF-06 Executar agente | [~] | `task-runner.ts`: execução de chat sem tools, deadline, cancelamento, resultado e erros SQL; execução real com Granite pendente |
-| RF-07 Avaliar com provas | [~] | Resposta entra em `awaiting_review`; não é aprovação; faltam testes/diff determinísticos |
+| RF-07 Avaliar com provas | [~] | Resposta entra em `awaiting_review` e revisão exige evidências; `review-evidence.ts` coleta diff real em worktree; faltam testes automatizados e critérios ponta a ponta |
 | RF-08 Correções limitadas | [~] | Estado `needs_revision`, máximo 2; repetição automática limitada pendente |
-| RF-09 Aprovação explícita | [~] | `lao_review`, decisão e evidência persistidas; promoção segura de patches não implementada |
+| RF-09 Aprovação explícita | [~] | `lao_review` registra decisão; aprovações de tarefas com escrita são bloqueadas até existir pipeline determinístico completo |
 | RF-10 Persistência/reconsulta | [~] | `lao_result` lê SQLite de tarefas/execuções/eventos/revisões, testes de reabertura e interrupção; recuperação automática no boot pendente |
 | RF-11 Boot | [ ] | Não instalado |
 | RF-12 Saúde | [~] | `monitor-status.ts`, `health.ts` e `lao_status`; faltam probes autenticados e daemon real |
@@ -61,11 +61,12 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F1-06/F2-04 | `task-runner.ts`, `task-store.ts`, testes | Execução simulada com status, traces, persistência, timeout, cancelamento e revisão | `5a9b913` |
 | F2-05 | `mcp-tools.ts`, `mcp-delegation.test.ts` | Delegate, result, review, workspace negado, no auto-approval | `5a9b913` |
 | F3-01 | `write-boundary.ts` e teste | Root de worktree, canonical path, managed/detached e shell negado | `30c2b2c` |
+| F4-02 | `review-evidence.ts`, `task-store.ts`, testes | Git diff, untracked, whitespace e HEAD coletados em worktree temporário; não declara testes/verificação e bloqueia aprovação de escrita | `3e65541` |
 | F2-03 | Modelo Granite local | Inferência **não validada**: ferramenta bloqueou chamada real por configuração de segurança; NÃO atribuir sucesso | [!] |
 
 **Baseline original:** 160 testes, 153 aprovados, 7 ignorados; `pnpm build` e `pnpm typecheck` verdes.
 
-**Testes do LAO (última rodada específica):** 50 aprovados, 0 falhas. Suite completa após as últimas alterações: **200 testes, 193 aprovados, 7 ignorados e 0 falhas**. **TypeScript e build aprovados**.
+**Testes do LAO (última rodada específica):** 52 aprovados, 0 falhas. Suite completa após as últimas alterações: **202 testes, 195 aprovados, 7 ignorados e 0 falhas**. **TypeScript e build aprovados**.
 
 ## Limitações importantes
 
@@ -76,4 +77,4 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 - O servidor LAO de saúde é código opt-in, **não** um serviço Windows instalado.
 - Sem merge em `main`, sem serviços Windows, sem alterações no boot, sem execução em produção.
 
-**Próximos gates:** concluir a validação full suite/build; executar leitura real com Granite quando permitido; integrar broker de ferramentas limitado, worktree por tarefa e verificador de diff/testes; depois serviço Windows e tray com aprovação do usuário.
+**Próximos gates:** executar leitura real com Granite quando permitido; integrar broker de ferramentas limitado, worktree por tarefa e verificador de diff/testes; depois serviço Windows e tray com aprovação do usuário.

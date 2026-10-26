@@ -33,4 +33,4 @@ O LAO nao e iniciado automaticamente, nao altera banco legado e nao instala serv
 
 ## Regressao atualizada
 
-Suite final apos mudancas (25/10/2026): 200 testes, 193 OK, 7 skip, 0 falhas; build e typecheck aprovados.
+Suite final apos mudancas (25/10/2026): 202 testes, 195 OK, 7 skip, 0 falhas; build e typecheck aprovados.
