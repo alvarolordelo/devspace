@@ -29,6 +29,7 @@ test("read-only Ollama chat sends no tool definitions or shell access", async ()
     assert.equal(url, "http://127.0.0.1:11434/api/chat");
     const input = JSON.parse(String(init.body));
     assert.equal(input.stream, false);
+    assert.equal(input.think, false);
     assert.equal(input.tools, undefined);
     assert.equal(input.options.num_predict, 12);
   }));

@@ -64,7 +64,8 @@ export class LaoOllamaClient {
     if (!model || model.length > 200) throw new RangeError("Invalid model name");
     const result = chatSchema.safeParse(await this.request("/api/chat", {
       model, messages: [{ role: "user", content: prompt }],
-      stream: false, options: { num_predict: maxTokens },
+      // A bounded response must not consume its entire token budget on hidden thinking.
+      stream: false, think: false, options: { num_predict: maxTokens },
     }, { signal: options.signal, timeoutMs: options.timeoutMs ?? 90_000 }));
     if (!result.success || result.data.done !== true || result.data.message.role !== "assistant") {
       throw new LaoOllamaError("INVALID_RESPONSE", "Incomplete or invalid Ollama chat response");
