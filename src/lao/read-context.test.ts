@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
+import { realpath } from "node:fs/promises";
 import test from "node:test";
 import { loadLaoReadContext, LAO_MAX_CONTEXT_FILE_BYTES } from "./read-context.js";
 import type { Workspace, WorkspaceRegistry } from "../workspaces.js";
@@ -25,6 +26,13 @@ function fixture() {
 test("reads explicit text from approved root without adding unrelated files", async () => {
   const f = fixture();
   try {
+    if (process.env.GITHUB_ACTIONS === "true") {
+      const target = await realpath(join(f.root, "README.md"));
+      console.log("LAO_CI_PATH_DIAGNOSTIC", JSON.stringify({
+        root: f.root, canonicalRoot: f.workspace.canonicalRoot, target,
+        relationship: relative(f.workspace.canonicalRoot, target),
+      }));
+    }
     const files = await loadLaoReadContext(f.registry, f.workspace, ["README.md"]);
     assert.deepEqual(files, [{ path: "README.md", content: "Repository overview\n" }]);
   } finally { f.cleanup(); }
