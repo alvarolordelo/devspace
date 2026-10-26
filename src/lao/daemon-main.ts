@@ -5,7 +5,9 @@ import { laoDaemonEnvironment, startLaoDaemon } from "./daemon.js";
 export async function runLaoDaemon(): Promise<void> {
   const config = loadLaoConfig();
   const { stateDir, port } = laoDaemonEnvironment();
-  const daemon = await startLaoDaemon({ config, stateDir, port });
+  const daemon = await startLaoDaemon({
+    config, stateDir, port, dashboardToken: process.env.LAO_DASHBOARD_TOKEN,
+  });
   console.log(JSON.stringify({
     component: "lao-daemon", port: daemon.port,
     host: "127.0.0.1", recoveredTasks: daemon.recoveredTasks,

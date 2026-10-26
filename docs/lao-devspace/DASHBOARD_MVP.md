@@ -1,0 +1,47 @@
+# F6-01 - Painel operacional local (MVP)
+
+Estado: painel funcional somente-leitura, opt-in; tray, notificacoes,
+controle da fila e UI de revisao de patches continuam pendentes.
+
+## Abrir o painel
+
+Este recurso nao instala nenhum servico e nao altera o DevSpace original.
+Compile a feature com `pnpm build`. Inicie o processo LAO opcional
+com `DEVSPACE_LAO_ENABLED=true` e `LAO_DASHBOARD_TOKEN` configurados
+somente no ambiente do processo. O token deve ter 32 a 256 caracteres ASCII
+imprimiveis; nunca grave ou compartilhe esse token em repositorios, logs,
+scripts, URLs ou capturas de tela.
+
+O daemon experimental pode ser iniciado pelo entrypoint
+`node bin/devspace-laod.js` na branch LAO (execucao manual, foreground).
+O endereco padrao, quando o daemon estiver ativo, sera
+`http://127.0.0.1:7877/dashboard` (porta configuravel com
+`DEVSPACE_LAO_PORT`). Para desligar, encerre o processo em foreground.
+A tela pede o token e o mantem apenas na memoria JavaScript ate sair ou
+fechar a aba. O token e enviado somente no cabecalho Authorization.
+
+## Recursos disponiveis
+
+- Status de prontidao real (Ollama/modelo + confirmacao DevSpace).
+- Numero de tarefas, pendencias de revisao e tarefas em andamento.
+- Lista das 200 tarefas mais recentes, com identificador, status,
+  modelo, revisoes e ultima atualizacao.
+- Atualizacao automatica a cada 10 segundos.
+- Sem permissoes de execucao, aprovacao, commit ou alteracao no Git.
+
+## Limites e protecoes
+
+- Servidor escuta exclusivamente em `127.0.0.1`.
+- Sem token forte, a rota /dashboard e /dashboard/api/* responde 404.
+- Rotas de dados exigem Authorization Bearer, validacao de Host e rejeitam
+  Origin cross-site, POST/PUT, query string e URL com credenciais.
+- Respostas incluem CSP com nonce, no-store, frame denial e nosniff.
+- Conteudo dos registros e exibido por textContent (sem innerHTML).
+- Dados sensiveis como goal, acceptanceCriteria, traceId e permissions
+  nao sao retornados pela API de lista.
+- Sem assets externos, CDN ou requests a servidores remotos.
+- O painel nao substitui autenticacao do protocolo MCP.
+
+Nao instalar no boot, configurar conta Windows, gerenciar credenciais,
+expor tunel, nem ativar URL publica automaticamente. Tais operacoes
+dependem de uma etapa separada, de verificacao e autorizacao.

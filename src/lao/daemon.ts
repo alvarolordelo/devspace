@@ -3,12 +3,14 @@ import { join } from "node:path";
 import { LaoTaskStore } from "./task-store.js";
 import type { LaoConfig } from "./config.js";
 import { startLaoHealthServer } from "./health-server.js";
+import { validateLaoDashboardToken } from "./dashboard.js";
 
 export interface LaoDaemonOptions {
   config: LaoConfig;
   stateDir: string;
   port: number;
   devspaceReady?: () => boolean;
+  dashboardToken?: string;
 }
 
 /**
@@ -17,11 +19,14 @@ export interface LaoDaemonOptions {
  */
 export async function startLaoDaemon(options: LaoDaemonOptions) {
   if (!options.config.enabled) throw new Error("LAO daemon is disabled");
+  const token = validateLaoDashboardToken(options.dashboardToken);
+  const ready = options.devspaceReady ?? (() => false);
+  let store: LaoTaskStore;
   // Bind first: a second instance using the same port must not mutate tasks.
   const server = await startLaoHealthServer(options.config, {
-    port: options.port, devspaceReady: options.devspaceReady ?? (() => false),
+    port: options.port, devspaceReady: ready,
+    dashboard: token ? { token, devspaceReady: ready, listTasks: () => store?.list() ?? [] } : undefined,
   });
-  let store: LaoTaskStore;
   let recovered: number;
   try {
     store = new LaoTaskStore(options.stateDir);
