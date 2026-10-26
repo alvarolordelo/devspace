@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { LaoPatchOutcome } from "./worktree-patch.js";
 import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -8,6 +9,16 @@ import {
   LAO_CONTRACT_VERSION as RUN_VERSION, laoRunSchema, type LaoRun,
 } from "./contracts.js";
 import { assertLaoTransition } from "./task-state.js";
+
+export interface LaoStoredWriteEvidence {
+  taskId: string;
+  runId: string;
+  patchSha256: string;
+  modelOutputSha256: string;
+  normalizationApplied: boolean;
+  applied: LaoPatchOutcome["applied"];
+  evidence: LaoPatchOutcome["evidence"];
+}
 
 export interface LaoTaskEvent {
   id: number;
@@ -60,6 +71,11 @@ export class LaoTaskStore {
         record_json text not null
       );
       create index if not exists lao_runs_task_idx on lao_runs(task_id, id);
+      create table if not exists lao_write_evidence (
+        run_id text primary key references lao_runs(id) on delete cascade,
+        task_id text not null references lao_tasks(id) on delete cascade,
+        record_json text not null
+      );
     `);
   }
 
@@ -159,7 +175,7 @@ export class LaoTaskStore {
     }).immediate();
   }
 
-  completeRun(id: string, outcome: { status: "completed" | "failed" | "cancelled"; summary?: string; errorCode?: string }): LaoRun {
+  completeRun(id: string, outcome: { status: "completed" | "failed" | "cancelled"; summary?: string; errorCode?: string; toolCalls?: number }): LaoRun {
     return this.sqlite.transaction(() => {
       const row = this.sqlite.prepare("select record_json from lao_runs where id = ?")
         .get(id) as { record_json: string } | undefined;
@@ -168,6 +184,7 @@ export class LaoTaskStore {
       if (run.status !== "running") throw new Error("LAO run already finished");
       const updated = laoRunSchema.parse({
         ...run, status: outcome.status, finishedAt: new Date().toISOString(),
+        toolCalls: outcome.toolCalls ?? run.toolCalls,
         summary: outcome.summary?.slice(0, 20000) ?? null,
         errorCode: outcome.errorCode?.slice(0,64) ?? null,
       });
@@ -176,6 +193,42 @@ export class LaoTaskStore {
       if (changed.changes !== 1) throw new Error("Concurrent run finish");
       return updated;
     }).immediate();
+  }
+
+  /** Store a bounded reviewable diff before a run is marked completed. */
+  recordWriteEvidence(runId: string, artifact: Omit<LaoStoredWriteEvidence, "runId" | "taskId">): void {
+    this.sqlite.transaction(() => {
+      const row = this.sqlite.prepare("select task_id, record_json from lao_runs where id = ?")
+        .get(runId) as { task_id: string; record_json: string } | undefined;
+      if (!row) throw new Error("LAO run not found");
+      const run = laoRunSchema.parse(JSON.parse(row.record_json));
+      const task = this.requireTask(run.taskId);
+      if (run.status !== "running" || task.status !== "running" ||
+          task.permissions.write !== "isolated_worktree") {
+        throw new Error("Cannot record write evidence outside active write run");
+      }
+      if (!/^[0-9a-f]{64}$/.test(artifact.patchSha256) ||
+          !/^[0-9a-f]{64}$/.test(artifact.modelOutputSha256) ||
+          typeof artifact.normalizationApplied !== "boolean" ||
+          artifact.evidence.taskId !== task.id ||
+          artifact.evidence.workspaceId !== task.workspaceId ||
+          artifact.evidence.testsVerified !== false ||
+          artifact.evidence.criteriaVerified !== false ||
+          JSON.stringify(artifact.applied).length > 100_000) {
+        throw new Error("Invalid or unbounded write evidence");
+      }
+      const data: LaoStoredWriteEvidence = { taskId: task.id, runId, ...artifact };
+      this.sqlite.prepare("insert into lao_write_evidence(run_id,task_id,record_json) values(?,?,?)")
+        .run(runId, task.id, JSON.stringify(data));
+    }).immediate();
+  }
+
+  getWriteEvidence(taskId: string): LaoStoredWriteEvidence[] {
+    this.requireTask(taskId);
+    const rows = this.sqlite.prepare(
+      "select record_json from lao_write_evidence where task_id = ? order by rowid",
+    ).all(taskId) as Array<{record_json:string}>;
+    return rows.map(row => JSON.parse(row.record_json) as LaoStoredWriteEvidence);
   }
 
   getRuns(taskId: string): LaoRun[] {

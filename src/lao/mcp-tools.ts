@@ -1,4 +1,6 @@
 import * as z from "zod/v4";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { McpRegistrationTarget } from "../mcp-modern-server.js";
 import type { WorkspaceRegistry } from "../workspaces.js";
 import type { LaoConfig } from "./config.js";
@@ -6,6 +8,8 @@ import { LaoOllamaClient } from "./ollama-client.js";
 import { measureLaoReadiness } from "./health.js";
 import { LaoTaskStore } from "./task-store.js";
 import { LaoReadOnlyRunner } from "./task-runner.js";
+import { LaoIsolatedWriteRunner } from "./write-task-runner.js";
+import { normalizeLaoPatchPath } from "./worktree-patch.js";
 import { loadLaoReadContext } from "./read-context.js";
 import type { LaoReview } from "./contracts.js";
 
@@ -13,7 +17,8 @@ type Target = Pick<McpRegistrationTarget, "registerTool">;
 
 export interface LaoMcpContext {
   stateDir: string;
-  workspaces: Pick<WorkspaceRegistry, "getWorkspace"> & Partial<Pick<WorkspaceRegistry, "resolvePath">>;
+  workspaces: Pick<WorkspaceRegistry, "getWorkspace"> & Partial<Pick<WorkspaceRegistry, "resolvePath" | "openWorkspace">>;
+  worktreeRoot?: string;
   ollama?: Pick<LaoOllamaClient, "inspectModel" | "chatReadOnly">;
 }
 
@@ -174,6 +179,111 @@ export function registerLaoMcpTools(
     } catch (error) { return toolFailure(error); }
   });
 
+
+  // Write-capable tools are not advertised to discovery-only callers.
+  // Creation requires DevSpace's actual authorized-workspace registry and
+  // its configured, managed worktree root. No shell is given to Ollama.
+  if (context.worktreeRoot && context.workspaces.openWorkspace) {
+    const openManaged = context.workspaces.openWorkspace.bind(context.workspaces);
+    const gitBranch = promisify(execFile);
+    server.registerTool("lao_write_prepare", {
+      title: "Prepare supervised isolated LAO task",
+      description: "Create a fresh managed detached worktree from an authorized feature checkout, then persist a bounded task with exact write paths. Does not execute a model or patch.",
+      inputSchema: {
+        source_workspace_id: z.string().min(1),
+        goal: z.string().trim().min(1).max(4000),
+        acceptance_criteria: z.array(z.string().trim().min(1).max(500)).min(1).max(10),
+        allowed_write_paths: z.array(z.string().min(1).max(240)).min(1).max(5),
+        model: z.string().trim().min(1).max(200).optional(),
+        max_wall_seconds: z.number().int().min(1).max(180).optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    }, async ({ source_workspace_id, goal, acceptance_criteria,
+      allowed_write_paths, model, max_wall_seconds }) => {
+      try {
+        const source = await context.workspaces.getWorkspace(source_workspace_id);
+        if (source.mode !== "checkout" || !source.canonicalRoot) {
+          throw new Error("A source checkout is required");
+        }
+        const normalized = allowed_write_paths.map(normalizeLaoPatchPath);
+        const unique = normalized.map(p => process.platform === "win32" ? p.toLowerCase() : p);
+        if (new Set(unique).size !== normalized.length) throw new Error("Duplicate write paths");
+        const { stdout: branch } = await gitBranch("git",
+          ["-C", source.root, "symbolic-ref", "--short", "HEAD"],
+          { timeout: 5_000, windowsHide: true });
+        if (!branch.trim().startsWith("feature/")) {
+          throw new Error("Only an authorized feature-branch checkout can be a write source");
+        }
+        const { stdout: dirty } = await gitBranch("git",
+          ["-C", source.root, "status", "--porcelain=v1"],
+          { timeout: 5_000, windowsHide: true });
+        if (dirty.trim()) throw new Error("Source checkout must be clean");
+        const managed = (await openManaged({ path: source.root, mode: "worktree" })).workspace;
+        const task = await withStore(context.stateDir, store =>
+          new LaoIsolatedWriteRunner(store, context.ollama ?? new LaoOllamaClient(config),
+            context.worktreeRoot!).createTask({
+            workspaceId: managed.id, model: model ?? config.defaultModel,
+            goal, acceptanceCriteria: acceptance_criteria,
+            permissions: { read: true, write: "isolated_worktree",
+              shell: "none", allowedWritePaths: normalized },
+            limits: { maxRevisions: 2, maxToolCalls: 1, maxWallSeconds: max_wall_seconds ?? 90 },
+            requireReview: true,
+          }, managed));
+        return asToolResult({
+          task_id: task.id, workspace_id: managed.id, status: task.status,
+          allowed_write_paths: task.permissions.allowedWritePaths, requires_review: true,
+          shell_allowed: false, source_checkout_modified_by_lao: false,
+        });
+      } catch (error) { return toolFailure(error); }
+    });
+
+    server.registerTool("lao_write_run", {
+      title: "Run bounded model patch in isolated worktree",
+      description: "Execute one model-generated Codex patch through the exact-path worktree broker; store diff evidence and ALWAYS await supervisor review. No shell, tests or approval.",
+      inputSchema: {
+        workspace_id: z.string().min(1),
+        task_id: z.string().uuid(),
+        source_files: z.array(z.string().min(1).max(240)).max(3).optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    }, async ({ workspace_id, task_id, source_files }, extra) => {
+      try {
+        return await withStore(context.stateDir, async store => {
+          const workspace = await context.workspaces.getWorkspace(workspace_id);
+          const task = store.get(task_id);
+          if (!task || task.workspaceId !== workspace_id ||
+              task.permissions.write !== "isolated_worktree") {
+            throw new Error("Write task not accessible");
+          }
+          const chosen = source_files ?? [];
+          if (chosen.length && !context.workspaces.resolvePath)
+            throw new Error("Source reading is unavailable");
+          const snapshots = chosen.length
+            ? await loadLaoReadContext(
+              context.workspaces as Pick<WorkspaceRegistry, "resolvePath">, workspace, chosen)
+            : [];
+          const runner = new LaoIsolatedWriteRunner(
+            store, context.ollama ?? new LaoOllamaClient(config), context.worktreeRoot!);
+          try {
+            const result = await runner.runTask(task_id, workspace, extra?.signal, snapshots);
+            return asToolResult({
+              task_id, workspace_id, status: result.task.status, run: result.run,
+              changed_files: result.outcome.applied.files,
+              patch: result.outcome.applied.patch,
+              evidence: result.outcome.evidence, requires_review: true,
+              tests_verified: false, criteria_verified: false,
+            });
+          } catch {
+            return asToolResult({
+              task_id, status: store.get(task_id)?.status, error: "execution_failed",
+              requires_review: true, tests_verified: false, criteria_verified: false,
+            });
+          }
+        });
+      } catch (error) { return toolFailure(error); }
+    });
+  }
+
   server.registerTool("lao_result", {
     title: "Read LAO task result",
     description: "Inspect persisted runs, event history, and review decision for a task in an authorized workspace.",
@@ -189,6 +299,7 @@ export function registerLaoMcpTools(
         return asToolResult({
           task: store.get(task_id), runs: store.getRuns(task_id),
           events: store.events(task_id), review: store.getReview(task_id),
+          write_evidence: store.getWriteEvidence(task_id),
         });
       });
     } catch (error) { return toolFailure(error); }

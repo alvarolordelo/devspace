@@ -1,4 +1,5 @@
-import { isAbsolute, posix, win32 } from "node:path";
+import { isAbsolute, join, posix, win32 } from "node:path";
+import { lstat } from "node:fs/promises";
 import { applyPatch, parsePatch, type ApplyPatchResult } from "../apply-patch.js";
 import type { Workspace } from "../workspaces.js";
 import type { LaoTask } from "./contracts.js";
@@ -52,11 +53,18 @@ export async function applyLaoWorktreePatch(
   }
   const key = (value: string) => process.platform === "win32" ? value.toLowerCase() : value;
   const allowed = new Set(approvedPaths.map(value => key(normalizeLaoPatchPath(value))));
+  // Existing manual changes must not be laundered into this task's evidence.
+  const before = await collectLaoReviewEvidence(task, workspace, worktreeRoot);
+  assertEvidenceInScope(before, allowed, key);
   const actions = parsePatch(patch);
   if (!actions.length || actions.length > 5) throw new RangeError("LAO patch action budget exceeded");
   for (const action of actions) {
+    await assertNoSymlinks(workspace.root, normalizeLaoPatchPath(action.path));
     if (!allowed.has(key(normalizeLaoPatchPath(action.path)))) {
       throw new Error("Patch path is outside explicit task scope");
+    }
+    if (action.kind === "update" && action.moveTo) {
+      await assertNoSymlinks(workspace.root, normalizeLaoPatchPath(action.moveTo));
     }
     if (action.kind === "update" && action.moveTo &&
         !allowed.has(key(normalizeLaoPatchPath(action.moveTo)))) {
@@ -65,5 +73,32 @@ export async function applyLaoWorktreePatch(
   }
   const applied = await applyPatch(workspace.root, patch);
   const evidence = await collectLaoReviewEvidence(task, workspace, worktreeRoot);
+  assertEvidenceInScope(evidence, allowed, key);
   return { applied, evidence };
+}
+
+function assertEvidenceInScope(
+  evidence: LaoReviewEvidence, allowed: Set<string>, key: (path: string) => string,
+): void {
+  for (const changed of [...evidence.changedFiles, ...evidence.untrackedFiles]) {
+    let normalized: string;
+    try { normalized = normalizeLaoPatchPath(changed); }
+    catch { throw new Error("Worktree contains disallowed file changes"); }
+    if (!allowed.has(key(normalized))) throw new Error("Worktree contains out-of-scope changes");
+  }
+}
+
+/** Deny symlinked targets/parents, even if they currently resolve within the worktree. */
+async function assertNoSymlinks(root: string, relativePath: string): Promise<void> {
+  let part = root;
+  for (const segment of relativePath.split("/")) {
+    part = join(part, segment);
+    try {
+      const entry = await lstat(part);
+      if (entry.isSymbolicLink()) throw new Error("LAO write through symlink denied");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
+      throw error;
+    }
+  }
 }
