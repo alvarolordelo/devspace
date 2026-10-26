@@ -15,12 +15,13 @@ Não altere as variáveis ou portas da instância estável para testar a feature
 | `lao_status` | nenhuma | Consulta dependências sem executar modelo |
 | `lao_models` | nenhuma | Lista modelos locais sem carregá-los |
 | `lao_delegate` | `workspace_id`, `goal`, `acceptance_criteria`; `source_files` (opcional, máximo 3), modelo e deadline | Envia snapshots limitados de arquivos autorizados para análise read-only, sem ferramentas do modelo |
+| `lao_retry` | `workspace_id`, `task_id`, `source_files` opcionais | Reexecuta somente tarefa em `needs_revision` após decisão explícita de revisão, com feedback e até 2 correções |
 | `lao_result` | `workspace_id`, `task_id` | Recupera tarefa, execuções, estados, revisão e resumo, se existir |
 | `lao_review` | workspace/tarefa, decisão, critérios verificados, evidências e nota | Registra decisão **explícita** do supervisor; não altera arquivos |
 
 As ferramentas adicionais ficam ocultas quando `DEVSPACE_LAO_ENABLED` não é exatamente `true`. Todo acesso à tarefa exige workspace acessível no `WorkspaceRegistry` autorizado e ID compatível com a tarefa.
 
-`lao_delegate` permite apenas leitura explícita de até 3 arquivos regulares pequenos (4.000 bytes cada) por `source_files`, validados pela raiz canônica do DevSpace. Nega traversal, segmentos sensíveis e extensões binárias; persiste nomes de fontes e SHA-256 no histórico. O modelo não recebe ferramentas de filesystem, shell ou patch. A resposta permanece em `awaiting_review` e nunca comprova execução de testes.
+`lao_delegate` permite apenas leitura explícita de até 3 arquivos regulares pequenos (4.000 bytes cada) por `source_files`, validados pela raiz canônica do DevSpace. Nega traversal, segmentos sensíveis e extensões binárias; persiste nomes de fontes e SHA-256 no histórico. O modelo não recebe ferramentas de filesystem, shell ou patch. A resposta permanece em `awaiting_review` e nunca comprova execução de testes. Uma revisão com `needs_revision` permite `lao_retry` (máximo duas correções), que reaproveita critérios, modelo e permissões imutáveis da tarefa, inclui a nota/evidências da revisão e exige uma nova revisão. Não executa shell ou escrita.
 
 ## Validação
 

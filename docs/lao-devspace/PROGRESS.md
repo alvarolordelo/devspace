@@ -12,10 +12,10 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F1 Núcleo LAO | [~] | Contratos, feature flag OFF, SQLite, tarefas, execuções, eventos, estados, health e MCP opt-in |
 | F2 Ollama | [~] | Modelos reais e Granite validado em inferência read-only com persistência e reabertura SQLite; transporte MCP com modelo real ainda não verificado |
 | F3 Escrita isolada | [~] | Guarda de worktree gerenciado e broker interno de patch com arquivos permitidos, diff e sem shell; delegação via modelo/MCP ainda pendente |
-| F4 Avaliação/revisão | [~] | Revisões explícitas, evidência determinística do diff de worktree e limite de duas correções; execução de testes e promoção pendentes |
+| F4 Avaliação/revisão | [~] | Revisão explícita e `lao_retry` com até duas correções supervisionadas e feedback registrado; diff de worktree disponível, mas testes determinísticos e promoção pendentes |
 | F5 Serviço e tray | [~] | Daemon experimental em primeiro plano, health local, recovery e CLI validados; serviço SCM, tray e autostart pendentes |
 | F6 Painel | [ ] | Assets e layouts aprovados; painel funcional, notificações e histórico UI pendentes |
-| F7 Release | [~] | CI da feature executou no Windows e expôs 3 falhas de fixtures por caminhos TEMP não canônicos; correção preparada, nova execução remota pendente; instalador e release pendentes |
+| F7 Release | [~] | CI Windows expôs alias `RUNNER~1` diferente de `runneradmin` no TEMP; testes ajustados para realpath assíncrono e novo run pendente; instalador e release pendentes |
 | F8 Multimodelo | [ ] | Benchmark de Granite vs Spark com cinco repetições e failover pendentes |
 
 ## Requisitos funcionais (RF)
@@ -29,7 +29,7 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-05 Política de ferramentas | [~] | Guardas para leitura seletiva e para patch de até 5 ações em arquivos explicitamente listados, shell negado; broker de comandos/execução do modelo pendente |
 | RF-06 Executar agente | [~] | `task-runner.ts`: execução real Granite somente-leitura (resultado persistido e reaberto); ferramentas supervisionadas e execução MCP real pendentes |
 | RF-07 Avaliar com provas | [~] | Resposta entra em `awaiting_review` e revisão exige evidências; `review-evidence.ts` coleta diff real em worktree; faltam testes automatizados e critérios ponta a ponta |
-| RF-08 Correções limitadas | [~] | Estado `needs_revision`, máximo 2; repetição automática limitada pendente |
+| RF-08 Correções limitadas | [~] | `lao_retry` reexecuta tarefa read-only somente após `needs_revision`, com feedback e limite de 2 correções; orquestração automática de correções de escrita pendente |
 | RF-09 Aprovação explícita | [~] | `lao_review` registra decisão; aprovações de tarefas com escrita são bloqueadas até existir pipeline determinístico completo |
 | RF-10 Persistência/reconsulta | [~] | `lao_result` lê SQLite de tarefas/execuções/eventos/revisões, testes de reabertura e interrupção; recuperação automática no boot pendente |
 | RF-11 Boot | [ ] | Não instalado |
@@ -67,11 +67,12 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F3-01 | `write-boundary.ts` e teste | Root de worktree, canonical path, managed/detached e shell negado | `30c2b2c` |
 | F4-02 | `review-evidence.ts`, `task-store.ts`, testes | Git diff, untracked, whitespace e HEAD coletados em worktree temporário; não declara testes/verificação e bloqueia aprovação de escrita | `3e65541` |
 | F2-03 | Granite real, `scripts/lao-live-smoke.mjs` | `/api/chat` real, `think: false`, tarefa `4b1d9a53-d1df-456e-93f3-821c8158ea1a`, estado `awaiting_review`, run `completed`, SQLite reaberto, hash SHA-256 e seis eventos; 2.027 ms. Sem MCP real ou critérios aprovados. | Evidência local 25/10/2026 |
-| F7-01 | Testes Windows em GitHub Actions | Run `40252484850` falhou: 3 fixtures assumiam que `tmpdir()` era caminho canônico; testes corrigidos com `realpathSync`. Nova validação hospedada pendente. | A verificar após push |
+| F7-01 | Testes Windows em GitHub Actions | Runs `40252484850`, `40254006895` e `40254263498`: 3 falhas; log isolou TEMP `RUNNER~1` vs `runneradmin`; `realpathSync` mantém alias, corrigido com `await realpath()` como resolução de produção. | Nova execução remota pendente |
+| F4-03 | `lao_retry`, `task-runner.ts` e testes | Correção pelo supervisor com nota/evidência no novo prompt, até 2 reexecuções, workspace autorizado e estado exigido; saída sempre em revisão; 1 teste de integração MCP simulado adicionado. | Aguardando CI |
 
 **Baseline original:** 160 testes, 153 aprovados, 7 ignorados; `pnpm build` e `pnpm typecheck` verdes.
 
-**Testes do LAO (rodada atual):** 63 casos, 62 aprovados, 1 ignorado (symlink sem privilégio), 0 falhas. Regressão completa: **213 testes, 205 aprovados, 8 ignorados, 0 falhas**. TypeScript e build aprovados localmente. GitHub Actions Windows ainda não confirmado.
+**Testes do LAO (rodada atual):** 64 casos, 63 aprovados, 1 ignorado (symlink sem privilégio), 0 falhas. Regressão completa: **214 testes, 206 aprovados, 8 ignorados, 0 falhas**. TypeScript e build aprovados localmente. Nova execução GitHub Actions Windows pendente após correção do alias de TEMP.
 
 ## Limitações importantes
 
