@@ -10,12 +10,12 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 |---|---|---|
 | F0 Base segura | [x] | Branch e worktree separados, commits no fork, baseline e rollback documentados |
 | F1 Núcleo LAO | [~] | Contratos, feature flag OFF, SQLite, tarefas, execuções, eventos, estados, health e MCP opt-in |
-| F2 Ollama | [~] | Listagem real de modelos e inspeção Granite; leitura limitada de fontes escolhidas e execução simulada do modelo; inferência real não validada |
+| F2 Ollama | [~] | Modelos reais e Granite validado em inferência read-only com persistência e reabertura SQLite; transporte MCP com modelo real ainda não verificado |
 | F3 Escrita isolada | [~] | Guarda de worktree gerenciado e broker interno de patch com arquivos permitidos, diff e sem shell; delegação via modelo/MCP ainda pendente |
 | F4 Avaliação/revisão | [~] | Revisões explícitas, evidência determinística do diff de worktree e limite de duas correções; execução de testes e promoção pendentes |
 | F5 Serviço e tray | [~] | Daemon experimental em primeiro plano, health local, recovery e CLI validados; serviço SCM, tray e autostart pendentes |
 | F6 Painel | [ ] | Assets e layouts aprovados; painel funcional, notificações e histórico UI pendentes |
-| F7 Release | [~] | Workflow de CI específico da feature preparado; validação remota, instalador, rollback e release candidate pendentes |
+| F7 Release | [~] | CI da feature executou no Windows e expôs 3 falhas de fixtures por caminhos TEMP não canônicos; correção preparada, nova execução remota pendente; instalador e release pendentes |
 | F8 Multimodelo | [ ] | Benchmark de Granite vs Spark com cinco repetições e failover pendentes |
 
 ## Requisitos funcionais (RF)
@@ -23,11 +23,11 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | Requisito | Estado | Implementação e evidência / pendência |
 |---|---|---|
 | RF-01 Opt-in | [x] | `src/lao/config.ts`, `mcp-tools.ts`, `src/server.ts`; ferramenta só exposta com `DEVSPACE_LAO_ENABLED=true`; OFF preserva tool surface |
-| RF-02 Provedor/modelo | [~] | `ollama-client.ts`, descoberta via `/api/tags`, `/api/show`, seleção por `lao_delegate`; falta execução real validada |
+| RF-02 Provedor/modelo | [x] | `/api/tags` e `/api/show` verificados no Ollama local; Granite executou inferência real por `/api/chat`, com resposta e modelo registrados |
 | RF-03 Criar tarefa | [x] | `contracts.ts`, `task-store.ts`, `lao_delegate`; objetivo, workspace, critérios, permissões, orçamento, ID e persistência testados em read-only |
 | RF-04 Escrita isolada | [~] | `write-boundary.ts` e `worktree-patch.ts` aplicam patch real apenas em worktree detached gerenciado e caminhos autorizados; criação do worktree por tarefa/MCP pendente |
 | RF-05 Política de ferramentas | [~] | Guardas para leitura seletiva e para patch de até 5 ações em arquivos explicitamente listados, shell negado; broker de comandos/execução do modelo pendente |
-| RF-06 Executar agente | [~] | `task-runner.ts`: chat sem ferramentas, fontes explícitas como dados não confiáveis, deadline, cancelamento, hashes e resultados SQL; inferência Granite pendente |
+| RF-06 Executar agente | [~] | `task-runner.ts`: execução real Granite somente-leitura (resultado persistido e reaberto); ferramentas supervisionadas e execução MCP real pendentes |
 | RF-07 Avaliar com provas | [~] | Resposta entra em `awaiting_review` e revisão exige evidências; `review-evidence.ts` coleta diff real em worktree; faltam testes automatizados e critérios ponta a ponta |
 | RF-08 Correções limitadas | [~] | Estado `needs_revision`, máximo 2; repetição automática limitada pendente |
 | RF-09 Aprovação explícita | [~] | `lao_review` registra decisão; aprovações de tarefas com escrita são bloqueadas até existir pipeline determinístico completo |
@@ -43,7 +43,7 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-19 Multimodelo | [ ] | Benchmark 5x pendente |
 | RF-20 Failover | [ ] | Pendente |
 
-**RF concluídos:** 2/20 · **Parciais:** 10/20 · **Pendentes:** 8/20.
+**RF concluídos:** 3/20 · **Parciais:** 9/20 · **Pendentes:** 8/20.
 
 ## Histórico técnico e evidências
 
@@ -66,7 +66,8 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F3-02 | `worktree-patch.ts`, `contracts.ts`, testes | Patch real em Git worktree temporário, allowlist por arquivo, limites, bloqueios de traversal e diff após patch; checkout-fonte permaneceu limpo; **não exposto ao modelo/MCP** | `5a0e4f1` |
 | F3-01 | `write-boundary.ts` e teste | Root de worktree, canonical path, managed/detached e shell negado | `30c2b2c` |
 | F4-02 | `review-evidence.ts`, `task-store.ts`, testes | Git diff, untracked, whitespace e HEAD coletados em worktree temporário; não declara testes/verificação e bloqueia aprovação de escrita | `3e65541` |
-| F2-03 | Modelo Granite local | Inferência **não validada**: ferramenta bloqueou chamada real por configuração de segurança; NÃO atribuir sucesso | [!] |
+| F2-03 | Granite real, `scripts/lao-live-smoke.mjs` | `/api/chat` real, `think: false`, tarefa `4b1d9a53-d1df-456e-93f3-821c8158ea1a`, estado `awaiting_review`, run `completed`, SQLite reaberto, hash SHA-256 e seis eventos; 2.027 ms. Sem MCP real ou critérios aprovados. | Evidência local 25/10/2026 |
+| F7-01 | Testes Windows em GitHub Actions | Run `40252484850` falhou: 3 fixtures assumiam que `tmpdir()` era caminho canônico; testes corrigidos com `realpathSync`. Nova validação hospedada pendente. | A verificar após push |
 
 **Baseline original:** 160 testes, 153 aprovados, 7 ignorados; `pnpm build` e `pnpm typecheck` verdes.
 
@@ -81,4 +82,4 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 - O daemon experimental é manual e opt-in. **Não** há serviço Windows SCM, tray nem autostart instalados.
 - Sem merge em `main`, sem serviços Windows, sem alterações no boot, sem execução em produção.
 
-**Próximos gates:** validar inferência real com Granite; implementar broker limitado, worktree por tarefa e evidências determinísticas; depois serviço Windows e tray, sujeitos a testes e autorização operacional.
+**Próximos gates:** executar delegação real via transporte MCP da feature, implementar broker limitado, worktree por tarefa e evidências determinísticas; confirmar CI hospedada; depois serviço Windows e tray, sujeitos a testes e autorização operacional.

@@ -43,3 +43,14 @@ O módulo interno `applyLaoWorktreePatch` pode aplicar um patch delimitado em wo
 ## Evidências determinísticas em worktree
 
 O módulo `collectLaoReviewEvidence` coleta HEAD, arquivos alterados/não rastreados, resumo do diff e erros de whitespace em worktree gerenciada, sem executar comandos fornecidos pelo modelo. Os campos `testsVerified` e `criteriaVerified` são **false**. Tarefas com escrita não podem ser marcadas aprovadas pelo store até que uma validação determinística completa esteja implementada. Essa função ainda não está conectada a uma ferramenta MCP de execução com escrita.
+
+## Smoke real de Granite (somente leitura)
+
+Após `pnpm build`, execute **apenas no worktree da feature**, com Ollama local já disponível:
+
+```cmd
+cd /d D:\desenvolvimento\lao-devspace
+set DEVSPACE_LAO_ENABLED=true&& node scripts/lao-live-smoke.mjs
+```
+
+O script cria tarefa somente-leitura, consulta `/api/tags` e `/api/show`, faz **inferência real** via `/api/chat`, grava o resultado no banco SQLite LAO temporário, reabre e verifica a persistência e os hashes. Nenhuma ferramenta de modelo, escrita no repositório, aprovação ou execução de shell pelo agente é habilitada. O estado esperado é `awaiting_review`, não `approved`. Esta evidência não constitui validação de transporte MCP autenticado, critérios determinísticos ou instalação Windows. `think: false` mantém a geração dentro do orçamento de resposta e evita conteúdo vazio em modelos com raciocínio interno. O banco descartável é removido após a prova.
