@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/Waishnav/devspace.git",
+  "version": "1.0.8",
+  "commit": "13c99eec5ed43eb9aba3fdc457bd912d3ce82211",
+  "packageManager": "pnpm@11.25.0",
+  "lockBlob": "92ca7f368277809442c06f2fbd26b623bd8df6a0",
+  "workspaceBlob": "b10c94d086c0eb2f7db43791de4e16812cfee126",
+  "policy": "Fixed DevSpace source and dependencies. LAO feature changes never upgrade core automatically."
+}
