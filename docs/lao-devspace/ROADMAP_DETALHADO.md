@@ -4,12 +4,12 @@
 **Versão do plano:** 1.0
 **Situação:** planejamento aprovado conceitualmente; implementação pendente
 **Repositório-alvo:** `alvarolordelo/devspace` (fork)
-**Branch planejada:** `feature/lao-devspace`
+**Branch de desenvolvimento:** `feature/lao-devspace`
 **Regra principal:** manter o DevSpace existente utilizável, sem alteração de comportamento quando o LAO estiver desativado.
 **Ambiente inicial:** Windows 10/11, Node.js/TypeScript, DevSpace MCP, Ollama local e RTX 2060 6 GB.
 **Primeiros agentes:** `granite4.2-8b:gpu` (fluxos de ferramentas) e `spark-x2.6-q8-100gpu:latest` (tarefas rápidas).
 
-> **Estado de integração:** não foi possível acessar o DevSpace local na sessão de planejamento. A tentativa anterior de criar a branch no GitHub retornou HTTP 403. Portanto, este documento foi preparado como artefato de planejamento: a branch **não foi criada**, e o código atual do projeto **não foi modificado** nesta sessão.
+> **Estado de integração (25/10/2026):** branch `feature/lao-devspace` criada e publicada no fork, com worktree isolado. F0 verificada; módulos F1/F2 em desenvolvimento e tool surface MCP opt-in registrada. Consulte `PROGRESS.md` para o status realmente testado. O DevSpace estável segue em `main`, sem merge de LAO.
 
 ---
 
@@ -339,7 +339,7 @@ Sem datas arbitrárias: cada fase passa para a próxima apenas quando seus crit�
 ### Já decididas para a proposta
 
 - Produto: **LAO DevSpace — Local Agent Orchestrator + DevSpace**.
-- Branch: `feature/lao-devspace` no fork, como intenção; sem criação remota confirmada.
+- Branch: `feature/lao-devspace` no fork, criada e publicada; worktree isolado confirmado.
 - Isolamento com worktree e compatibilidade obrigatória com versão atual.
 - ChatGPT como supervisor; executor inicial Granite, com Spark como alternativa.
 - Monitor de saúde, inicialização automática Windows e dashboard são requisitos centrais.
@@ -364,4 +364,4 @@ Sem datas arbitrárias: cada fase passa para a próxima apenas quando seus crit�
 - Microsoft — recomendações de recuperação de serviço: https://learn.microsoft.com/en-us/windows/win32/rstmgr/guidelines-for-services
 - Microsoft — gatilhos de inicialização e logon: https://learn.microsoft.com/en-us/windows/win32/taskschd/trigger-types
 
-**Nota:** status da branch, acessos e arquitetura final devem ser reconfirmados quando o conector DevSpace voltar a responder. Este documento é um roadmap e uma especificação inicial, não uma alegação de implementação realizada.
+**Nota de atualização:** o acesso ao DevSpace e a publicação da branch foram confirmados em 25/10/2026. Este documento permanece como plano de arquitetura; use `PROGRESS.md` para distinguir requisitos implementados, simulados, bloqueados e pendentes.
