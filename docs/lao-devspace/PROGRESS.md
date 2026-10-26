@@ -11,8 +11,8 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F0 Base segura | [x] | Branch/worktree separados; DevSpace base v1.0.8 fixado no commit `13c99ee` com lockfile imutavel, verificador `lao-verify-devspace-pin.mjs` e teste negativo de upgrade |
 | F1 Núcleo LAO | [~] | Contratos, feature flag OFF, SQLite, tarefas, execuções, eventos, estados, health e MCP opt-in |
 | F2 Ollama | [~] | Granite executado via runner e handler `lao_delegate` real, com reabertura SQLite; canal MCP autenticado de ponta a ponta ainda não verificado |
-| F3 Escrita isolada | [~] | `lao_write_prepare` cria worktree gerenciado de feature autorizada; `lao_write_run` recebe patch do modelo real sem tools e aplica pelo broker com allowlist, hashes e diff persistido; transporte MCP autenticado e suites de testes executadas ainda pendentes; gate estatico de patches disponivel |
-| F4 Avaliação/revisão | [~] | `lao_result` inclui diff persistido; `lao_write_validate` revalida SHA-256, HEAD, allowlist, whitespace e sintaxe TS/JS/JSON sem executar codigo; testes reais e aceite pendentes, aprovacao de escrita bloqueada |
+| F3 Escrita isolada | [~] | `lao_write_prepare` cria worktree gerenciado de feature autorizada; `lao_write_run` recebe patch do modelo real sem tools e aplica pelo broker com allowlist, hashes e diff persistido; transporte MCP autenticado e suites completas do projeto ainda pendentes; gate estatico de patches disponivel |
+| F4 Avaliação/revisão | [~] | `lao_result` inclui diff persistido; `lao_write_validate` revalida SHA-256, HEAD, allowlist, whitespace e sintaxe TS/JS/JSON sem executar codigo; smoke Docker real validado; aceite, suites completas e MCP autenticado pendentes; aprovacao de escrita bloqueada |
 | F5 Serviço e tray | [~] | Daemon experimental em primeiro plano, health local, recovery e CLI validados; serviço SCM, tray e autostart pendentes |
 | F6 Painel | [ ] | Assets e layouts aprovados; painel funcional, notificações e histórico UI pendentes |
 | F7 Release | [~] | CI Windows anterior validado; adicionado gate de versao fixa ANTES de instalar dependencias e `pnpm install --frozen-lockfile`; CI Windows run `40260097979` aprovada com gate da base antes do install; instalador e rollback pendentes |
@@ -132,7 +132,7 @@ O pipeline de CI da nova branch devera validar novamente o conjunto completo.
 **Status:** [x] smoke real da suite em container; **F4 segue [~]**.
 Docker Desktop Linux Engine estava disponivel na verificacao subsequente. Foi usada
 uma imagem Node existente e local, fixada por SHA-256, sem pull nem alteracao da
-imagem. O script opt-in `scripts/lao-sandbox-live-smoke.mjs` criou um repositorio
+imagem. O script opt-in `src/lao/lao-sandbox-live-smoke.mjs` criou um repositorio
 Git e worktree **temporarios**, executou Node `--test` em container isolado e removeu
 os arquivos temporarios ao encerrar.
 
@@ -144,3 +144,25 @@ e `criteriaVerified=false` / `approvalAllowed=false`.
 **Ainda pendentes:** autenticacao MCP ponta a ponta, mapeamento verificavel de
 criterios de aceite, suites completas TypeScript, robustez de concorrencia,
 recuperacao e gate para aprovacao de escrita. Nao concluir F4 prematuramente.
+
+## F4-07 - Exclusao mutua em testes Docker (26/10/2026)
+
+**Status:** [x] lock de execucao supervisionada por tarefa implementado em SQLite;
+**F4 permanece [~]** devido a validacao de aceite e MCP autenticado pendentes.
+
+- A nova tabela `lao_write_test_leases` impede a execucao simultanea de
+  suites na mesma tarefa mesmo quando varios processos MCP usam o mesmo DB.
+- O handler `lao_write_test` adquire uma lease antes da execucao do sandbox
+  e a libera em `finally` tanto em sucesso quanto em erro.
+- A lease usa token opaco de instancia; worker antigo nao pode apagar lease nova
+  nem registrar evidencia com token vencido/trocado.
+- Uma lease vencida (TTL padrao 180 segundos) pode ser assumida por novo processo,
+  sem reexecutar automaticamente trabalhos interrompidos.
+- Testes exercitam duas conexoes SQLite, exclusao mutua, recuperacao apos
+  expiracao, token invalido e proibicao de persistencia apos liberar o lock.
+- Aprovacao de escrita ainda proibida, mesmo apos suite com exit code zero.
+
+**Verificacao desta entrega:** `pnpm typecheck` aprovado, `pnpm build`
+aprovado e regressao `pnpm test` com **218 testes: 210 aprovados,
+8 ignorados, 0 falhas**. Integracao live com Docker aprovada na F4-06.
+CI hospedada do commit F4-07 ainda precisa ser confirmada apos push.

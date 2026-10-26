@@ -327,12 +327,17 @@ export function registerLaoMcpTools(
               task.permissions.write !== "isolated_worktree") throw new Error("Write task not accessible");
           const record = store.getWriteEvidence(task_id).at(-1);
           if (!record) throw new Error("No persisted write evidence");
-          const evidence = await runLaoSandboxTests(
-            task, workspace, context.worktreeRoot!, record, test_files,
-            process.env.LAO_SANDBOX_NODE_IMAGE, undefined, extra?.signal,
-          );
-          store.recordTestEvidence(evidence);
-          return asToolResult({ ...evidence, requires_review: true });
+          const lease = store.acquireTestLease(task_id);
+          try {
+            const evidence = await runLaoSandboxTests(
+              task, workspace, context.worktreeRoot!, record, test_files,
+              process.env.LAO_SANDBOX_NODE_IMAGE, undefined, extra?.signal,
+            );
+            store.recordTestEvidence(evidence, lease);
+            return asToolResult({ ...evidence, requires_review: true });
+          } finally {
+            store.releaseTestLease(task_id, lease);
+          }
         });
       } catch (error) { return toolFailure(error); }
     });

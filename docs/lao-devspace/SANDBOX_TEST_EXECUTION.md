@@ -63,7 +63,7 @@ automaticamente para desbloquear estes testes.**
 Apos compilar (`pnpm build`), selecione uma imagem Node **ja presente**
 localmente, preferencialmente dedicada a QA, com referencia completa por digest
 SHA-256. No PowerShell, atribua a variavel `LAO_SANDBOX_NODE_IMAGE` ao processo
-que fara o teste e execute `node scripts/lao-sandbox-live-smoke.mjs`.
+que fara o teste e execute `node src/lao/lao-sandbox-live-smoke.mjs`.
 Nao ha download, instalacao de servico, alteracao do DevSpace original ou
 configuracao persistente de inicializacao.
 
@@ -73,3 +73,14 @@ falha intencional, imagem ausente sem pull e cancelamento. Finalmente remove
 o worktree e as fixtures. O resultado de sucesso nao aprova o patch.
 **A imagem usada no smoke deve ser avaliada pelo operador antes da execucao.**
 O teste efetivo do endpoint MCP autenticado continua pendente.
+
+## Exclusao mutua (F4-07)
+
+A ferramenta `lao_write_test` adquire uma lease SQLite exclusiva por tarefa
+antes de iniciar o sandbox. A duracao padrao da lease e de 180 segundos,
+maior que o limite de 60 segundos do processo Docker, incluindo margem para
+verificacoes de integridade. Outros processos MCP nao conseguem iniciar outra
+suite sobre a mesma tarefa enquanto a lease estiver ativa. O token secreto
+da lease nao e exposto ao MCP/modelo; e exigido para gravar evidencias.
+Se o processo falhar, a lease expirara e uma nova chamada explicita podera
+assumi-la. Nenhum trabalho e reiniciado automaticamente.

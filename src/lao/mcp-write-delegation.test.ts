@@ -104,6 +104,13 @@ test("MCP supervisor prepares isolated worktree, runs model patch, persists diff
     assert.equal(git(repo, "status", "--porcelain"), "");
     assert.equal(existsSync(join(worktrees[0], "src", "feature.ts")), true);
 
+    assert.ok(registrations.has("lao_write_test"),
+      "isolated suite tool must be present in authorized opt-in tool surface");
+    const deniedSuite = await invoke("lao_write_test", {
+      workspace_id: "ws_source", task_id: taskId,
+      test_files: ["tests/smoke.test.mjs"],
+    });
+    assert.equal(deniedSuite.isError, true, "source checkout may not execute isolated suites");
     const validated = await invoke("lao_write_validate", {
       workspace_id: workspaceId, task_id: taskId,
     });
@@ -138,6 +145,7 @@ test("MCP supervisor prepares isolated worktree, runs model patch, persists diff
       assert.equal(db.getWriteEvidence(taskId).length, 1);
       assert.equal(db.get(taskId)?.status, "awaiting_review");
       const runEvidence = db.getWriteEvidence(taskId)[0]!;
+      const lease = db.acquireTestLease(taskId);
       db.recordTestEvidence({
         taskId, runId: runEvidence.runId,
         suiteId: "node-test", testFiles: ["tests/smoke.test.mjs"],
@@ -147,7 +155,11 @@ test("MCP supervisor prepares isolated worktree, runs model patch, persists diff
         stdoutSha256: null, stderrSha256: null, integrityMaintained: true,
         contentFingerprint: runEvidence.evidence.contentFingerprint,
         criteriaVerified: false, approvalAllowed: false,
-      });
+      }, lease);
+      assert.equal(db.releaseTestLease(taskId, lease), true);
+      assert.throws(() =>
+        db.recordTestEvidence(db.getTestEvidence(taskId)[0]!, lease), /Invalid/,
+        "a released lease cannot record additional unverified evidence");
       assert.equal(db.getTestEvidence(taskId).length, 1);
       assert.equal(db.getTestEvidence(taskId)[0]?.criteriaVerified, false);
       assert.equal(db.get(taskId)?.status, "awaiting_review");

@@ -6,8 +6,8 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { collectLaoReviewEvidence } from "../dist/lao/review-evidence.js";
-import { runLaoSandboxTests } from "../dist/lao/write-test-sandbox.js";
+import { collectLaoReviewEvidence } from "../../dist/lao/review-evidence.js";
+import { runLaoSandboxTests } from "../../dist/lao/write-test-sandbox.js";
 
 const image = process.env.LAO_SANDBOX_NODE_IMAGE;
 if (!image) throw new Error("Set LAO_SANDBOX_NODE_IMAGE to a local digest before running");

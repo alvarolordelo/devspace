@@ -391,3 +391,11 @@ alteracao somente em worktree temporario, protecao read-only, bloqueio de rede,
 propagacao de falha, ausencia de pull, cancelamento e revisao obrigatoria.
 O registro atualizado esta no `PROGRESS.md`. Isto **nao satisfaz** ainda a
 validacao de criterios de aceite e a autenticacao MCP da F4.
+
+### F4-07 - Concorrencia de suites supervisionadas
+
+A execucao do sandbox passou a exigir lease SQLite por tarefa, com token
+opaco e recuperacao controlada por vencimento, para evitar runs concorrentes
+em um mesmo worktree. A trava e liberada com `finally` e evidencias de
+execucao nao podem ser persistidas por token antigo. O ciclo autenticado MCP,
+as suites funcionais amplas e o aceite deterministico seguem pendentes.

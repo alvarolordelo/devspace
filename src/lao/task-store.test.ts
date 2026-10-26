@@ -156,3 +156,39 @@ test("write-capable task cannot be approved before deterministic verification ex
     assert.equal(store.get(task.id)?.status, "awaiting_review");
   });
 });
+
+test("SQLite lease serializes sandbox suites across processes and fences stale owners", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "lao-sandbox-lease-"));
+  const first = new LaoTaskStore(dir);
+  const second = new LaoTaskStore(dir);
+  try {
+    const task = first.create({
+      ...makeInput(),
+      permissions: {
+        read: true, write: "isolated_worktree", shell: "none",
+        allowedWritePaths: ["src/test.js"],
+      },
+    });
+    toReview(first, task.id);
+    const initial = first.acquireTestLease(task.id, 20);
+    assert.throws(() => second.acquireTestLease(task.id), /already running/);
+    assert.equal(second.releaseTestLease(task.id, randomUUID()), false);
+    await new Promise<void>(resolve => setTimeout(resolve, 50));
+    const recovered = second.acquireTestLease(task.id);
+    assert.notEqual(recovered, initial);
+    assert.equal(first.releaseTestLease(task.id, initial), false,
+      "stale owner must not delete replacement lease");
+    assert.throws(() => first.acquireTestLease(task.id), /already running/);
+    assert.equal(second.releaseTestLease(task.id, recovered), true);
+    const third = first.acquireTestLease(task.id);
+    assert.equal(first.releaseTestLease(task.id, third), true);
+    const readOnly = first.create(makeInput());
+    toReview(first, readOnly.id);
+    assert.throws(() => first.acquireTestLease(readOnly.id), /isolated-write/);
+    assert.throws(() => first.acquireTestLease(task.id, 0), /duration/);
+  } finally {
+    first.close();
+    second.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -84,6 +84,11 @@ export class LaoTaskStore {
         record_json text not null
       );
       create index if not exists lao_write_test_idx on lao_write_test_evidence(task_id, id);
+      create table if not exists lao_write_test_leases (
+        task_id text primary key references lao_tasks(id) on delete cascade,
+        lease_token text not null,
+        expires_at_ms integer not null
+      );
     `);
   }
 
@@ -240,14 +245,56 @@ export class LaoTaskStore {
     return rows.map(row => JSON.parse(row.record_json) as LaoStoredWriteEvidence);
   }
 
+  /**
+   * One active sandbox suite per task, enforced by SQLite across MCP clients
+   * and LAO processes. An expired lease can be reclaimed after a process crash.
+   * The opaque token prevents a stale worker from recording/releasing a new lease.
+   */
+  acquireTestLease(taskId: string, ttlMs = 180_000): string {
+    if (!Number.isSafeInteger(ttlMs) || ttlMs < 1 || ttlMs > 180_000) {
+      throw new Error("Invalid sandbox lease duration");
+    }
+    return this.sqlite.transaction(() => {
+      const task = this.requireTask(taskId);
+      if (task.status !== "awaiting_review" ||
+          task.permissions.write !== "isolated_worktree") {
+        throw new Error("Test lease requires pending isolated-write review");
+      }
+      const now = Date.now();
+      const row = this.sqlite.prepare(
+        "select expires_at_ms from lao_write_test_leases where task_id = ?"
+      ).get(taskId) as { expires_at_ms: number } | undefined;
+      if (row && row.expires_at_ms > now) {
+        throw new Error("Sandbox test already running for this task");
+      }
+      const token = randomUUID();
+      this.sqlite.prepare(
+        "insert into lao_write_test_leases(task_id, lease_token, expires_at_ms) values(?,?,?)" +
+        " on conflict(task_id) do update set lease_token=excluded.lease_token," +
+        " expires_at_ms=excluded.expires_at_ms"
+      ).run(taskId, token, now + ttlMs);
+      return token;
+    }).immediate();
+  }
+
+  releaseTestLease(taskId: string, token: string): boolean {
+    return this.sqlite.prepare(
+      "delete from lao_write_test_leases where task_id = ? and lease_token = ?"
+    ).run(taskId, token).changes === 1;
+  }
+
   /** One immutable audit record for each attempted isolated suite. */
-  recordTestEvidence(evidence: LaoSandboxTestEvidence): void {
+  recordTestEvidence(evidence: LaoSandboxTestEvidence, token: string): void {
     this.sqlite.transaction(() => {
       const task = this.requireTask(evidence.taskId);
       const row = this.sqlite.prepare(
         "select run_id from lao_write_evidence where run_id = ? and task_id = ?"
       ).get(evidence.runId, evidence.taskId);
-      if (!row || task.status !== "awaiting_review" ||
+      const lease = this.sqlite.prepare(
+        "select lease_token, expires_at_ms from lao_write_test_leases where task_id = ?"
+      ).get(evidence.taskId) as { lease_token: string; expires_at_ms: number } | undefined;
+      if (!row || !lease || lease.lease_token !== token || lease.expires_at_ms <= Date.now() ||
+          task.status !== "awaiting_review" ||
           task.permissions.write !== "isolated_worktree" ||
           evidence.criteriaVerified !== false || evidence.approvalAllowed !== false ||
           JSON.stringify(evidence).length > 8192) {
