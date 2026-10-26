@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, realpathSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { realpath } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import type { McpRegistrationTarget } from "../mcp-modern-server.js";
@@ -21,7 +22,7 @@ test("explicit source snapshots are bounded, untrusted and hashed in persisted r
   const stateDir = join(dir, "state");
   writeFileSync(join(workRoot, "README.md"), "README_SOURCE_SIGNATURE\n");
   writeFileSync(join(workRoot, ".env"), "PRIVATE_SECRET_VALUE\n");
-  const workspace = { id: "ws_source", root: workRoot, canonicalRoot: realpathSync(workRoot) } as Workspace;
+  const workspace = { id: "ws_source", root: workRoot, canonicalRoot: await realpath(workRoot) } as Workspace;
   const handlers = new Map<string, Handler>();
   let prompt = "";
   const server = {

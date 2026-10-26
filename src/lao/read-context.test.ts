@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync, realpathSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { realpath } from "node:fs/promises";
 import test from "node:test";
 import { loadLaoReadContext, LAO_MAX_CONTEXT_FILE_BYTES } from "./read-context.js";
 import type { Workspace, WorkspaceRegistry } from "../workspaces.js";
 import { resolvePathInsideCanonicalRoot } from "../roots.js";
 
-function fixture() {
+async function fixture() {
   const base = mkdtempSync(join(tmpdir(), "lao-context-"));
   const root = join(base, "repo"), outside = join(base, "outside");
   mkdirSync(root); mkdirSync(outside);
@@ -16,7 +16,7 @@ function fixture() {
   writeFileSync(join(root, ".env"), "SECRET=must_not_leak\n");
   writeFileSync(join(root, "oversize.ts"), "x".repeat(LAO_MAX_CONTEXT_FILE_BYTES + 1));
   writeFileSync(join(outside, "outside.md"), "not inside root\n");
-  const workspace = { id: "ws", root, canonicalRoot: realpathSync(root) } as Workspace;
+  const workspace = { id: "ws", root, canonicalRoot: await realpath(root) } as Workspace;
   const registry = { resolvePath: async (ws: Workspace, path: string) =>
     resolvePathInsideCanonicalRoot(path, ws.root, ws.root, ws.canonicalRoot),
   } as Pick<WorkspaceRegistry, "resolvePath">;
@@ -24,21 +24,14 @@ function fixture() {
     rmSync(base, { recursive: true, force: true }) };
 }
 test("reads explicit text from approved root without adding unrelated files", async () => {
-  const f = fixture();
+  const f = await fixture();
   try {
-    if (process.env.GITHUB_ACTIONS === "true") {
-      const target = await realpath(join(f.root, "README.md"));
-      console.log("LAO_CI_PATH_DIAGNOSTIC", JSON.stringify({
-        root: f.root, canonicalRoot: f.workspace.canonicalRoot, target,
-        relationship: relative(f.workspace.canonicalRoot, target),
-      }));
-    }
     const files = await loadLaoReadContext(f.registry, f.workspace, ["README.md"]);
     assert.deepEqual(files, [{ path: "README.md", content: "Repository overview\n" }]);
   } finally { f.cleanup(); }
 });
 test("rejects traversal, absolute paths, secrets, duplicate paths and excess count", async () => {
-  const f = fixture();
+  const f = await fixture();
   try {
     for (const name of ["../outside/outside.md", "/etc/passwd", ".env", ".git/config", "secret.md", "id_rsa", "a/../../README.md", "oversize.ts", "README.exe", "C:\\Windows\\win.ini"]) {
       await assert.rejects(loadLaoReadContext(f.registry, f.workspace, [name]));
@@ -49,7 +42,7 @@ test("rejects traversal, absolute paths, secrets, duplicate paths and excess cou
   } finally { f.cleanup(); }
 });
 test("symlink escaping canonical root is refused", async t => {
-  const f = fixture();
+  const f = await fixture();
   try {
     try { symlinkSync(join(f.outside, "outside.md"), join(f.root, "linked.md")); }
     catch { t.skip("Symlink unavailable on this Windows account"); return; }
