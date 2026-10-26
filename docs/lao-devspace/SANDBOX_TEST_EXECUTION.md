@@ -57,3 +57,19 @@ A aprovacao de escrita no `lao_review` continua bloqueada.
 
 **Nao instalar Docker, iniciar servicos Windows ou alterar o boot
 automaticamente para desbloquear estes testes.**
+
+## Smoke real opcional
+
+Apos compilar (`pnpm build`), selecione uma imagem Node **ja presente**
+localmente, preferencialmente dedicada a QA, com referencia completa por digest
+SHA-256. No PowerShell, atribua a variavel `LAO_SANDBOX_NODE_IMAGE` ao processo
+que fara o teste e execute `node scripts/lao-sandbox-live-smoke.mjs`.
+Nao ha download, instalacao de servico, alteracao do DevSpace original ou
+configuracao persistente de inicializacao.
+
+O script cria uma fixture Git temporaria, inclui testes inalterados de
+comportamento, rede desativada e montagem somente leitura. Tambem verifica
+falha intencional, imagem ausente sem pull e cancelamento. Finalmente remove
+o worktree e as fixtures. O resultado de sucesso nao aprova o patch.
+**A imagem usada no smoke deve ser avaliada pelo operador antes da execucao.**
+O teste efetivo do endpoint MCP autenticado continua pendente.

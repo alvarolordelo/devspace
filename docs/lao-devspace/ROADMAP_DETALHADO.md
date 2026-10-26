@@ -382,3 +382,12 @@ escrita. Consulte `SANDBOX_TEST_EXECUTION.md` para restricoes.
 suites completas do projeto e verificacoes deterministicas de aceite;
 comprovar que falhas bloqueiam aprovacao. O Docker Engine nao estava ativo
 na primeira verificacao e nao foi iniciado por politica de seguranca.
+
+### Evidencia F4-06 - smoke Docker real
+
+O executor isolado F4-05 foi validado em Docker Engine Linux ja ativo, sem
+instalar servicos ou baixar imagem. Testes reais confirmaram aplicacao da
+alteracao somente em worktree temporario, protecao read-only, bloqueio de rede,
+propagacao de falha, ausencia de pull, cancelamento e revisao obrigatoria.
+O registro atualizado esta no `PROGRESS.md`. Isto **nao satisfaz** ainda a
+validacao de criterios de aceite e a autenticacao MCP da F4.

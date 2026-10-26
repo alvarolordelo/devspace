@@ -126,3 +126,21 @@ Windows e autorizacao explicita para revisao/promocao. A F4 continua parcial.
 `pnpm typecheck`, `pnpm build`, verificacao da versao fixa e
 teste direcionado do runner apos o ajuste: **aprovados**.
 O pipeline de CI da nova branch devera validar novamente o conjunto completo.
+
+## F4-06 - Execucao Docker real (26/10/2026)
+
+**Status:** [x] smoke real da suite em container; **F4 segue [~]**.
+Docker Desktop Linux Engine estava disponivel na verificacao subsequente. Foi usada
+uma imagem Node existente e local, fixada por SHA-256, sem pull nem alteracao da
+imagem. O script opt-in `scripts/lao-sandbox-live-smoke.mjs` criou um repositorio
+Git e worktree **temporarios**, executou Node `--test` em container isolado e removeu
+os arquivos temporarios ao encerrar.
+
+Resultados comprovados: suite positiva, leitura da alteracao no worktree,
+proibicao de escrita no bind mount, rede externa indisponivel, suite que falha
+bloqueada, digest inexistente sem pull, cancelamento, checkout de origem limpo
+e `criteriaVerified=false` / `approvalAllowed=false`.
+
+**Ainda pendentes:** autenticacao MCP ponta a ponta, mapeamento verificavel de
+criterios de aceite, suites completas TypeScript, robustez de concorrencia,
+recuperacao e gate para aprovacao de escrita. Nao concluir F4 prematuramente.
