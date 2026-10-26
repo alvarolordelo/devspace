@@ -12,7 +12,7 @@ import { SqliteOAuthStore } from "../oauth-store.js";
 import { createServer } from "../server.js";
 import { writeTestDevspaceConfig } from "../test-support/config.test.js";
 
-test("authenticated real HTTP MCP exposes opt-in LAO and delegates through bounded fake Ollama", async (t) => {
+test("authenticated MCP runs LAO with bounded fake or optional live Ollama", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "lao-http-e2e-"));
   const work = join(root, "project");
   mkdirSync(work);
@@ -21,6 +21,16 @@ test("authenticated real HTTP MCP exposes opt-in LAO and delegates through bound
   }).trim();
   git("init", "-b", "feature/http-e2e");
   writeFileSync(join(work, "README.md"), "Temporary MCP test workspace");
+  mkdirSync(join(work, "tests"));
+  writeFileSync(join(work, "tests", "fixture.test.mjs"), [
+    'import test from "node:test";',
+    'import assert from "node:assert/strict";',
+    'import { readFileSync } from "node:fs";',
+    'test("model patch contains approved boolean fixture", () => {',
+    '  const source = readFileSync("/workspace/src/fixture.ts", "utf8");',
+    '  assert.match(source, /fixture\\s*=\\s*true/);',
+    '});', "",
+  ].join("\n"));
   git("add", ".");
   git("-c", "user.name=LAO Test", "-c", "user.email=lao-test@example.invalid",
     "commit", "-m", "baseline");
@@ -160,8 +170,8 @@ test("authenticated real HTTP MCP exposes opt-in LAO and delegates through bound
   }},false)).status,401);
   {
     const prepared = await rpc("tools/call",{ name:"lao_write_prepare", arguments:{
-      source_workspace_id: workspaceId, goal:"Add one bounded fixture",
-      acceptance_criteria:["Fixture constant is true"],
+      source_workspace_id: workspaceId, goal:"Create src/fixture.ts containing exactly: export const fixture = true;",
+      acceptance_criteria:["static: integrity","node:test tests/fixture.test.mjs"],
       allowed_write_paths:["src/fixture.ts"],
     }});
     assert.equal(prepared.data.result?.structuredContent?.status,"created");
@@ -177,6 +187,25 @@ test("authenticated real HTTP MCP exposes opt-in LAO and delegates through bound
       workspace_id:managedId,task_id:writeTask,
     }});
     assert.equal(validated.data.result?.structuredContent?.staticChecksPassed,true);
+    const beforeTests = await rpc("tools/call",{name:"lao_write_assess",arguments:{
+      workspace_id:managedId,task_id:writeTask,
+    }});
+    assert.equal(beforeTests.data.result?.structuredContent?.allCriteriaVerified,false);
+    assert.equal(beforeTests.data.result?.structuredContent?.promotionAllowed,false);
+    if (process.env.LAO_SANDBOX_NODE_IMAGE) {
+      const isolated = await rpc("tools/call",{name:"lao_write_test",arguments:{
+        workspace_id:managedId,task_id:writeTask,
+        test_files:["tests/fixture.test.mjs"],
+      }});
+      assert.equal(isolated.data.result?.structuredContent?.passed,true, JSON.stringify(isolated.data.result));
+      const assessed = await rpc("tools/call",{name:"lao_write_assess",arguments:{
+        workspace_id:managedId,task_id:writeTask,
+      }});
+      assert.equal(assessed.data.result?.structuredContent?.allCriteriaVerified,true);
+      assert.equal(assessed.data.result?.structuredContent?.approvalAllowed,false);
+      assert.equal(assessed.data.result?.structuredContent?.promotionAllowed,false);
+      console.log("Authenticated MCP + Docker test + declarative acceptance: passed, review blocked");
+    }
     const deniedApproval = await rpc("tools/call",{name:"lao_review",arguments:{
       workspace_id:managedId,task_id:writeTask,decision:"approved",
       criteria_verified:true,evidence:["Not accepted"],note:"Test",

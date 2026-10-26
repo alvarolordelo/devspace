@@ -11,6 +11,8 @@ import { LaoReadOnlyRunner } from "./task-runner.js";
 import { LaoIsolatedWriteRunner } from "./write-task-runner.js";
 import { validateLaoStaticWrite } from "./write-validation.js";
 import { runLaoSandboxTests } from "./write-test-sandbox.js";
+import { assessLaoWriteAcceptance } from "./write-acceptance.js";
+import { collectLaoReviewEvidence } from "./review-evidence.js";
 import { normalizeLaoPatchPath } from "./worktree-patch.js";
 import { loadLaoReadContext } from "./read-context.js";
 import type { LaoReview } from "./contracts.js";
@@ -285,6 +287,66 @@ export function registerLaoMcpTools(
       } catch (error) { return toolFailure(error); }
     });
 
+    server.registerTool("lao_write_retry", {
+      title: "Retry isolated write after supervisor corrections",
+      description: "Explicitly rerun a reviewed write task in the same managed worktree after needs_revision, with supervisor feedback and the original exact-path allowlist. At most two revisions; never approves or promotes.",
+      inputSchema: {
+        workspace_id: z.string().min(1),
+        task_id: z.string().uuid(),
+        source_files: z.array(z.string().min(1).max(240)).max(3).optional(),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    }, async ({ workspace_id, task_id, source_files }, extra) => {
+      try {
+        return await withStore(context.stateDir, async store => {
+          const workspace = await context.workspaces.getWorkspace(workspace_id);
+          const task = store.get(task_id);
+          if (!task || task.workspaceId !== workspace_id ||
+              task.permissions.write !== "isolated_worktree" ||
+              task.status !== "needs_revision" ||
+              task.revisionCount >= task.limits.maxRevisions ||
+              store.getReview(task_id)?.decision !== "needs_revision") {
+            throw new Error("Explicit write correction approval or revision budget missing");
+          }
+          const chosen = source_files ?? [];
+          if (chosen.length && !context.workspaces.resolvePath) {
+            throw new Error("Source reading is unavailable");
+          }
+          const snapshots = chosen.length
+            ? await loadLaoReadContext(
+              context.workspaces as Pick<WorkspaceRegistry, "resolvePath">, workspace, chosen)
+            : [];
+          // A correction must start from the exact reviewed patch, never
+          // silently incorporate manual edits made after the review.
+          const previous = store.getWriteEvidence(task_id).at(-1);
+          if (!previous) throw new Error("Previous write evidence is missing");
+          const current = await collectLaoReviewEvidence(task, workspace, context.worktreeRoot!);
+          if (current.head !== previous.evidence.head ||
+              current.contentFingerprint !== previous.evidence.contentFingerprint) {
+            throw new Error("Worktree changed after the supervisor review");
+          }
+          const runner = new LaoIsolatedWriteRunner(
+            store, context.ollama ?? new LaoOllamaClient(config), context.worktreeRoot!);
+          try {
+            const result = await runner.runTask(task_id, workspace, extra?.signal, snapshots);
+            return asToolResult({
+              task_id, workspace_id, status: result.task.status, run: result.run,
+              revision_count: result.task.revisionCount,
+              changed_files: result.outcome.applied.files,
+              patch: result.outcome.applied.patch,
+              evidence: result.outcome.evidence,
+              requires_review: true, tests_verified: false, criteria_verified: false,
+            });
+          } catch {
+            return asToolResult({
+              task_id, status: store.get(task_id)?.status, error: "execution_failed",
+              requires_review: true, tests_verified: false, criteria_verified: false,
+            });
+          }
+        });
+      } catch (error) { return toolFailure(error); }
+    });
+
     server.registerTool("lao_write_validate", {
       title: "Validate supervised write without executing code",
       description: "Re-read persisted worktree evidence and perform bounded integrity, scope, whitespace and syntax checks. Does not run tests, verify acceptance criteria, approve or merge.",
@@ -340,6 +402,34 @@ export function registerLaoMcpTools(
           }
         });
       } catch (error) { return toolFailure(error); }
+    });
+
+    server.registerTool("lao_write_assess", {
+    title: "Assess isolated write acceptance evidence",
+    description: "Recheck worktree integrity and map explicitly declared static: integrity or node:test <path> criteria to recorded isolated tests. Natural-language criteria remain unverified. Never approves or promotes changes.",
+    inputSchema: {
+      workspace_id: z.string().min(1),
+      task_id: z.string().uuid(),
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, async ({ workspace_id, task_id }) => {
+    try {
+      return await withStore(context.stateDir, async store => {
+        const workspace = await context.workspaces.getWorkspace(workspace_id);
+        const task = store.get(task_id);
+        if (!task || task.workspaceId !== workspace_id ||
+            task.permissions.write !== "isolated_worktree" || !context.worktreeRoot) {
+          throw new Error("Isolated write task not accessible");
+        }
+        const record = store.getWriteEvidence(task_id).at(-1);
+        if (!record) throw new Error("No persisted write evidence");
+        const staticValidation = await validateLaoStaticWrite(task, workspace, context.worktreeRoot, record);
+        const report = assessLaoWriteAcceptance(
+          task, record, staticValidation, store.getTestEvidence(task_id),
+        );
+        return asToolResult(report);
+      });
+    } catch (error) { return toolFailure(error); }
     });
   }
 

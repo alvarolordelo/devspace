@@ -84,3 +84,38 @@ suite sobre a mesma tarefa enquanto a lease estiver ativa. O token secreto
 da lease nao e exposto ao MCP/modelo; e exigido para gravar evidencias.
 Se o processo falhar, a lease expirara e uma nova chamada explicita podera
 assumi-la. Nenhum trabalho e reiniciado automaticamente.
+
+## Avaliacao deterministica da F4 (F4-08)
+
+A ferramenta MCP `lao_write_assess` e exclusivamente de consulta,
+disponivel somente no contexto com worktree gerenciado. Recalcula o
+fingerprint e os testes sintaticos do patch antes de analisar a
+evidencia Docker do run mais recente. Ela aceita SOMENTE duas formas
+literais declaradas no campo `acceptance_criteria` da tarefa:
+
+```text
+static: integrity
+node:test tests/feature.test.mjs
+```
+
+Em `node:test`, o caminho declarado deve ser um arquivo baseline,
+rastreado pelo Git e inalterado. Somente a tentativa mais recente
+daquele teste e considerada; a evidencia deve ser bem-sucedida, ter
+imagem local fixada por SHA-256 e SHA-256 do stdout, e coincidir
+com o task, run e fingerprint atuais.
+
+Um criterio livre, como "a funcionalidade esta correta", nao pode
+ser provado por igualdade de texto; permanece `unverified` mesmo
+se o teste passar. `allCriteriaVerified=true` so significa que
+TODOS os criterios declarativos disponiveis possuem prova registrada.
+Mesmo assim, `approvalAllowed=false` e `promotionAllowed=false`;
+o responsavel deve revisar requisitos de negocio e autorizar qualquer
+promocao posteriormente por uma operacao explicita.
+
+Correcoes de escrita podem ser solicitadas pelo supervisor com
+`lao_review needs_revision` e depois `lao_write_retry`, ate duas
+vezes, preservando os caminhos originais. O retry exige que o
+worktree ainda tenha o mesmo HEAD e contentFingerprint observados na
+ultima revisao. Rejeita alteracoes manuais concorrentes, ainda que
+tenham ocorrido num caminho permitido. Revisao tambem e recusada
+enquanto uma suite Docker detem lease de teste ativa.

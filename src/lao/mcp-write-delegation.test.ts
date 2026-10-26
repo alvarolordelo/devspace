@@ -128,6 +128,13 @@ test("MCP supervisor prepares isolated worktree, runs model patch, persists diff
     assert.equal(tampered.structuredContent.staticChecksPassed, false);
     assert.equal(tampered.structuredContent.fingerprintMatches, false);
     writeFileSync(join(worktrees[0], "src", "feature.ts"), "export const feature = true;\n");
+    const assessed = await invoke("lao_write_assess", {
+      workspace_id: workspaceId, task_id: taskId,
+    });
+    assert.equal(assessed.structuredContent.allCriteriaVerified, false);
+    assert.equal(assessed.structuredContent.criteria[0].status, "unverified",
+      "natural language must not be treated as passed");
+    assert.equal(assessed.structuredContent.approvalAllowed, false);
     const reviewed = await invoke("lao_result", { workspace_id: workspaceId, task_id: taskId });
     assert.equal(reviewed.structuredContent.runs.length, 1);
     assert.equal(reviewed.structuredContent.runs[0].toolCalls, 1);
@@ -169,6 +176,59 @@ test("MCP supervisor prepares isolated worktree, runs model patch, persists diff
       assert.equal(reopened.getTestEvidence(taskId).length, 1);
       assert.equal(reopened.getTestEvidence(taskId)[0]?.failureCode, "sandbox_unavailable");
     } finally { reopened.close(); }
+
+    const corrections = await invoke("lao_review", {
+      workspace_id: workspaceId, task_id: taskId, decision: "needs_revision",
+      criteria_verified: false, evidence: ["Flag must be false"], note: "Change flag value",
+    });
+    assert.equal(corrections.structuredContent.task.status, "needs_revision");
+    currentPatch = "*** Begin Patch\n*** Update File: src/feature.ts\n@@\n-export const feature = true;\n+export const feature = false;\n*** End Patch";
+    writeFileSync(join(worktrees[0], "src", "feature.ts"), "export const feature = 42;\n");
+    const unreviewedChange = await invoke("lao_write_retry", {
+      workspace_id: workspaceId, task_id: taskId,
+    });
+    assert.equal(unreviewedChange.isError, true,
+      "manual changes inside the allowlist must not be adopted into the retry");
+    const interrupted = new LaoTaskStore(stateDir);
+    try { assert.equal(interrupted.get(taskId)?.status, "needs_revision"); }
+    finally { interrupted.close(); }
+    writeFileSync(join(worktrees[0], "src", "feature.ts"), "export const feature = true;\n");
+    const firstCorrection = await invoke("lao_write_retry", {
+      workspace_id: workspaceId, task_id: taskId,
+    });
+    assert.equal(firstCorrection.structuredContent.status, "awaiting_review");
+    assert.equal(firstCorrection.structuredContent.revision_count, 1);
+    assert.match(firstCorrection.structuredContent.patch, /feature = false/);
+    assert.equal((await invoke("lao_write_validate", {
+      workspace_id: workspaceId, task_id: taskId,
+    })).structuredContent.staticChecksPassed, true);
+    assert.equal(existsSync(join(repo, "src", "feature.ts")), false);
+    assert.equal(git(repo, "status", "--porcelain"), "");
+
+    await invoke("lao_review", {
+      workspace_id: workspaceId, task_id: taskId, decision: "needs_revision",
+      criteria_verified: false, evidence: ["Flag must be restored"], note: "Return flag to true",
+    });
+    currentPatch = "*** Begin Patch\n*** Update File: src/feature.ts\n@@\n-export const feature = false;\n+export const feature = true;\n*** End Patch";
+    const secondCorrection = await invoke("lao_write_retry", {
+      workspace_id: workspaceId, task_id: taskId,
+    });
+    assert.equal(secondCorrection.structuredContent.status, "awaiting_review");
+    assert.equal(secondCorrection.structuredContent.revision_count, 2);
+    await invoke("lao_review", {
+      workspace_id: workspaceId, task_id: taskId, decision: "needs_revision",
+      criteria_verified: false, evidence: ["Third attempt denied"], note: "No budget",
+    });
+    assert.equal((await invoke("lao_write_retry", {
+      workspace_id: workspaceId, task_id: taskId,
+    })).isError, true, "writes must not exceed two supervisor-authorized retries");
+    const afterCorrections = new LaoTaskStore(stateDir);
+    try {
+      assert.equal(afterCorrections.getWriteEvidence(taskId).length, 3);
+      assert.equal(afterCorrections.getRuns(taskId).length, 3);
+      assert.equal(afterCorrections.get(taskId)?.revisionCount, 2);
+    } finally { afterCorrections.close(); }
+    assert.equal(git(repo, "status", "--porcelain"), "");
 
     currentPatch = "*** Begin Patch\n*** Add File: src/forbidden.ts\n+unsafe\n*** End Patch";
     const second = await prepare();
