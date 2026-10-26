@@ -55,7 +55,7 @@ export class LaoOllamaClient {
     prompt: string,
     options: { model?: string; signal?: AbortSignal; timeoutMs?: number; maxOutputTokens?: number } = {},
   ): Promise<string> {
-    if (!prompt.trim() || prompt.length > 8_000) throw new RangeError("Invalid prompt length");
+    if (!prompt.trim() || prompt.length > 20_000) throw new RangeError("Invalid prompt length");
     const maxTokens = options.maxOutputTokens ?? 256;
     if (!Number.isSafeInteger(maxTokens) || maxTokens < 1 || maxTokens > 1024) {
       throw new RangeError("Invalid maximum output tokens");

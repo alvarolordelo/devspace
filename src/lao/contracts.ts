@@ -55,6 +55,7 @@ export const laoRunSchema = z.object({
   toolCalls: z.number().int().min(0),
   summary: z.string().max(20000).nullable(),
   errorCode: z.string().max(64).nullable().default(null),
+  sourceManifest: z.array(z.object({ path: z.string().min(1).max(240), sha256: z.string().regex(/^[0-9a-f]{64}$/) }).strict()).max(3).default([]),
 }).strict();
 export type LaoRun = z.output<typeof laoRunSchema>;
 

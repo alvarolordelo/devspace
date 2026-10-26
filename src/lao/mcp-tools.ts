@@ -6,13 +6,14 @@ import { LaoOllamaClient } from "./ollama-client.js";
 import { measureLaoReadiness } from "./health.js";
 import { LaoTaskStore } from "./task-store.js";
 import { LaoReadOnlyRunner } from "./task-runner.js";
+import { loadLaoReadContext } from "./read-context.js";
 import type { LaoReview } from "./contracts.js";
 
 type Target = Pick<McpRegistrationTarget, "registerTool">;
 
 export interface LaoMcpContext {
   stateDir: string;
-  workspaces: Pick<WorkspaceRegistry, "getWorkspace">;
+  workspaces: Pick<WorkspaceRegistry, "getWorkspace"> & Partial<Pick<WorkspaceRegistry, "resolvePath">>;
   ollama?: Pick<LaoOllamaClient, "inspectModel" | "chatReadOnly">;
 }
 
@@ -79,19 +80,27 @@ export function registerLaoMcpTools(
 
   server.registerTool("lao_delegate", {
     title: "Delegate read-only task to local model",
-    description: "Create and execute a bounded read-only task with Ollama, no filesystem/shell/tools. Output always awaits supervisor review; never edits code.",
+    description: "Create a bounded read-only task with optionally supplied source file snapshots from the authorized workspace. No shell or model tools; always requires supervisor review.",
     inputSchema: {
       workspace_id: z.string().min(1),
       goal: z.string().trim().min(1).max(4000),
       acceptance_criteria: z.array(z.string().trim().min(1).max(500)).min(1).max(10),
       model: z.string().trim().min(1).max(200).optional(),
       max_wall_seconds: z.number().int().min(1).max(180).optional(),
+      source_files: z.array(z.string().min(1).max(240)).max(3).optional(),
     },
     annotations: { readOnlyHint: false, openWorldHint: false },
-  }, async ({ workspace_id, goal, acceptance_criteria, model, max_wall_seconds }, extra) => {
+  }, async ({ workspace_id, goal, acceptance_criteria, model, max_wall_seconds, source_files }, extra) => {
     let taskId: string | undefined;
     try {
-      await assertWorkspace(workspace_id, undefined, context);
+      const workspace = await context.workspaces.getWorkspace(workspace_id);
+      const selectedFiles = source_files ?? [];
+      if (selectedFiles.length && !context.workspaces.resolvePath) {
+        throw new Error("File read context is unavailable");
+      }
+      const sourceSnapshots = selectedFiles.length
+        ? await loadLaoReadContext(context.workspaces as Pick<WorkspaceRegistry, "resolvePath">, workspace, selectedFiles)
+        : [];
       return await withStore(context.stateDir, async (store) => {
         const runner = new LaoReadOnlyRunner(store, context.ollama ?? new LaoOllamaClient(config));
         const task = runner.createTask({
@@ -103,9 +112,9 @@ export function registerLaoMcpTools(
         });
         taskId = task.id;
         try {
-          const result = await runner.runTask(task.id, extra?.signal);
+          const result = await runner.runTask(task.id, extra?.signal, sourceSnapshots);
           return asToolResult({ task_id: task.id, status: result.task.status, run: result.run,
-            requires_review: true, criteria_verified: false });
+            requires_review: true, criteria_verified: false, source_manifest: result.run.sourceManifest });
         } catch {
           return asToolResult({ task_id: task.id, status: store.get(task.id)?.status,
             requires_review: true, error: "execution_failed", criteria_verified: false });

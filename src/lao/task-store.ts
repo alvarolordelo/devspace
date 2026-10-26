@@ -139,7 +139,7 @@ export class LaoTaskStore {
   }
 
   /** Records one run before model execution so crashes leave an audit record. */
-  startRun(taskId: string): LaoRun {
+  startRun(taskId: string, sourceManifest: LaoRun["sourceManifest"] = []): LaoRun {
     return this.sqlite.transaction(() => {
       const task = this.requireTask(taskId);
       if (task.status !== "running") throw new Error("Run requires running task");
@@ -151,7 +151,7 @@ export class LaoTaskStore {
         schemaVersion: RUN_VERSION, id: randomUUID(), taskId,
         model: task.model, status: "running",
         startedAt: new Date().toISOString(), finishedAt: null,
-        toolCalls: 0, summary: null, errorCode: null,
+        toolCalls: 0, summary: null, errorCode: null, sourceManifest,
       });
       this.sqlite.prepare("insert into lao_runs(id, task_id, status, record_json) values (?, ?, ?, ?)")
         .run(run.id, taskId, run.status, JSON.stringify(run));
