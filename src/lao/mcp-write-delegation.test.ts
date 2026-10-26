@@ -17,7 +17,7 @@ const git = (root: string, ...args: string[]) =>
 const goodPatch = "*** Begin Patch\n*** Add File: src/feature.ts\n+export const feature = true;\n*** End Patch";
 
 test("MCP supervisor prepares isolated worktree, runs model patch, persists diff and denies approval", async () => {
-  const base = mkdtempSync(join(tmpdir(), "lao-write-mcp-"));
+  const base = await realpath(mkdtempSync(join(tmpdir(), "lao-write-mcp-")));
   const repo = join(base, "source");
   const managed = join(base, "managed");
   const stateDir = join(base, "state");
