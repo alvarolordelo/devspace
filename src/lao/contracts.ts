@@ -19,6 +19,7 @@ export const laoPermissionsSchema = z.object({
   read: z.literal(true),
   write: z.enum(["none", "isolated_worktree"]).default("none"),
   shell: z.enum(["none", "allowlist"]).default("none"),
+  allowedWritePaths: z.array(z.string().trim().min(1).max(240)).max(20).default([]),
 }).strict();
 
 export const laoTaskInputSchema = z.object({
