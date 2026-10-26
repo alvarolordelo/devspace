@@ -23,6 +23,8 @@ jobs:
       DEVSPACE_LAO_ENABLED: "false"
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup pnpm and Node
         uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2
@@ -30,6 +32,11 @@ jobs:
           runtime: node@24
           cache: true
           install: false
+
+      - name: Verify pinned DevSpace version and lock
+        run: |
+          node scripts/lao-verify-devspace-pin.mjs
+          node --test scripts/lao-verify-devspace-pin.test.mjs
 
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
