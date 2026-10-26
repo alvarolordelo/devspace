@@ -1,0 +1,52 @@
+name: LAO Feature CI
+
+on:
+  push:
+    branches:
+      - feature/lao-devspace
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lao-feature-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-latest:
+    name: Windows LAO regression
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      DEVSPACE_OAUTH_OWNER_TOKEN: ci-owner-token-that-is-long-enough
+      DEVSPACE_LAO_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm and Node
+        uses: pnpm/setup@84cb39b217b10273981911c288cd62326dc7c6d2
+        with:
+          runtime: node@24
+          cache: true
+          install: false
+
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: LAO unit and boundary tests
+        run: pnpm exec tsx --test src/lao/*.test.ts
+
+      - name: Full DevSpace regression
+        run: pnpm test
+
+      - name: Confirm LAO remains opt-in
+        shell: pwsh
+        run: |
+          node -e "import('./dist/lao/config.js').then(({loadLaoConfig}) => { if (loadLaoConfig({}).enabled) process.exit(1); })"
