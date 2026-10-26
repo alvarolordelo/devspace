@@ -819,7 +819,7 @@ function registerMcpSurface(
     processSessions,
   });
 
-  registerLaoMcpTools(registrationTarget, loadLaoConfig());
+  registerLaoMcpTools(registrationTarget, loadLaoConfig(), { stateDir: config.stateDir, workspaces });
 
   registerAppTool(
     registrationTarget,

@@ -54,6 +54,7 @@ export const laoRunSchema = z.object({
   finishedAt: z.iso.datetime().nullable(),
   toolCalls: z.number().int().min(0),
   summary: z.string().max(20000).nullable(),
+  errorCode: z.string().max(64).nullable().default(null),
 }).strict();
 export type LaoRun = z.output<typeof laoRunSchema>;
 

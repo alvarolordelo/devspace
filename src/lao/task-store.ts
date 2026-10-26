@@ -5,6 +5,7 @@ import Database from "better-sqlite3";
 import {
   LAO_CONTRACT_VERSION, laoReviewSchema, laoTaskInputSchema, laoTaskSchema,
   type LaoReview, type LaoTask, type LaoTaskInput, type LaoTaskState,
+  LAO_CONTRACT_VERSION as RUN_VERSION, laoRunSchema, type LaoRun,
 } from "./contracts.js";
 import { assertLaoTransition } from "./task-state.js";
 
@@ -52,6 +53,13 @@ export class LaoTaskStore {
         record_json text not null
       );
       create index if not exists lao_reviews_task_idx on lao_reviews(task_id, id);
+      create table if not exists lao_runs (
+        id text primary key,
+        task_id text not null references lao_tasks(id) on delete cascade,
+        status text not null,
+        record_json text not null
+      );
+      create index if not exists lao_runs_task_idx on lao_runs(task_id, id);
     `);
   }
 
@@ -127,9 +135,66 @@ export class LaoTaskStore {
     return row ? laoReviewSchema.parse(JSON.parse(row.record_json)) : null;
   }
 
+  /** Records one run before model execution so crashes leave an audit record. */
+  startRun(taskId: string): LaoRun {
+    return this.sqlite.transaction(() => {
+      const task = this.requireTask(taskId);
+      if (task.status !== "running") throw new Error("Run requires running task");
+      const existing = this.sqlite.prepare(
+        "select id from lao_runs where task_id = ? and status = 'running'"
+      ).get(taskId);
+      if (existing) throw new Error("A model run is already in progress");
+      const run = laoRunSchema.parse({
+        schemaVersion: RUN_VERSION, id: randomUUID(), taskId,
+        model: task.model, status: "running",
+        startedAt: new Date().toISOString(), finishedAt: null,
+        toolCalls: 0, summary: null, errorCode: null,
+      });
+      this.sqlite.prepare("insert into lao_runs(id, task_id, status, record_json) values (?, ?, ?, ?)")
+        .run(run.id, taskId, run.status, JSON.stringify(run));
+      return run;
+    }).immediate();
+  }
+
+  completeRun(id: string, outcome: { status: "completed" | "failed" | "cancelled"; summary?: string; errorCode?: string }): LaoRun {
+    return this.sqlite.transaction(() => {
+      const row = this.sqlite.prepare("select record_json from lao_runs where id = ?")
+        .get(id) as { record_json: string } | undefined;
+      if (!row) throw new Error("LAO run not found");
+      const run = laoRunSchema.parse(JSON.parse(row.record_json));
+      if (run.status !== "running") throw new Error("LAO run already finished");
+      const updated = laoRunSchema.parse({
+        ...run, status: outcome.status, finishedAt: new Date().toISOString(),
+        summary: outcome.summary?.slice(0, 20000) ?? null,
+        errorCode: outcome.errorCode?.slice(0,64) ?? null,
+      });
+      const changed = this.sqlite.prepare("update lao_runs set status = ?, record_json = ? where id = ? and status = 'running'")
+        .run(updated.status, JSON.stringify(updated), id);
+      if (changed.changes !== 1) throw new Error("Concurrent run finish");
+      return updated;
+    }).immediate();
+  }
+
+  getRuns(taskId: string): LaoRun[] {
+    this.requireTask(taskId);
+    const rows = this.sqlite.prepare("select record_json from lao_runs where task_id = ? order by rowid")
+      .all(taskId) as Array<{ record_json: string }>;
+    return rows.map(row => laoRunSchema.parse(JSON.parse(row.record_json)));
+  }
+
   /** Called on LAO startup. Never resumes tasks or writes to a worktree. */
   recoverInterrupted(): number {
     return this.sqlite.transaction(() => {
+      const currentRuns = this.sqlite.prepare("select id, record_json from lao_runs where status = 'running'")
+        .all() as Array<{id: string;record_json: string}>;
+      for (const row of currentRuns) {
+        const run = laoRunSchema.parse(JSON.parse(row.record_json));
+        const interrupted = laoRunSchema.parse({
+          ...run, status: "interrupted", finishedAt: new Date().toISOString(),
+        });
+        this.sqlite.prepare("update lao_runs set status = ?, record_json = ? where id = ?")
+          .run(interrupted.status, JSON.stringify(interrupted), row.id);
+      }
       let changed = 0;
       const interruptedStates: LaoTaskState[] = ["preparing", "running", "validating"];
       for (const task of this.list()) {

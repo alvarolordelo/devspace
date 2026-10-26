@@ -112,3 +112,33 @@ test("multiple review rounds append evidence without overwriting prior reviews",
     assert.equal(store.get(task.id)?.revisionCount, 1);
   });
 });
+
+test("run output persists across reopen; recovery interrupts both task and run", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lao-run-recover-"));
+  let store = new LaoTaskStore(dir);
+  try {
+    const task = store.create(makeInput());
+    for (const state of ["queued", "preparing", "running"] as const) store.transition(task.id, state);
+    const run = store.startRun(task.id);
+    assert.equal(run.status, "running");
+    assert.throws(() => store.startRun(task.id), /already in progress/);
+    store.close();
+    store = new LaoTaskStore(dir);
+    assert.equal(store.getRuns(task.id)[0]?.status, "running");
+    assert.equal(store.recoverInterrupted(), 1);
+    assert.equal(store.getRuns(task.id)[0]?.status, "interrupted");
+    assert.equal(store.get(task.id)?.status, "interrupted");
+    assert.ok(store.getRuns(task.id)[0]?.finishedAt);
+  } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+test("completed runs are immutable; their bounded results remain durable", () => {
+  withStore((store) => {
+    const task = store.create(makeInput());
+    for (const state of ["queued", "preparing", "running"] as const) store.transition(task.id, state);
+    const run = store.startRun(task.id);
+    const saved = store.completeRun(run.id, { status: "completed", summary: "Verified only by supervisor later" });
+    assert.equal(saved.status, "completed");
+    assert.equal(store.getRuns(task.id)[0]?.summary, saved.summary);
+    assert.throws(() => store.completeRun(run.id, { status: "failed" }), /already finished/);
+  });
+});
