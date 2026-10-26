@@ -116,6 +116,9 @@ export class LaoTaskStore {
     return this.sqlite.transaction(() => {
       const current = this.requireTask(decision.taskId);
       assertLaoTransition(current.status, decision.decision, "review");
+      if (decision.decision === "approved" && current.permissions.write !== "none") {
+        throw new Error("Write task approval requires deterministic evidence pipeline");
+      }
       if (decision.decision === "approved" && !decision.criteriaVerified) {
         throw new Error("Cannot approve without verified acceptance criteria");
       }

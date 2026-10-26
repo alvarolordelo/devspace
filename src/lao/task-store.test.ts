@@ -142,3 +142,17 @@ test("completed runs are immutable; their bounded results remain durable", () =>
     assert.throws(() => store.completeRun(run.id, { status: "failed" }), /already finished/);
   });
 });
+
+test("write-capable task cannot be approved before deterministic verification exists", () => {
+  withStore((store) => {
+    const task = store.create({
+      ...makeInput(), permissions: { read: true, write: "isolated_worktree", shell: "none" },
+    });
+    toReview(store, task.id);
+    assert.throws(() => store.decideReview({
+      schemaVersion: 1, taskId: task.id, decision: "approved", reviewer: "supervisor",
+      criteriaVerified: true, evidence: ["manual claim"], note: "not enough", decidedAt: new Date().toISOString(),
+    }), /deterministic evidence pipeline/);
+    assert.equal(store.get(task.id)?.status, "awaiting_review");
+  });
+});
