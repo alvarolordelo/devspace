@@ -137,7 +137,26 @@ test("MCP supervisor prepares isolated worktree, runs model patch, persists diff
     try {
       assert.equal(db.getWriteEvidence(taskId).length, 1);
       assert.equal(db.get(taskId)?.status, "awaiting_review");
+      const runEvidence = db.getWriteEvidence(taskId)[0]!;
+      db.recordTestEvidence({
+        taskId, runId: runEvidence.runId,
+        suiteId: "node-test", testFiles: ["tests/smoke.test.mjs"],
+        image: "node@sha256:" + "a".repeat(64),
+        at: new Date().toISOString(), executed: false, passed: false,
+        exitCode: null, failureCode: "sandbox_unavailable",
+        stdoutSha256: null, stderrSha256: null, integrityMaintained: true,
+        contentFingerprint: runEvidence.evidence.contentFingerprint,
+        criteriaVerified: false, approvalAllowed: false,
+      });
+      assert.equal(db.getTestEvidence(taskId).length, 1);
+      assert.equal(db.getTestEvidence(taskId)[0]?.criteriaVerified, false);
+      assert.equal(db.get(taskId)?.status, "awaiting_review");
     } finally { db.close(); }
+    const reopened = new LaoTaskStore(stateDir);
+    try {
+      assert.equal(reopened.getTestEvidence(taskId).length, 1);
+      assert.equal(reopened.getTestEvidence(taskId)[0]?.failureCode, "sandbox_unavailable");
+    } finally { reopened.close(); }
 
     currentPatch = "*** Begin Patch\n*** Add File: src/forbidden.ts\n+unsafe\n*** End Patch";
     const second = await prepare();

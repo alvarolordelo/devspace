@@ -367,3 +367,18 @@ Sem datas arbitrárias: cada fase passa para a próxima apenas quando seus crit�
 - Microsoft — gatilhos de inicialização e logon: https://learn.microsoft.com/en-us/windows/win32/taskschd/trigger-types
 
 **Nota de atualização:** o acesso ao DevSpace e a publicação da branch foram confirmados em 25/10/2026. Este documento permanece como plano de arquitetura; use `PROGRESS.md` para distinguir requisitos implementados, simulados, bloqueados e pendentes.
+
+
+### Complemento F4-05 (26/10/2026) - runner de suites supervisionadas
+
+Foi introduzido um executor experimental para scripts node:test preexistentes
+em worktree gerenciado. A versao inicial exige imagem Docker local e imutavel
+por digest, nao utiliza rede, executa em usuario nao privilegiado, limita
+recursos e monta o worktree apenas para leitura. Cada resultado e associado
+a task/run e nao pode declarar criterios de aceite verificados nem aprovar
+escrita. Consulte `SANDBOX_TEST_EXECUTION.md` para restricoes.
+
+**Gate ainda pendente:** testar Docker real e caminho MCP autenticado; cobrir
+suites completas do projeto e verificacoes deterministicas de aceite;
+comprovar que falhas bloqueiam aprovacao. O Docker Engine nao estava ativo
+na primeira verificacao e nao foi iniciado por politica de seguranca.

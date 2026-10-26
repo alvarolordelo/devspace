@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { LaoPatchOutcome } from "./worktree-patch.js";
+import type { LaoSandboxTestEvidence } from "./write-test-sandbox.js";
 import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -76,6 +77,13 @@ export class LaoTaskStore {
         task_id text not null references lao_tasks(id) on delete cascade,
         record_json text not null
       );
+      create table if not exists lao_write_test_evidence (
+        id integer primary key autoincrement,
+        task_id text not null references lao_tasks(id) on delete cascade,
+        run_id text not null references lao_runs(id) on delete cascade,
+        record_json text not null
+      );
+      create index if not exists lao_write_test_idx on lao_write_test_evidence(task_id, id);
     `);
   }
 
@@ -230,6 +238,33 @@ export class LaoTaskStore {
       "select record_json from lao_write_evidence where task_id = ? order by rowid",
     ).all(taskId) as Array<{record_json:string}>;
     return rows.map(row => JSON.parse(row.record_json) as LaoStoredWriteEvidence);
+  }
+
+  /** One immutable audit record for each attempted isolated suite. */
+  recordTestEvidence(evidence: LaoSandboxTestEvidence): void {
+    this.sqlite.transaction(() => {
+      const task = this.requireTask(evidence.taskId);
+      const row = this.sqlite.prepare(
+        "select run_id from lao_write_evidence where run_id = ? and task_id = ?"
+      ).get(evidence.runId, evidence.taskId);
+      if (!row || task.status !== "awaiting_review" ||
+          task.permissions.write !== "isolated_worktree" ||
+          evidence.criteriaVerified !== false || evidence.approvalAllowed !== false ||
+          JSON.stringify(evidence).length > 8192) {
+        throw new Error("Invalid isolated test evidence");
+      }
+      this.sqlite.prepare(
+        "insert into lao_write_test_evidence(task_id,run_id,record_json) values (?,?,?)"
+      ).run(evidence.taskId, evidence.runId, JSON.stringify(evidence));
+    }).immediate();
+  }
+
+  getTestEvidence(taskId: string): LaoSandboxTestEvidence[] {
+    this.requireTask(taskId);
+    return (this.sqlite.prepare(
+      "select record_json from lao_write_test_evidence where task_id = ? order by id"
+    ).all(taskId) as Array<{record_json:string}>).map(row =>
+      JSON.parse(row.record_json) as LaoSandboxTestEvidence);
   }
 
   getRuns(taskId: string): LaoRun[] {

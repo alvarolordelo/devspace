@@ -88,3 +88,41 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 - Sem merge em `main`, sem serviços Windows, sem alterações no boot, sem execução em produção.
 
 **Proximos gates:** validar transporte MCP autenticado da feature, implementar executor de suites de testes autorizadas e isoladas e verificar criterios de aceite; aprovacao de escrita permanece bloqueada. Servico Windows e tray dependem de autorizacao operacional.
+
+
+## Atualizacao F4-05 - 26/10/2026
+
+**Status:** [~] executor de suite isolada preparado; criterio de saida da F4 NAO concluido.
+
+- Criado `src/lao/write-test-sandbox.ts`: apenas scripts `node:test` explicitos,
+  rastreados no HEAD e inalterados, dentro de container Docker de rede desativada,
+  imagem SHA-256 fixa presente localmente e filesystem/worktree somente leitura.
+- Nova ferramenta opt-in `lao_write_test` exige worktree, task e run corretos e
+  a imagem administrativa `LAO_SANDBOX_NODE_IMAGE`. Nao aceita comando do modelo.
+- Evidencias de suites em `lao_write_test_evidence`, reconsultadas em
+  `lao_result`; logs guardados somente via SHA-256, sem conteudo bruto.
+- Fingerprint do patch revalidado antes e apos o teste; falha de suite,
+  daemon indisponivel e adulteracao nunca autorizam aprovacao.
+- Testes locais de politica e simulacao de invocacao do container aprovados;
+  armazenamento de evidencia comprovado por reabertura SQLite.
+- **Bloqueio operacional:** Docker Desktop Linux Engine nao estava ativo
+  (npipe do Docker inexistente). Nenhum servico foi iniciado ou instalado.
+  Portanto, suite Docker real, isolamento em execucao e teste MCP autenticado
+  ainda NAO estao verificados.
+- A regra de reprovacao de escrita no `lao_review` permanece intacta.
+- Documentacao de seguranca: `docs/lao-devspace/SANDBOX_TEST_EXECUTION.md`.
+- Ollama local respondeu HTTP 200 na API /api/tags, modelo Granite instalado;
+  smoke read-only real completou com persistencia e awaiting_review
+  (task `8bb6f9b1-ba6e-4182-8813-6b1d2ebf516f`, 23853 ms), sem MCP real.
+- GitHub Actions run `40324744189` (commit 6f199e1): Windows LAO regression
+  **success**; a nova rodada F4-05 requer CI apos push.
+
+**Proximos gates:** teste real do Docker em ambiente aprovado, suites TypeScript
+em isolamento, criterios de aceite deterministas, MCP autenticado, regressao
+Windows e autorizacao explicita para revisao/promocao. A F4 continua parcial.
+
+**Verificacao de regressao nesta rodada (antes do ajuste final de host Docker local):**
+`pnpm test`: **217 testes, 209 aprovados, 8 ignorados, 0 falhas**;
+`pnpm typecheck`, `pnpm build`, verificacao da versao fixa e
+teste direcionado do runner apos o ajuste: **aprovados**.
+O pipeline de CI da nova branch devera validar novamente o conjunto completo.

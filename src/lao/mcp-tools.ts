@@ -10,6 +10,7 @@ import { LaoTaskStore } from "./task-store.js";
 import { LaoReadOnlyRunner } from "./task-runner.js";
 import { LaoIsolatedWriteRunner } from "./write-task-runner.js";
 import { validateLaoStaticWrite } from "./write-validation.js";
+import { runLaoSandboxTests } from "./write-test-sandbox.js";
 import { normalizeLaoPatchPath } from "./worktree-patch.js";
 import { loadLaoReadContext } from "./read-context.js";
 import type { LaoReview } from "./contracts.js";
@@ -308,6 +309,33 @@ export function registerLaoMcpTools(
       } catch (error) { return toolFailure(error); }
     });
 
+    server.registerTool("lao_write_test", {
+      title: "Run approved isolated node test suite",
+      description: "Run only specified baseline node:test scripts inside a locked, offline Docker sandbox with a locally installed image pinned by host SHA-256. No shell commands from the model. Tests do not verify acceptance criteria or approve changes.",
+      inputSchema: {
+        workspace_id: z.string().min(1),
+        task_id: z.string().uuid(),
+        test_files: z.array(z.string().min(1).max(240)).min(1).max(5),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+    }, async ({ workspace_id, task_id, test_files }, extra) => {
+      try {
+        return await withStore(context.stateDir, async store => {
+          const workspace = await context.workspaces.getWorkspace(workspace_id);
+          const task = store.get(task_id);
+          if (!task || task.workspaceId !== workspace_id ||
+              task.permissions.write !== "isolated_worktree") throw new Error("Write task not accessible");
+          const record = store.getWriteEvidence(task_id).at(-1);
+          if (!record) throw new Error("No persisted write evidence");
+          const evidence = await runLaoSandboxTests(
+            task, workspace, context.worktreeRoot!, record, test_files,
+            process.env.LAO_SANDBOX_NODE_IMAGE, undefined, extra?.signal,
+          );
+          store.recordTestEvidence(evidence);
+          return asToolResult({ ...evidence, requires_review: true });
+        });
+      } catch (error) { return toolFailure(error); }
+    });
   }
 
   server.registerTool("lao_result", {
@@ -326,6 +354,7 @@ export function registerLaoMcpTools(
           task: store.get(task_id), runs: store.getRuns(task_id),
           events: store.events(task_id), review: store.getReview(task_id),
           write_evidence: store.getWriteEvidence(task_id),
+          test_evidence: store.getTestEvidence(task_id),
         });
       });
     } catch (error) { return toolFailure(error); }
