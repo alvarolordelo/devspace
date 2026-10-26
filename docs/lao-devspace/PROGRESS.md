@@ -11,8 +11,8 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F0 Base segura | [x] | Branch e worktree separados, commits no fork, baseline e rollback documentados |
 | F1 Núcleo LAO | [~] | Contratos, feature flag OFF, SQLite, tarefas, execuções, eventos, estados, health e MCP opt-in |
 | F2 Ollama | [~] | Granite executado via runner e handler `lao_delegate` real, com reabertura SQLite; canal MCP autenticado de ponta a ponta ainda não verificado |
-| F3 Escrita isolada | [~] | Guarda de worktree gerenciado e broker interno de patch com arquivos permitidos, diff e sem shell; delegação via modelo/MCP ainda pendente |
-| F4 Avaliação/revisão | [~] | Revisão explícita e `lao_retry` com até duas correções supervisionadas e feedback registrado; diff de worktree disponível, mas testes determinísticos e promoção pendentes |
+| F3 Escrita isolada | [~] | `lao_write_prepare` cria worktree gerenciado de feature autorizada; `lao_write_run` recebe patch do modelo real sem tools e aplica pelo broker com allowlist, hashes e diff persistido; transporte MCP autenticado e teste determinístico ainda pendentes |
+| F4 Avaliação/revisão | [~] | `lao_result` inclui evidências e diff persistido do worktree; revisão explícita e até 2 correções read-only; aprovação de escrita bloqueada até testes/aceite determinísticos |
 | F5 Serviço e tray | [~] | Daemon experimental em primeiro plano, health local, recovery e CLI validados; serviço SCM, tray e autostart pendentes |
 | F6 Painel | [ ] | Assets e layouts aprovados; painel funcional, notificações e histórico UI pendentes |
 | F7 Release | [~] | GitHub Actions Windows validado com sucesso no run `40254905076` (typecheck, build, testes LAO, regressão e opt-in); instalador, rollback testado e release pendentes |
@@ -25,13 +25,13 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-01 Opt-in | [x] | `src/lao/config.ts`, `mcp-tools.ts`, `src/server.ts`; ferramenta só exposta com `DEVSPACE_LAO_ENABLED=true`; OFF preserva tool surface |
 | RF-02 Provedor/modelo | [x] | `/api/tags` e `/api/show` verificados no Ollama local; Granite executou inferência real por `/api/chat`, com resposta e modelo registrados |
 | RF-03 Criar tarefa | [x] | `contracts.ts`, `task-store.ts`, `lao_delegate`; objetivo, workspace, critérios, permissões, orçamento, ID e persistência testados em read-only |
-| RF-04 Escrita isolada | [~] | `write-boundary.ts` e `worktree-patch.ts` aplicam patch real apenas em worktree detached gerenciado e caminhos autorizados; criação do worktree por tarefa/MCP pendente |
-| RF-05 Política de ferramentas | [~] | Guardas para leitura seletiva e para patch de até 5 ações em arquivos explicitamente listados, shell negado; broker de comandos/execução do modelo pendente |
-| RF-06 Executar agente | [~] | `task-runner.ts`: Granite real via runner e handler MCP de teste, persistência e reconsulta; ferramentas supervisionadas e transporte MCP autenticado ainda pendentes |
-| RF-07 Avaliar com provas | [~] | Resposta entra em `awaiting_review` e revisão exige evidências; `review-evidence.ts` coleta diff real em worktree; faltam testes automatizados e critérios ponta a ponta |
+| RF-04 Escrita isolada | [~] | Criação real de worktree por tarefa via DevSpace com checkout `feature/*` limpo; modelo propõe patch e broker aplica apenas caminhos permitidos, sem alterar checkout fonte; falta ciclo completo de testes/aprovação |
+| RF-05 Política de ferramentas | [~] | Modelo não recebe ferramentas; broker valida 1–5 caminhos explícitos, até 5 ações/32 KB, bloqueia symlinks e diff pré-existente fora da allowlist; shell e comandos do modelo negados, execução de testes autorizados pendente |
+| RF-06 Executar agente | [~] | Granite real aplicou `src/lao-smoke.ts` em Git worktree temporário, com tarefa persistida, tempo medido, estado `awaiting_review` e nenhuma escrita no repo de origem; transporte MCP autenticado e verificações completas pendentes |
+| RF-07 Avaliar com provas | [~] | `lao_result` recupera patch, hashes SHA-256, diff, arquivos, whitespace e eventos; `testsVerified=false`, `criteriaVerified=false`; testes determinísticos e validação dos critérios continuam pendentes |
 | RF-08 Correções limitadas | [~] | `lao_retry` reexecuta tarefa read-only somente após `needs_revision`, com feedback e limite de 2 correções; orquestração automática de correções de escrita pendente |
-| RF-09 Aprovação explícita | [~] | `lao_review` registra decisão; aprovações de tarefas com escrita são bloqueadas até existir pipeline determinístico completo |
-| RF-10 Persistência/reconsulta | [~] | `lao_result` lê SQLite de tarefas/execuções/eventos/revisões, testes de reabertura e interrupção; recuperação automática no boot pendente |
+| RF-09 Aprovação explícita | [~] | Teste MCP confirmou que `lao_review` rejeita aprovação de escrita mesmo quando critérios são alegados verdadeiros; pipeline determinístico e promoção mediante aprovação ainda pendentes |
+| RF-10 Persistência/reconsulta | [~] | `lao_result` lê SQLite com runs, eventos, revisões e artefatos de escrita persistidos; reabertura testada; recuperação autônoma de tarefas no boot pendente |
 | RF-11 Boot | [ ] | Não instalado |
 | RF-12 Saúde | [~] | `monitor-status.ts`, `health.ts`, `lao_status`, daemon experimental testado; faltam probe MCP autenticado e serviço Windows |
 | RF-13 Painel | [~] | Health endpoints locais opt-in; visual real pendente |
@@ -69,18 +69,19 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F2-03 | Granite real, `scripts/lao-live-smoke.mjs` | `/api/chat` real, `think: false`, tarefa `4b1d9a53-d1df-456e-93f3-821c8158ea1a`, estado `awaiting_review`, run `completed`, SQLite reaberto, hash SHA-256 e seis eventos; 2.027 ms. Sem MCP real ou critérios aprovados. | Evidência local 25/10/2026 |
 | F7-01 | Testes Windows em GitHub Actions | Runs anteriores falharam por alias de TEMP `RUNNER~1` vs `runneradmin`; fixtures normalizadas via `await realpath()`. Run `40254905076` hospedado no Windows: **success**, todas as etapas aprovadas. | `cf0962d` (correção); run `40254905076` |
 | F4-03 | `lao_retry`, `task-runner.ts` e testes | Duas correções máximas com autorização e feedback; teste MCP simulado aprovado e handler real com Granite: tarefa `3ffdd197-a77c-4832-bfc3-c585ac3b0f09`, duas execuções `completed`, revisão obrigatória; **não comprova transporte autenticado**. | `38bc634`; CI `40254905076` |
+| F3-03 | `write-task-runner.ts`, `mcp-tools.ts`, `task-store.ts` e broker | Teste MCP com Git worktree real (simulou modelo), rejeição de paths, origem `main`, patch malicioso, alterações prévias e autoaprovação; reabertura de evidências; teste real Granite em repo temporário: tarefa `8ef03dca-9e2a-4ec6-b544-4be6fc19244a`, 2.356 ms, conteúdo correto, origem intacta; formatação de Add File normalizada com hashes separados. | Commit e CI desta rodada |
 
 **Baseline original:** 160 testes, 153 aprovados, 7 ignorados; `pnpm build` e `pnpm typecheck` verdes.
 
-**Testes do LAO (rodada atual):** 64 casos, 63 aprovados, 1 ignorado (symlink sem privilégio), 0 falhas. Regressão completa: **214 testes, 206 aprovados, 8 ignorados, 0 falhas**. TypeScript e build aprovados localmente. GitHub Actions Windows run `40254905076` **aprovado**.
+**Testes do LAO (rodada atual):** 66 casos, 65 aprovados, 1 ignorado (symlink sem privilégio), 0 falhas. Regressão completa: **216 testes, 208 aprovados, 8 ignorados, 0 falhas**. TypeScript e build aprovados localmente. CI anterior `40254905076` aprovada; CI da versão desta rodada pendente de publicação/verificação.
 
 ## Limitações importantes
 
-- Não foi criada uma autorização geral de escrita, shell ou execução de comandos via agente local.
+- A escrita experimental exige `lao_write_prepare` no checkout `feature/*` limpo e `lao_write_run` com caminhos explícitos. A única operação de escrita disponível ao modelo é um patch textual mediado pelo broker em worktree separado. Não há shell/model tools.
 - `lao_delegate` recebe apenas fontes explicitamente indicadas pelo host em `source_files` (até 3 arquivos de 4 kB). Não explora o repositório automaticamente e não habilita ferramentas de modelo.
-- O modelo local nunca recebe definições de ferramentas nessa fase e nunca aprova sua própria resposta.
+- O modelo local nunca recebe definições de ferramentas; gera texto que passa por normalização restrita e validação de patch; nunca aprova sua própria resposta.
 - Registros de revisão são atos do host autenticado; a promoção de patches exigirá controle mais rigoroso e evidências determinísticas.
 - O daemon experimental é manual e opt-in. **Não** há serviço Windows SCM, tray nem autostart instalados.
 - Sem merge em `main`, sem serviços Windows, sem alterações no boot, sem execução em produção.
 
-**Próximos gates:** validar delegação real pelo transporte MCP autenticado da feature; implementar broker limitado, worktree por tarefa e evidências determinísticas; depois serviço Windows e tray, sujeitos a testes e autorização operacional.
+**Próximos gates:** validar fluxo novo no MCP autenticado da feature, implementar executor de testes determinísticos autorizado e revisão com critérios verificáveis, manter aprovação de escrita bloqueada até o aceite; depois serviço Windows e tray, sujeitos a autorização operacional.
