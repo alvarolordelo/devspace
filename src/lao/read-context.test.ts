@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, symlinkSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -15,7 +15,7 @@ function fixture() {
   writeFileSync(join(root, ".env"), "SECRET=must_not_leak\n");
   writeFileSync(join(root, "oversize.ts"), "x".repeat(LAO_MAX_CONTEXT_FILE_BYTES + 1));
   writeFileSync(join(outside, "outside.md"), "not inside root\n");
-  const workspace = { id: "ws", root, canonicalRoot: root } as Workspace;
+  const workspace = { id: "ws", root, canonicalRoot: realpathSync(root) } as Workspace;
   const registry = { resolvePath: async (ws: Workspace, path: string) =>
     resolvePathInsideCanonicalRoot(path, ws.root, ws.root, ws.canonicalRoot),
   } as Pick<WorkspaceRegistry, "resolvePath">;
