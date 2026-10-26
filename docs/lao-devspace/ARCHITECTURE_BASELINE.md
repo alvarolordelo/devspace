@@ -31,6 +31,12 @@ O desenvolvimento ocorre no worktree `D:\desenvolvimento\lao-devspace`, branch `
 
 O LAO nao e iniciado automaticamente, nao altera banco legado e nao instala servico, tray ou autostart. Commits da branch feature oferecem marcos reversiveis; qualquer rollback deve ser feito sem reset destrutivo, preservando main e credenciais locais. Nao realizar merge/PR sem aprovacao.
 
+## F2/F5 experimentais, sem alteracao na instalacao estavel
+
+- Leitura de 3 arquivos explicitamente selecionados (4 kB cada) por `lao_delegate`; hashes SHA-256 de cada fonte no registro de execucao, sem expor ferramentas ao modelo.
+- Daemon foreground compilado, validado em processo real com porta dinamica local: `/health/live` HTTP 200, `/health/ready` HTTP 503 sem MCP autenticado; processo encerrado ao fim.
+- Sem inferencia real validada com Granite, servico SCM ou boot alterado.
+
 ## Regressao atualizada
 
-Suite final apos mudancas (25/10/2026): 202 testes, 195 OK, 7 skip, 0 falhas; build e typecheck aprovados.
+Suite final apos mudancas (25/10/2026): 211 testes, 203 OK, 8 skip, 0 falhas. Typecheck e build validados na feature. Um caso de symlink foi ignorado por falta de privilegio da conta Windows.

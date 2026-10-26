@@ -14,19 +14,23 @@ Não altere as variáveis ou portas da instância estável para testar a feature
 |---|---|---|
 | `lao_status` | nenhuma | Consulta dependências sem executar modelo |
 | `lao_models` | nenhuma | Lista modelos locais sem carregá-los |
-| `lao_delegate` | `workspace_id`, `goal`, `acceptance_criteria`; modelo e deadline opcionais | Registra tarefa durável e solicita resposta somente-leitura ao Ollama |
+| `lao_delegate` | `workspace_id`, `goal`, `acceptance_criteria`; `source_files` (opcional, máximo 3), modelo e deadline | Envia snapshots limitados de arquivos autorizados para análise read-only, sem ferramentas do modelo |
 | `lao_result` | `workspace_id`, `task_id` | Recupera tarefa, execuções, estados, revisão e resumo, se existir |
 | `lao_review` | workspace/tarefa, decisão, critérios verificados, evidências e nota | Registra decisão **explícita** do supervisor; não altera arquivos |
 
 As ferramentas adicionais ficam ocultas quando `DEVSPACE_LAO_ENABLED` não é exatamente `true`. Todo acesso à tarefa exige workspace acessível no `WorkspaceRegistry` autorizado e ID compatível com a tarefa.
 
-`lao_delegate` **não tem acesso ao filesystem, shell, patch ou outras ferramentas do modelo**. Ele envia apenas instruções/objetivo/critérios recebidos para geração de texto. Portanto, seu resultado não prova que o repositório foi lido, compilado ou testado. Mesmo um resumo plausível sempre fica em `awaiting_review`.
+`lao_delegate` permite apenas leitura explícita de até 3 arquivos regulares pequenos (4.000 bytes cada) por `source_files`, validados pela raiz canônica do DevSpace. Nega traversal, segmentos sensíveis e extensões binárias; persiste nomes de fontes e SHA-256 no histórico. O modelo não recebe ferramentas de filesystem, shell ou patch. A resposta permanece em `awaiting_review` e nunca comprova execução de testes.
 
 ## Validação
 
 A partir do worktree da feature, verificar `pnpm typecheck`, `pnpm exec tsx --test src/lao/*.test.ts`, `pnpm test` e `pnpm build`. As verificações de chat nos testes usam transporte simulado; só chame de execução real quando houver resultado registrado do Granite via Ollama.
 
-`LaoTaskStore.recoverInterrupted()` permite marcar execuções antigas como interrompidas ao reiniciar o futuro processo LAO. Isso não retoma a tarefa automaticamente. O LAO atual **ainda não possui** serviço Windows, tray, gerenciador de filas ou execução de patches.
+`LaoTaskStore.recoverInterrupted()` permite marcar execuções antigas como interrompidas ao reiniciar o futuro processo LAO. Isso não retoma a tarefa automaticamente. Há um daemon **experimental de primeiro plano**, iniciado manualmente após build, com `DEVSPACE_LAO_ENABLED=true` e `node bin/devspace-laod.js`. Usa `127.0.0.1:7877` por padrão, porta configurável em `DEVSPACE_LAO_PORT` e diretório SQLite independente em `DEVSPACE_LAO_STATE_DIR`. A sondagem de prontidão informa indisponibilidade enquanto o MCP não tiver sido autenticadamente confirmado; nunca presume verde. **Não foi instalado** serviço Windows SCM, tray, autostart, fila ou execução de patches.
+
+## CI da branch
+
+O workflow `.github/workflows/lao-feature-ci.yml` executa a suíte LAO e a regressão do DevSpace em `windows-latest`, além de build e typecheck. A presença do YAML não comprova que a execução hospedada passou; conferir o status do GitHub Actions após o push.
 
 ## Segurança e rollback
 
