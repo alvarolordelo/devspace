@@ -89,7 +89,55 @@ export class LaoTaskStore {
         lease_token text not null,
         expires_at_ms integer not null
       );
+      create table if not exists lao_daemon_lease (
+        id integer primary key check (id = 1),
+        token text not null,
+        expires_at_ms integer not null
+      );
     `);
+  }
+
+  /**
+   * At most one foreground daemon owns a given LAO state directory, even
+   * when operators configure different TCP ports. Lease is persisted in
+   * SQLite and can be reclaimed after a crashed process stops renewing.
+   */
+  acquireDaemonLease(ttlMs = 45_000): string {
+    if (!Number.isSafeInteger(ttlMs) || ttlMs < 1 || ttlMs > 60_000) {
+      throw new Error("Invalid LAO daemon lease duration");
+    }
+    return this.sqlite.transaction(() => {
+      const row = this.sqlite.prepare(
+        "select expires_at_ms from lao_daemon_lease where id = 1"
+      ).get() as { expires_at_ms: number } | undefined;
+      const now = Date.now();
+      if (row && row.expires_at_ms > now) {
+        throw new Error("A LAO daemon already owns this state directory");
+      }
+      const token = randomUUID();
+      this.sqlite.prepare(
+        "insert into lao_daemon_lease(id, token, expires_at_ms) values (1, ?, ?) " +
+        "on conflict(id) do update set token=excluded.token, expires_at_ms=excluded.expires_at_ms"
+      ).run(token, now + ttlMs);
+      return token;
+    }).immediate();
+  }
+
+  renewDaemonLease(token: string, ttlMs = 45_000): boolean {
+    if (!Number.isSafeInteger(ttlMs) || ttlMs < 1 || ttlMs > 60_000) {
+      throw new Error("Invalid LAO daemon lease duration");
+    }
+    const now = Date.now();
+    return this.sqlite.prepare(
+      "update lao_daemon_lease set expires_at_ms = ? " +
+      "where id = 1 and token = ? and expires_at_ms > ?"
+    ).run(now + ttlMs, token, now).changes === 1;
+  }
+
+  releaseDaemonLease(token: string): boolean {
+    return this.sqlite.prepare(
+      "delete from lao_daemon_lease where id = 1 and token = ?"
+    ).run(token).changes === 1;
   }
 
   create(input: LaoTaskInput): LaoTask {
@@ -145,6 +193,14 @@ export class LaoTaskStore {
     return this.sqlite.transaction(() => {
       const current = this.requireTask(decision.taskId);
       assertLaoTransition(current.status, decision.decision, "review");
+      if (current.permissions.write === "isolated_worktree") {
+        const testLease = this.sqlite.prepare(
+          "select expires_at_ms from lao_write_test_leases where task_id = ?"
+        ).get(current.id) as { expires_at_ms: number } | undefined;
+        if (testLease && testLease.expires_at_ms > Date.now()) {
+          throw new Error("Cannot review write task while isolated tests are active");
+        }
+      }
       if (decision.decision === "approved" && current.permissions.write !== "none") {
         throw new Error("Write task approval requires deterministic evidence pipeline");
       }

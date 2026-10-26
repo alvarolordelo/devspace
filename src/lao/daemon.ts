@@ -28,25 +28,43 @@ export async function startLaoDaemon(options: LaoDaemonOptions) {
     dashboard: token ? { token, devspaceReady: ready, listTasks: () => store?.list() ?? [] } : undefined,
   });
   let recovered: number;
+  let leaseToken = "";
   try {
     store = new LaoTaskStore(options.stateDir);
-    try { recovered = store.recoverInterrupted(); }
-    catch (error) { store.close(); throw error; }
+    try {
+      leaseToken = store.acquireDaemonLease();
+      recovered = store.recoverInterrupted();
+    } catch (error) {
+      if (leaseToken) store.releaseDaemonLease(leaseToken);
+      store.close();
+      throw error;
+    }
   } catch (error) {
     await server.close();
     throw error;
   }
   let closed = false;
-  return {
-    port: server.port,
-    recoveredTasks: recovered,
-    close: async () => {
-      if (closed) return;
-      closed = true;
-      try { await server.close(); }
+  const close = async () => {
+    if (closed) return;
+    closed = true;
+    clearInterval(heartbeat);
+    try { await server.close(); }
+    finally {
+      try { store.releaseDaemonLease(leaseToken); }
       finally { store.close(); }
-    },
+    }
   };
+  // A stolen or expired lease must stop the old listener, not appear healthy.
+  const heartbeat = setInterval(() => {
+    if (closed) return;
+    try {
+      if (!store.renewDaemonLease(leaseToken)) void close().catch(() => undefined);
+    } catch {
+      void close().catch(() => undefined);
+    }
+  }, 15_000);
+  heartbeat.unref();
+  return { port: server.port, recoveredTasks: recovered, close };
 }
 
 export function laoDaemonEnvironment(env: NodeJS.ProcessEnv = process.env) {

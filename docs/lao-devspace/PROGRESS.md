@@ -28,14 +28,14 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-04 Escrita isolada | [x] | Worktree gerenciado e destacado, escrita bounded com allowlist 1-5 paths. Patch Granite real via OAuth MCP preservou checkout fonte |
 | RF-05 Política de ferramentas | [~] | Modelo não recebe ferramentas; broker valida 1–5 caminhos explícitos, até 5 ações/32 KB, bloqueia symlinks e diff pré-existente fora da allowlist; shell e comandos do modelo negados, execução de testes autorizados pendente |
 | RF-06 Executar agente | [x] | Granite real executou leitura e escrita supervisionadas via MCP autenticado em HTTP local, persistiu run e aguardou review; sem ferramentas no modelo |
-| RF-07 Avaliar com provas | [~] | `lao_result` recupera patch, hashes SHA-256, diff, arquivos, whitespace e eventos; `testsVerified=false`, `criteriaVerified=false`; verificacao estatica disponivel, mas suites de testes reais e aceite continuam pendentes |
-| RF-08 Correções limitadas | [~] | `lao_retry` reexecuta tarefa read-only somente após `needs_revision`, com feedback e limite de 2 correções; orquestração automática de correções de escrita pendente |
+| RF-07 Avaliar com provas | [~] | lao_write_assess mapeia criterios declarativos a fingerprint/sintaxe e suite Docker real no mesmo run; linguagem natural nao aprovada; gate de promocao pendente |
+| RF-08 Correcoes limitadas | [~] | lao_retry read-only e lao_write_retry para escrita, ambos com feedback explicito e maximo de 2 revisoes; teste Granite de duas correcoes pendente |
 | RF-09 Aprovação explícita | [~] | Teste MCP confirmou que `lao_review` rejeita aprovação de escrita mesmo quando critérios são alegados verdadeiros; pipeline determinístico e promoção mediante aprovação ainda pendentes |
 | RF-10 Persistência/reconsulta | [~] | `lao_result` lê SQLite com runs, eventos, revisões e artefatos de escrita persistidos; reabertura testada; recuperação autônoma de tarefas no boot pendente |
 | RF-11 Boot | [ ] | Não instalado |
 | RF-12 Saúde | [~] | `monitor-status.ts`, `health.ts`, `lao_status`, daemon experimental testado; faltam probe MCP autenticado e serviço Windows |
 | RF-13 Painel | [~] | Health endpoints locais opt-in; visual real pendente |
-| RF-14 Recuperação | [ ] | Recuperação startup validada e porta duplicada rejeitada; SCM e single-instance robusto pendentes |
+| RF-14 Recuperacao | [~] | SQLite lease impede dois daemons no mesmo stateDir, heartbeat/TTL/reclamacao apos crash testados; SCM e reinicio operacional pendentes |
 | RF-15 Tray | [~] | Monitor Windows manual em PowerShell/WinForms, usa icones aprovados, mutex e health local; teste GUI interativo ainda pendente |
 | RF-16 Autostart configurável | [ ] | Pendente |
 | RF-17 Notificações | [ ] | Pendente |
@@ -43,7 +43,7 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-19 Multimodelo | [~] | Benchmark sequencial 5x real com modelos locais, acertos e latencias documentados em BENCHMARK_20261026.md; prova de codigo pendente |
 | RF-20 Failover | [ ] | Pendente |
 
-**RF concluídos:** 5/20 - **Parciais:** 10/20 - **Pendentes:** 5/20.
+**RF concluídos:** 5/20 - **Parciais:** 11/20 - **Pendentes:** 4/20.
 
 ## Histórico técnico e evidências
 
@@ -170,8 +170,8 @@ CI hospedada do commit F4-07 ainda precisa ser confirmada apos push.
 ## F6-01 - Painel local MVP (26/10/2026)
 
 **Status [~]:** implementado um painel HTTP local, de consulta, sem tray nem
-servico Windows instalado. A rota \`/dashboard\` so e habilitada quando
-\`LAO_DASHBOARD_TOKEN\` e informado explicitamente no processo do daemon.
+servico Windows instalado. A rota `/dashboard` so e habilitada quando
+`LAO_DASHBOARD_TOKEN` e informado explicitamente no processo do daemon.
 Token: 32-256 caracteres ASCII imprimiveis; nunca impresso em logs ou URLs.
 
 Recursos: login por Bearer, estado real das dependencias, contadores de tarefas
@@ -184,14 +184,14 @@ resposta CSP com nonce, frame deny, nosniff, no-store, token so em memoria,
 comparacao timing-safe; dados sensiveis nao saem na API e valores exibidos por
 textContent. API/painel seguem desligados sem token de operador.
 
-Integracao feita somente nos modulos \`src/lao\`. Instanciacao do daemon em
+Integracao feita somente nos modulos `src/lao`. Instanciacao do daemon em
 foreground continua opt-in. Dashboard consome o banco indicado pelo daemon;
 para visualizar tarefas MCP de outro processo, o caminho de estado deve ser
 o mesmo e explicitamente configurado. Nao instalar no Windows automaticamente.
 
-Evidencia: \`src/lao/dashboard.test.ts\` verifica opt-in, segredo invalido,
+Evidencia: `src/lao/dashboard.test.ts` verifica opt-in, segredo invalido,
 acesso negado, CSP, Host e Origin, metodos HTTP, sanitizacao e parser JavaScript.
-Documentacao: \`docs/lao-devspace/DASHBOARD_MVP.md\`.
+Documentacao: `docs/lao-devspace/DASHBOARD_MVP.md`.
 
 **Limites:** teste real em navegador nao comprovado; tray, servico SCM,
 notificacoes e revisao visual continuam pendentes.
@@ -203,13 +203,13 @@ com limite de tokens e sem ativar failover. Granite e Spark tiveram 5/5
 acertos no teste aritmetico trivial, com medianas de 4468 ms e 4716 ms
 respectivamente. Cold starts de 20317 ms e 62014 ms. Estes dados nao validam
 qualidade de codigo e nao autorizam alternar o modelo padrao. Evidencias e
-ressalvas em \`docs/lao-devspace/BENCHMARK_20261026.md\`. Nenhum download.
+ressalvas em `docs/lao-devspace/BENCHMARK_20261026.md`. Nenhum download.
 
 ## F2-07 - Transporte MCP autenticado em HTTP real (26/10/2026)
 
 **Status [~]:** integracao testada no listener HTTP real do DevSpace
 com OAuth/Bearer e transporte MCP moderno 2026-07-28. O teste
-\`src/lao/mcp-http-e2e.test.ts\` inicia um servidor Ollama mock em loopback,
+`src/lao/mcp-http-e2e.test.ts` inicia um servidor Ollama mock em loopback,
 registra OAuth temporario e executa o fluxo autenticado:
 tools/list -> open_workspace -> lao_delegate -> lao_result. Confirma
 que a tarefa ficou awaiting_review, a execucao persistiu no SQLite,
@@ -225,25 +225,25 @@ em um teste live opt-in antes de declarar F2 concluida.
 ## F2-08 / F3-04 - MCP OAuth HTTP + Granite real (26/10/2026)
 
 **Conclusao das fases F2/F3 dentro do escopo de smoke autenticado local:**
-\`src/lao/mcp-http-e2e.test.ts\` registra um cliente OAuth e bearer
+`src/lao/mcp-http-e2e.test.ts` registra um cliente OAuth e bearer
 temporarios no storage de teste, inicia o servidor DevSpace MCP HTTP real,
 cria workspace Git feature temporario e executa:
 
-1. \`tools/list\` autorizado e negacao HTTP 401 sem token.
-2. \`open_workspace\` com root autorizado, sem acesso a workspace falso.
-3. \`lao_delegate\` com Granite real, status \`awaiting_review\`;
-   \`lao_result\` comprova run \`completed\` persistido.
-4. \`lao_write_prepare\` cria worktree destacado com allowlist restrita.
-5. \`lao_write_run\` usa o Granite real para produzir patch proposto, com
-   execucao pelo broker em worktree separado. Resultado \`awaiting_review\`.
-6. \`lao_write_validate\` reavalia fingerprints, escopo e sintaxe:
-   \`staticChecksPassed=true\`.
-7. \`lao_review\` rejeita a aprovacao prematura da escrita; a fonte Git
+1. `tools/list` autorizado e negacao HTTP 401 sem token.
+2. `open_workspace` com root autorizado, sem acesso a workspace falso.
+3. `lao_delegate` com Granite real, status `awaiting_review`;
+   `lao_result` comprova run `completed` persistido.
+4. `lao_write_prepare` cria worktree destacado com allowlist restrita.
+5. `lao_write_run` usa o Granite real para produzir patch proposto, com
+   execucao pelo broker em worktree separado. Resultado `awaiting_review`.
+6. `lao_write_validate` reavalia fingerprints, escopo e sintaxe:
+   `staticChecksPassed=true`.
+7. `lao_review` rejeita a aprovacao prematura da escrita; a fonte Git
    permanece limpa e nao possui o arquivo inserido no worktree.
 
 Teste de CI usa Ollama fake no mesmo HTTP/OAuth real para reproducibilidade.
-O modo manual \`LAO_MCP_LIVE=true\` substitui somente o modelo fake por
-\`granite4.2-8b:gpu\` local; a rodada live foi aprovada. Nao houve merge,
+O modo manual `LAO_MCP_LIVE=true` substitui somente o modelo fake por
+`granite4.2-8b:gpu` local; a rodada live foi aprovada. Nao houve merge,
 push do patch, instalacao de servicos ou alteracao do DevSpace original.
 
 **Limitacao:** a prova usa OAuth temporario na maquina, NAO login real de
@@ -252,30 +252,128 @@ criterios de aceite continua na F4, sem aprovacao de escrita.
 
 ## F5-01 - Tray Windows opt-in (26/10/2026)
 
-**Status [~]:** \`src/lao/windows/lao-tray.ps1\` implementa monitor
+**Status [~]:** `src/lao/windows/lao-tray.ps1` implementa monitor
 manual Windows PowerShell 5.1/STA/WinForms, com os arquivos ICO aprovados,
 mutex por SID (uma instancia por conta), health em loopback a cada 15s,
 icone e tooltip conforme status real, menu Abrir painel, Copiar diagnostico
 sanitizado e Sair do monitor sem encerrar o daemon. Uma sessao com daemon
 indisponivel nao e confundida com status pronto.
 
-Parser PowerShell, carregar todos os ICO e modo \`-CheckOnly\` passaram
+Parser PowerShell, carregar todos os ICO e modo `-CheckOnly` passaram
 no Windows com politica de execucao apenas no processo e sem mostrar GUI.
-Teste \`src/lao/windows-tray.test.ts\` aprovou no Windows. Integracao
+Teste `src/lao/windows-tray.test.ts` aprovou no Windows. Integracao
 visual GUI manual, notificacoes, autostart, servico Windows SCM,
 instalacao/desinstalacao e rollback continuam pendentes. Nenhuma
 configuracao de boot/registro/servico foi alterada.
 
-Manual: \`docs/lao-devspace/TRAY_MVP.md\`.
+Manual: `docs/lao-devspace/TRAY_MVP.md`.
 
 ## Regressoes consolidadas apos F2/F3/F5/F6/F8 - 26/10/2026
 
-\`pnpm test\`: **223 testes, 215 aprovados, 8 ignorados, 0 falhas**.
-\`pnpm typecheck\`: aprovado. \`pnpm build\`: aprovado.
-\`node scripts/lao-verify-devspace-pin.mjs\`: aprovado, DevSpace base v1.0.8
+`pnpm test`: **223 testes, 215 aprovados, 8 ignorados, 0 falhas**.
+`pnpm typecheck`: aprovado. `pnpm build`: aprovado.
+`node scripts/lao-verify-devspace-pin.mjs`: aprovado, DevSpace base v1.0.8
 fixado sem alterar dependencias do upstream.
 Teste live adicional de OAuth/MCP HTTP e Granite read-only + write:
 aprovado em fixture descartavel, sem alterar o checkout.
-\`LAO_DASHBOARD_TOKEN\` nao configurado por padrao.
+`LAO_DASHBOARD_TOKEN` nao configurado por padrao.
 Nenhum servico SCM/autostart/boot, instalador ou tray interativo iniciado.
 CI Windows do novo HEAD requer validacao apos push.
+
+## F4-08 - Avaliacao de criterios declarativos (26/10/2026)
+
+**Status [~]:** nova ferramenta `lao_write_assess`, somente leitura,
+com revalidacao da integridade atual antes de relatar os criterios de aceite.
+`src/lao/write-acceptance.ts` aceita **apenas** os formatos exatos:
+
+- `static: integrity`: corresponde ao verificador de HEAD, fingerprint,
+  allowlist, whitespace e sintaxe do patch atual.
+- `node:test tests/example.test.mjs`: corresponde a um teste baseline
+  rastreado e executado no container isolado. Precisa ser a ultima tentativa
+  daquele arquivo, mesmo task/run, fingerprint identico, exit 0,
+  `passed=true`, logs com SHA-256 e imagem Docker fixada por digest.
+
+Cada criterio retorna passed, failed ou unverified, com motivo claro.
+Criterios de linguagem natural ou nomes de teste sem provas adequadas
+continuam `unverified`. Uma execucao falhada posteriormente invalida
+sucesso anterior do mesmo teste; prova de outra tarefa/run ou de patch
+adulterado e rejeitada.
+
+**Importante:** mesmo quando `allCriteriaVerified=true` nas regras
+declarativas, `humanReviewRequired=true`, `approvalAllowed=false`,
+`promotionAllowed=false`. Este endpoint nao grava decisao, nao aprova,
+nao comita e nao modifica worktree/checkout. Ele **nao** substitui a
+revisao humana de objetivos de negocio. Gate de aprovacao e promocao
+continuam pendentes para a F4.
+
+Teste unitario e integracao MCP com criterio natural nao-verificado
+foram acrescentados e aprovados.
+
+## F5-02 - Exclusao mutua real do daemon por SQLite (26/10/2026)
+
+**Status [~]:** tabela `lao_daemon_lease` no banco independente do LAO,
+com token opaco, TTL de 45s e heartbeat de 15s. Duas instancias do
+daemon apontadas ao MESMO stateDir nao podem iniciar, mesmo com portas
+diferentes. Ao fechar, o dono libera a lease; apos queda abrupta a lease
+expira para que novo processo autorizado assuma. Worker antigo nao
+consegue renovar ou retirar a lease de outro dono. Perda de lease
+encerra o listener de health ao proximo heartbeat.
+
+Teste de duas instancias com portas diferentes, concorrencia de SQLite,
+expiracao, token invalido e abertura apos encerramento: aprovado.
+Daemon permanece foreground/opt-in; sem servico Windows SCM,
+autostart ou alteracoes de credenciais ou instalacao do sistema.
+
+## F4-09 - Correcoes de escrita supervisionadas (26/10/2026)
+
+**Status [~]:** ferramenta MCP `lao_write_retry` acrescentada ao
+modo de escrita isolada. Somente task em `needs_revision` com revisao
+explicita do supervisor e saldo no orcamento pode ser reexecutada.
+Mantem o mesmo worktree gerenciado, modelo, criterio e lista exata
+de paths, nao oferece shell ao modelo e insere feedback da revisao
+no prompt. Gera novo run e evidencia de patch; exige nova revisao.
+Limite de **2 correcoes** imposto pelo task-store e pelo handler.
+Nao existe repeticao automatica, merge, commit ou push do patch.
+
+Teste MCP com worktree Git temporario simulou dois patches Update File
+sequenciais; checou novos runs e fingerprints, checkout origem intocado,
+terceira tentativa rejeitada e ausencia de autoaprovacao.
+O banco agora impede transicao de revisao durante lease ativa de
+suite isolada para evitar escrever enquanto testes ainda executam.
+**Pendente:** teste com Granite real de duas correcoes e metrica de
+qualidade; orquestracao de aprovacao/promocao continua bloqueada.
+
+**Hardening F4-09:** uma nova correcao agora confirma HEAD e
+contentFingerprint exatos da evidencia mais recente ANTES de consultar
+o modelo. Se usuario/processo alterar mesmo um caminho permitido depois
+da revisao, a operacao falha fechada, preserva needs_revision e nao
+executa o modelo. Teste de adulteracao + restauracao do patch aprovado.
+
+## F4-10 - Integracao MCP OAuth + Granite real + Docker + aceite (26/10/2026)
+
+**Status [x] do smoke de integracao, F4 ainda [~].** Em fixture Git
+temporaria e descartavel, o teste `mcp-http-e2e.test.ts` executou:
+
+- OAuth/Bearer no listener HTTP MCP real, autenticacao obrigatoria.
+- `lao_write_prepare` em feature checkout e worktree destacado.
+- `lao_write_run` com o Granite real, produzindo `src/fixture.ts`
+  sem alterar o checkout de origem.
+- `lao_write_validate` passou no patch atual.
+- `lao_write_test` executou `tests/fixture.test.mjs` REAL em Docker
+  Linux existente, imagem local fixada por digest, sem rede e read-only.
+- `lao_write_assess` marcou os criterios **declarativos**
+  `static: integrity` e `node:test tests/fixture.test.mjs` como
+  verificados, com task/run/fingerprint coincidentes.
+- `approvalAllowed=false` e `promotionAllowed=false`, e o
+  `lao_review approved` foi rejeitado. Nenhum commit/merge no checkout.
+- No CI, o mesmo teste usa Ollama simulado e ignora etapa Docker se
+  `LAO_SANDBOX_NODE_IMAGE` nao estiver explicitamente configurada.
+
+**Regressao da entrega anterior ao ultimo ajuste do fixture:**
+`pnpm test` 230 testes, 222 aprovados, 8 ignorados, zero falhas.
+Typecheck e build passaram. O E2E com Docker e Granite real foi
+reexecutado e passou apos ajuste do prompt/fixture de teste.
+
+**Gate nao concluido:** validacao semantica universal de criterios
+de negocio, aprovacao auditada e promocao segura, SCM Windows, GUI tray
+interativa, instalador/rollback e release candidate.

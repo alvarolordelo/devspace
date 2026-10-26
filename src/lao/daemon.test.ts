@@ -72,3 +72,23 @@ test("foreground daemon port is explicit and validated", () => {
     assert.throws(() => laoDaemonEnvironment({ DEVSPACE_LAO_PORT: value }));
   }
 });
+
+test("daemon rejects concurrent listener on a different port sharing the same state directory", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "lao-daemon-exclusive-"));
+  try {
+    const first = await startLaoDaemon({ config, stateDir: dir, port: 0 });
+    try {
+      await assert.rejects(
+        startLaoDaemon({ config, stateDir: dir, port: 0 }), /already owns/,
+      );
+      const live = await fetch("http://127.0.0.1:" + first.port + "/health/live");
+      assert.equal(live.status, 200);
+      const store = new LaoTaskStore(dir);
+      try {
+        assert.throws(() => store.acquireDaemonLease(), /already owns/);
+      } finally { store.close(); }
+    } finally { await first.close(); }
+    const reopened = await startLaoDaemon({ config, stateDir: dir, port: 0 });
+    await reopened.close();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

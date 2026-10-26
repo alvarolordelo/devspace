@@ -402,11 +402,11 @@ as suites funcionais amplas e o aceite deterministico seguem pendentes.
 
 ### F6-01 (26/10/2026) - Dashboard de observabilidade
 
-MVP opt-in em \`/dashboard\` no mesmo listener local do daemon, com token
+MVP opt-in em `/dashboard` no mesmo listener local do daemon, com token
 forte em ambiente, painel responsivo, status do Ollama/DevSpace e historico
-SQLite. API somente-leitura \`/dashboard/api/status\` e
-\`/dashboard/api/tasks\` e protegida por Bearer. Esta entrega NAO equivale
-a tray/servico/autostart; veja \`DASHBOARD_MVP.md\`.
+SQLite. API somente-leitura `/dashboard/api/status` e
+`/dashboard/api/tasks` e protegida por Bearer. Esta entrega NAO equivale
+a tray/servico/autostart; veja `DASHBOARD_MVP.md`.
 
 ### F2-07 - Caminho MCP autenticado (parcial)
 
@@ -422,7 +422,7 @@ Smoke opt-in confirmou via HTTP MCP autentico, OAuth temporario, workspace
 de feature real, delegado read-only e patch de escrita do Granite real em
 worktree isolado. Resultado com hash/sintaxe verificados e origem intacta;
 sem aprovacao ou merge. O teste repetivel e
-\`src/lao/mcp-http-e2e.test.ts\`; o modo live requer \`LAO_MCP_LIVE=true\`.
+`src/lao/mcp-http-e2e.test.ts`; o modo live requer `LAO_MCP_LIVE=true`.
 Nao e prova de login do ChatGPT em producao. F4 continua com gates de testes
 de suite ampla, aceite deterministico e aprovacao manual.
 
@@ -432,4 +432,39 @@ Entregue script WinForms/STA que usa icons ICO aprovados, evita duplicacao
 por SID e reflete health real via loopback (offline/idle/active).
 Acoes seguras: abrir painel, copiar diagnostico e sair somente do tray.
 Testes de parser/icon e modo CheckOnly aprovados. Nao e servico SCM nem
-autostart e nao foi iniciado em sessao grafica. Veja \`TRAY_MVP.md\`.
+autostart e nao foi iniciado em sessao grafica. Veja `TRAY_MVP.md`.
+
+### F4-08 - Criterios de aceite deterministas, somente leitura
+
+A ferramenta `lao_write_assess` cruza validacao estatica atual do
+worktree com testes baseline Docker persistidos e vinculados a tarefa,
+run e SHA-256 do patch. Somente declaracoes exatas
+`static: integrity` e `node:test <arquivo>` podem ser marcadas
+como verificadas; linguagem natural permanece nao verificada.
+Mesmo com criterios declarativos aprovados, a promocao e aprovacao
+automaticas continuam proibidas.
+
+### F5-02 - Single-instance de daemon por stateDir
+
+Lease persistida no SQLite, renovada pelo processo, impede que duas
+instancias LAO usem a mesma base com portas distintas. Encerra
+health listener apos detectar perda de token; recupera apos prazo.
+Pendente: SCM real, install/uninstall, boot e tray visual.
+
+### F4-09 - Ciclo de correcoes supervised write
+
+`lao_write_retry` expoe correcao explicitamente solicitada ao agente,
+somente apos `needs_revision` do supervisor e no mesmo worktree.
+Limite maximo de duas correcoes e revalidacao obrigatoria. Nao ha
+retry automatico nem privilegios adicionais. Revisao fica bloqueada
+enquanto uma suite Docker detem lease ativa. Testes MCP simulados de
+duas alteracoes e excesso de revisoes aprovados.
+
+### F4-10 - Smoke real de ponta a ponta na maquina local
+
+O servidor OAuth MCP real, Granite instalado, aplicacao de patch em
+worktree e teste Node isolado em Docker foram executados em um so fluxo
+descartavel. Criterios declarativos documentados passaram, mas o
+LAO nao aprovou nem promoveu o patch; o SCM/release permanece pendente.
+Script E2E `src/lao/mcp-http-e2e.test.ts` em modo opt-in com
+`LAO_MCP_LIVE=true` e `LAO_SANDBOX_NODE_IMAGE` local por SHA-256.

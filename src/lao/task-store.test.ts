@@ -192,3 +192,52 @@ test("SQLite lease serializes sandbox suites across processes and fences stale o
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("daemon lease fences concurrent processes, stale renewal and stolen releases", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "lao-daemon-lease-"));
+  const first = new LaoTaskStore(dir);
+  const second = new LaoTaskStore(dir);
+  try {
+    const initial = first.acquireDaemonLease(20);
+    assert.throws(() => second.acquireDaemonLease(), /already owns/);
+    assert.equal(second.renewDaemonLease(randomUUID()), false);
+    assert.equal(second.releaseDaemonLease(randomUUID()), false);
+    await new Promise<void>(resolve => setTimeout(resolve, 60));
+    assert.equal(first.renewDaemonLease(initial), false);
+    const reclaimed = second.acquireDaemonLease();
+    assert.notEqual(reclaimed, initial);
+    assert.equal(first.releaseDaemonLease(initial), false);
+    assert.equal(second.renewDaemonLease(reclaimed), true);
+    assert.throws(() => first.acquireDaemonLease(), /already owns/);
+    assert.equal(second.releaseDaemonLease(reclaimed), true);
+    const third = first.acquireDaemonLease();
+    assert.equal(first.releaseDaemonLease(third), true);
+    assert.throws(() => first.acquireDaemonLease(0), /duration/);
+  } finally {
+    first.close();
+    second.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("review cannot race an active isolated test suite", () => {
+  withStore(store => {
+    const task = store.create({
+      ...makeInput(),
+      permissions: { read: true, write: "isolated_worktree", shell: "none",
+        allowedWritePaths: ["src/feature.ts"] },
+    });
+    toReview(store, task.id);
+    const lease = store.acquireTestLease(task.id);
+    const review = {
+      schemaVersion: 1 as const, taskId: task.id, decision: "needs_revision" as const,
+      reviewer: "supervisor" as const, criteriaVerified: false,
+      evidence: ["Need a changed test"], note: "Retry only after suite completes",
+      decidedAt: new Date().toISOString(),
+    };
+    assert.throws(() => store.decideReview(review), /tests are active/);
+    assert.equal(store.get(task.id)?.status, "awaiting_review");
+    assert.equal(store.releaseTestLease(task.id, lease), true);
+    assert.equal(store.decideReview(review).status, "needs_revision");
+  });
+});
