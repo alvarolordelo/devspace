@@ -468,3 +468,12 @@ descartavel. Criterios declarativos documentados passaram, mas o
 LAO nao aprovou nem promoveu o patch; o SCM/release permanece pendente.
 Script E2E `src/lao/mcp-http-e2e.test.ts` em modo opt-in com
 `LAO_MCP_LIVE=true` e `LAO_SANDBOX_NODE_IMAGE` local por SHA-256.
+
+### F7-02 - Staging de release auditavel (26/10/2026)
+
+Ferramenta local de staging cria uma pasta nova com arquivos LAO selecionados,
+manifesto de tamanho e SHA-256 por arquivo e referencia fixa DevSpace v1.0.8.
+Nao roda instalacao ou modifica sistema. Teste positivo e negativo de
+sobrescrita passaram em diretorio temporario. Nao e pacote operacional:
+faltam dependencias runtime instaladas offline, instalador, assinatura,
+servico Windows e rollback.

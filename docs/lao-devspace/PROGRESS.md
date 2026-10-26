@@ -377,3 +377,27 @@ reexecutado e passou apos ajuste do prompt/fixture de teste.
 **Gate nao concluido:** validacao semantica universal de criterios
 de negocio, aprovacao auditada e promocao segura, SCM Windows, GUI tray
 interativa, instalador/rollback e release candidate.
+
+## F7-02 - Preparacao de release candidate sem instalacao (26/10/2026)
+
+**Status [~]:** criado `src/lao/release-package.mjs`, capaz de montar um
+diretorio novo de release candidate a partir da compilacao local existente,
+sem executar instalacao, copiar dependencias, criar servico, alterar registro,
+habilitar boot ou publicar artefatos. Sao incluidos o launcher, o nucleo
+compilado LAO, lockfile e manifest de versao fixa, documentos de operacao e
+icones do tray. O manifest registra SHA-256 e tamanho de todos os arquivos
+copiados, `serviceInstalled=false` e `autostartEnabled=false`.
+Testes confirmaram copia em pasta temporaria, 35 arquivos, hashes corretos,
+ausencia de node_modules e bloqueio de sobrescrita do pacote.
+
+**F7 nao concluida:** o pacote e somente um estagio auditavel; falta
+instalador real, bootstrap de dependencias offline confiavel, assinatura,
+SCM Windows, permissao explicita para instalar, backup, desinstalacao e
+rollback, alem de testes em maquina limpa.
+
+**Validacao da retomada:** `pnpm test` executou 231 casos: 223 aprovados,
+8 ignorados e 0 falhas; `pnpm typecheck`, `pnpm build` e
+`node scripts/lao-verify-devspace-pin.mjs` passaram. O verificador
+confirmou DevSpace 1.0.8 no commit fixo `13c99eec5ed43eb9aba3fdc457bd912d3ce82211`.
+O staging continua nao instalavel: nenhum teste de maquina limpa foi
+executado e nenhuma alteracao de servico/boot foi realizada.
