@@ -39,4 +39,4 @@ O LAO nao e iniciado automaticamente, nao altera banco legado e nao instala serv
 
 ## Regressao atualizada
 
-Suite final apos mudancas (25/10/2026): 211 testes, 203 OK, 8 skip, 0 falhas. Typecheck e build validados na feature. Um caso de symlink foi ignorado por falta de privilegio da conta Windows.
+Suite final apos mudancas (25/10/2026): 213 testes, 205 OK, 8 skip, 0 falhas. Typecheck e build validados na feature. Um caso de symlink foi ignorado por falta de privilegio da conta Windows.

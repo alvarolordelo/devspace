@@ -11,7 +11,7 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F0 Base segura | [x] | Branch e worktree separados, commits no fork, baseline e rollback documentados |
 | F1 Núcleo LAO | [~] | Contratos, feature flag OFF, SQLite, tarefas, execuções, eventos, estados, health e MCP opt-in |
 | F2 Ollama | [~] | Listagem real de modelos e inspeção Granite; leitura limitada de fontes escolhidas e execução simulada do modelo; inferência real não validada |
-| F3 Escrita isolada | [~] | Guarda explícita de worktree gerenciado/desanexado; execução de patches por agente pendente |
+| F3 Escrita isolada | [~] | Guarda de worktree gerenciado e broker interno de patch com arquivos permitidos, diff e sem shell; delegação via modelo/MCP ainda pendente |
 | F4 Avaliação/revisão | [~] | Revisões explícitas, evidência determinística do diff de worktree e limite de duas correções; execução de testes e promoção pendentes |
 | F5 Serviço e tray | [~] | Daemon experimental em primeiro plano, health local, recovery e CLI validados; serviço SCM, tray e autostart pendentes |
 | F6 Painel | [ ] | Assets e layouts aprovados; painel funcional, notificações e histórico UI pendentes |
@@ -25,8 +25,8 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-01 Opt-in | [x] | `src/lao/config.ts`, `mcp-tools.ts`, `src/server.ts`; ferramenta só exposta com `DEVSPACE_LAO_ENABLED=true`; OFF preserva tool surface |
 | RF-02 Provedor/modelo | [~] | `ollama-client.ts`, descoberta via `/api/tags`, `/api/show`, seleção por `lao_delegate`; falta execução real validada |
 | RF-03 Criar tarefa | [x] | `contracts.ts`, `task-store.ts`, `lao_delegate`; objetivo, workspace, critérios, permissões, orçamento, ID e persistência testados em read-only |
-| RF-04 Escrita isolada | [~] | `write-boundary.ts` valida worktree gerenciado, detached e containment; patch real ainda não ligado |
-| RF-05 Política de ferramentas | [~] | Guardas de workspace, até três arquivos explicitamente selecionados, paths sensíveis bloqueados; shell/escrita negados; broker completo pendente |
+| RF-04 Escrita isolada | [~] | `write-boundary.ts` e `worktree-patch.ts` aplicam patch real apenas em worktree detached gerenciado e caminhos autorizados; criação do worktree por tarefa/MCP pendente |
+| RF-05 Política de ferramentas | [~] | Guardas para leitura seletiva e para patch de até 5 ações em arquivos explicitamente listados, shell negado; broker de comandos/execução do modelo pendente |
 | RF-06 Executar agente | [~] | `task-runner.ts`: chat sem ferramentas, fontes explícitas como dados não confiáveis, deadline, cancelamento, hashes e resultados SQL; inferência Granite pendente |
 | RF-07 Avaliar com provas | [~] | Resposta entra em `awaiting_review` e revisão exige evidências; `review-evidence.ts` coleta diff real em worktree; faltam testes automatizados e critérios ponta a ponta |
 | RF-08 Correções limitadas | [~] | Estado `needs_revision`, máximo 2; repetição automática limitada pendente |
@@ -63,13 +63,14 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F2-06 | `read-context.ts`, `task-runner.ts`, `mcp-source-context.test.ts` | Leitura real de fontes escolhidas no workspace, limite 3 x 4 kB, hashes SHA-256 persistidos; geração do modelo simulada | `6743d4f` |
 | F7-00 | `.github/workflows/lao-feature-ci.yml` | Matriz Windows com LAO OFF, typecheck, build e testes; YAML verificado localmente, workflow remoto ainda não executado | `1487448` |
 | F5-00 | `daemon.ts`, `daemon-main.ts`, `bin/devspace-laod.js` | Health loopback, recovery, porta ocupada e smoke real do CLI compilado; **não instalado no Windows** | `206cfa4` |
+| F3-02 | `worktree-patch.ts`, `contracts.ts`, testes | Patch real em Git worktree temporário, allowlist por arquivo, limites, bloqueios de traversal e diff após patch; checkout-fonte permaneceu limpo; **não exposto ao modelo/MCP** | `5a0e4f1` |
 | F3-01 | `write-boundary.ts` e teste | Root de worktree, canonical path, managed/detached e shell negado | `30c2b2c` |
 | F4-02 | `review-evidence.ts`, `task-store.ts`, testes | Git diff, untracked, whitespace e HEAD coletados em worktree temporário; não declara testes/verificação e bloqueia aprovação de escrita | `3e65541` |
 | F2-03 | Modelo Granite local | Inferência **não validada**: ferramenta bloqueou chamada real por configuração de segurança; NÃO atribuir sucesso | [!] |
 
 **Baseline original:** 160 testes, 153 aprovados, 7 ignorados; `pnpm build` e `pnpm typecheck` verdes.
 
-**Testes do LAO (rodada atual):** 61 casos, 60 aprovados, 1 ignorado (symlink sem privilégio), 0 falhas. Regressão completa: **211 testes, 203 aprovados, 8 ignorados, 0 falhas**. TypeScript e build aprovados localmente. GitHub Actions Windows ainda não confirmado.
+**Testes do LAO (rodada atual):** 63 casos, 62 aprovados, 1 ignorado (symlink sem privilégio), 0 falhas. Regressão completa: **213 testes, 205 aprovados, 8 ignorados, 0 falhas**. TypeScript e build aprovados localmente. GitHub Actions Windows ainda não confirmado.
 
 ## Limitações importantes
 
