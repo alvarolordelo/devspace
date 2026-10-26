@@ -125,6 +125,55 @@ export function registerLaoMcpTools(
     }
   });
 
+  server.registerTool("lao_retry", {
+    title: "Retry reviewed LAO read-only task",
+    description: "Explicitly retry an existing task only after supervisor requested corrections. Reuses the stored limits, read-only policy, model and criteria; at most two retries, never self-approves.",
+    inputSchema: {
+      workspace_id: z.string().min(1),
+      task_id: z.string().uuid(),
+      source_files: z.array(z.string().min(1).max(240)).max(3).optional(),
+    },
+    annotations: { readOnlyHint: false, openWorldHint: false },
+  }, async ({ workspace_id, task_id, source_files }, extra) => {
+    try {
+      return await withStore(context.stateDir, async (store) => {
+        const workspace = await context.workspaces.getWorkspace(workspace_id);
+        const task = store.get(task_id);
+        if (!task || task.workspaceId !== workspace_id) {
+          throw new Error("Task is not accessible in this workspace");
+        }
+        if (task.status !== "needs_revision") {
+          throw new Error("Task must have explicit needs_revision decision");
+        }
+        if (task.revisionCount >= task.limits.maxRevisions) {
+          throw new Error("LAO revision budget exhausted");
+        }
+        const selectedFiles = source_files ?? [];
+        if (selectedFiles.length && !context.workspaces.resolvePath) {
+          throw new Error("File read context is unavailable");
+        }
+        const snapshots = selectedFiles.length
+          ? await loadLaoReadContext(context.workspaces as Pick<WorkspaceRegistry, "resolvePath">, workspace, selectedFiles)
+          : [];
+        const runner = new LaoReadOnlyRunner(store, context.ollama ?? new LaoOllamaClient(config));
+        try {
+          const result = await runner.runTask(task_id, extra?.signal, snapshots);
+          return asToolResult({
+            task_id, status: result.task.status, run: result.run,
+            revision_count: result.task.revisionCount,
+            requires_review: true, criteria_verified: false,
+            source_manifest: result.run.sourceManifest,
+          });
+        } catch {
+          return asToolResult({
+            task_id, status: store.get(task_id)?.status,
+            requires_review: true, criteria_verified: false, error: "execution_failed",
+          });
+        }
+      });
+    } catch (error) { return toolFailure(error); }
+  });
+
   server.registerTool("lao_result", {
     title: "Read LAO task result",
     description: "Inspect persisted runs, event history, and review decision for a task in an authorized workspace.",

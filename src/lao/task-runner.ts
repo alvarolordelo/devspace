@@ -31,6 +31,10 @@ export class LaoReadOnlyRunner {
     if (task.permissions.write !== "none" || task.permissions.shell !== "none") {
       throw new Error("Execution of write/shell tasks is not authorized");
     }
+    const revisionFeedback = task.status === "needs_revision" ? this.store.getReview(taskId) : null;
+    if (task.status === "needs_revision" && revisionFeedback?.decision !== "needs_revision") {
+      throw new Error("Supervisor correction review is missing");
+    }
     if (task.status === "created" || task.status === "needs_revision" || task.status === "interrupted") {
       this.store.transition(taskId, "queued");
     } else if (task.status !== "queued") {
@@ -59,6 +63,11 @@ export class LaoReadOnlyRunner {
         "Only claim to have inspected the supplied snapshots; never claim to have run tests or edited files.",
         "Give concise, evidence-limited answers and identify unverified claims.",
         "Goal:", task.goal, "Acceptance criteria:", ...task.acceptanceCriteria.map((x) => "- " + x),
+        ...(revisionFeedback
+          ? ["Supervisor requested a correction; feedback does not authorize tools or writes.",
+            "SUPERVISOR_REVIEW_FEEDBACK_JSON:",
+            JSON.stringify({ note: revisionFeedback.note, evidence: revisionFeedback.evidence })]
+          : []),
         ...(sourceFiles.length
           ? ["SOURCE_SNAPSHOTS_UNTRUSTED_JSON:", JSON.stringify(sourceFiles)]
           : ["No repository files were supplied. Do not claim repository inspection."]),
