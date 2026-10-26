@@ -14,9 +14,9 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F3 Escrita isolada | [~] | `lao_write_prepare` cria worktree gerenciado de feature autorizada; `lao_write_run` recebe patch do modelo real sem tools e aplica pelo broker com allowlist, hashes e diff persistido; transporte MCP autenticado e suites completas do projeto ainda pendentes; gate estatico de patches disponivel |
 | F4 Avaliação/revisão | [~] | `lao_result` inclui diff persistido; `lao_write_validate` revalida SHA-256, HEAD, allowlist, whitespace e sintaxe TS/JS/JSON sem executar codigo; smoke Docker real validado; aceite, suites completas e MCP autenticado pendentes; aprovacao de escrita bloqueada |
 | F5 Serviço e tray | [~] | Daemon experimental em primeiro plano, health local, recovery e CLI validados; serviço SCM, tray e autostart pendentes |
-| F6 Painel | [ ] | Assets e layouts aprovados; painel funcional, notificações e histórico UI pendentes |
+| F6 Painel | [~] | MVP HTTP local do dashboard, autenticação Bearer por token forte, status Ollama/DevSpace e histórico de tarefas; tray, notificações e controles pendentes |
 | F7 Release | [~] | CI Windows anterior validado; adicionado gate de versao fixa ANTES de instalar dependencias e `pnpm install --frozen-lockfile`; CI Windows run `40260097979` aprovada com gate da base antes do install; instalador e rollback pendentes |
-| F8 Multimodelo | [ ] | Benchmark de Granite vs Spark com cinco repetições e failover pendentes |
+| F8 Multimodelo | [~] | Benchmark Ollama real 5x Granite vs Spark concluido; teste simples 2+2, simulacao de agente e failover pendentes |
 
 ## Requisitos funcionais (RF)
 
@@ -39,11 +39,11 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-15 Tray | [ ] | Ícones aprovados, tray pendente |
 | RF-16 Autostart configurável | [ ] | Pendente |
 | RF-17 Notificações | [ ] | Pendente |
-| RF-18 Dashboard/histórico | [ ] | Persistência de execuções existente; dashboard pendente |
-| RF-19 Multimodelo | [ ] | Benchmark 5x pendente |
+| RF-18 Dashboard/histórico | [~] | Painel local consulta o SQLite e apresenta tarefas/estados com atualização a cada 10s; filtros, detalhes e histórico visual ampliado pendentes |
+| RF-19 Multimodelo | [~] | Benchmark sequencial 5x real com modelos locais, acertos e latencias documentados em BENCHMARK_20261026.md; prova de codigo pendente |
 | RF-20 Failover | [ ] | Pendente |
 
-**RF concluídos:** 3/20 · **Parciais:** 9/20 · **Pendentes:** 8/20.
+**RF concluídos:** 3/20 - **Parciais:** 11/20 - **Pendentes:** 6/20.
 
 ## Histórico técnico e evidências
 
@@ -166,3 +166,41 @@ recuperacao e gate para aprovacao de escrita. Nao concluir F4 prematuramente.
 aprovado e regressao `pnpm test` com **218 testes: 210 aprovados,
 8 ignorados, 0 falhas**. Integracao live com Docker aprovada na F4-06.
 CI hospedada do commit F4-07 ainda precisa ser confirmada apos push.
+
+## F6-01 - Painel local MVP (26/10/2026)
+
+**Status [~]:** implementado um painel HTTP local, de consulta, sem tray nem
+servico Windows instalado. A rota \`/dashboard\` so e habilitada quando
+\`LAO_DASHBOARD_TOKEN\` e informado explicitamente no processo do daemon.
+Token: 32-256 caracteres ASCII imprimiveis; nunca impresso em logs ou URLs.
+
+Recursos: login por Bearer, estado real das dependencias, contadores de tarefas
+ativas/em revisao, historico das 200 tarefas mais recentes (ID, estado, modelo,
+revisoes e data), atualizacao a cada 10 segundos, logout e layout responsivo.
+Sem scripts remotos, sem CDN, sem capacidade de aprovar/editar/merge.
+
+Seguranca: bind em loopback; valida Host, nega Origin/POST e query strings,
+resposta CSP com nonce, frame deny, nosniff, no-store, token so em memoria,
+comparacao timing-safe; dados sensiveis nao saem na API e valores exibidos por
+textContent. API/painel seguem desligados sem token de operador.
+
+Integracao feita somente nos modulos \`src/lao\`. Instanciacao do daemon em
+foreground continua opt-in. Dashboard consome o banco indicado pelo daemon;
+para visualizar tarefas MCP de outro processo, o caminho de estado deve ser
+o mesmo e explicitamente configurado. Nao instalar no Windows automaticamente.
+
+Evidencia: \`src/lao/dashboard.test.ts\` verifica opt-in, segredo invalido,
+acesso negado, CSP, Host e Origin, metodos HTTP, sanitizacao e parser JavaScript.
+Documentacao: \`docs/lao-devspace/DASHBOARD_MVP.md\`.
+
+**Limites:** teste real em navegador nao comprovado; tray, servico SCM,
+notificacoes e revisao visual continuam pendentes.
+
+## F8-01 - Benchmark multimodelo basico (26/10/2026)
+
+**Status [~]:** script local de comparacao sequencial, 5 repeticoes por modelo,
+com limite de tokens e sem ativar failover. Granite e Spark tiveram 5/5
+acertos no teste aritmetico trivial, com medianas de 4468 ms e 4716 ms
+respectivamente. Cold starts de 20317 ms e 62014 ms. Estes dados nao validam
+qualidade de codigo e nao autorizam alternar o modelo padrao. Evidencias e
+ressalvas em \`docs/lao-devspace/BENCHMARK_20261026.md\`. Nenhum download.

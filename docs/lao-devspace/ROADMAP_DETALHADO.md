@@ -399,3 +399,11 @@ opaco e recuperacao controlada por vencimento, para evitar runs concorrentes
 em um mesmo worktree. A trava e liberada com `finally` e evidencias de
 execucao nao podem ser persistidas por token antigo. O ciclo autenticado MCP,
 as suites funcionais amplas e o aceite deterministico seguem pendentes.
+
+### F6-01 (26/10/2026) - Dashboard de observabilidade
+
+MVP opt-in em \`/dashboard\` no mesmo listener local do daemon, com token
+forte em ambiente, painel responsivo, status do Ollama/DevSpace e historico
+SQLite. API somente-leitura \`/dashboard/api/status\` e
+\`/dashboard/api/tasks\` e protegida por Bearer. Esta entrega NAO equivale
+a tray/servico/autostart; veja \`DASHBOARD_MVP.md\`.
