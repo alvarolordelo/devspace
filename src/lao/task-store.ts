@@ -212,6 +212,7 @@ export class LaoTaskStore {
           typeof artifact.normalizationApplied !== "boolean" ||
           artifact.evidence.taskId !== task.id ||
           artifact.evidence.workspaceId !== task.workspaceId ||
+          !/^[0-9a-f]{64}$/.test(artifact.evidence.contentFingerprint) ||
           artifact.evidence.testsVerified !== false ||
           artifact.evidence.criteriaVerified !== false ||
           JSON.stringify(artifact.applied).length > 100_000) {

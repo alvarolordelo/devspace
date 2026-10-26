@@ -39,6 +39,7 @@ test("review evidence inspects detached worktree without executing tests or appr
     assert.deepEqual(result.changedFiles, ["source.txt"]);
     assert.deepEqual(result.untrackedFiles, ["new.txt"]);
     assert.equal(result.whitespaceClean, true);
+    assert.match(result.contentFingerprint, /^[0-9a-f]{64}$/);
     assert.equal(result.testsVerified, false);
     assert.equal(result.criteriaVerified, false);
     assert.equal(result.head, git(repo, "rev-parse", "HEAD"));
@@ -46,6 +47,11 @@ test("review evidence inspects detached worktree without executing tests or appr
     writeFileSync(join(wt, "source.txt"), "trailing whitespace  \n");
     const whitespace = await collectLaoReviewEvidence(task, workspace, destination);
     assert.equal(whitespace.whitespaceClean, false);
+    assert.notEqual(whitespace.contentFingerprint, result.contentFingerprint);
+    writeFileSync(join(wt, "new.txt"), "new untracked  \n");
+    const untrackedWhitespace = await collectLaoReviewEvidence(task, workspace, destination);
+    assert.equal(untrackedWhitespace.whitespaceClean, false);
+    assert.notEqual(untrackedWhitespace.contentFingerprint, whitespace.contentFingerprint);
     await assert.rejects(collectLaoReviewEvidence(task, { ...workspace, mode: "checkout" }, destination), /managed/);
   } finally {
     try { git(repo, "worktree", "remove", "--force", wt); } catch { /* temp cleanup */ }

@@ -9,6 +9,7 @@ import { measureLaoReadiness } from "./health.js";
 import { LaoTaskStore } from "./task-store.js";
 import { LaoReadOnlyRunner } from "./task-runner.js";
 import { LaoIsolatedWriteRunner } from "./write-task-runner.js";
+import { validateLaoStaticWrite } from "./write-validation.js";
 import { normalizeLaoPatchPath } from "./worktree-patch.js";
 import { loadLaoReadContext } from "./read-context.js";
 import type { LaoReview } from "./contracts.js";
@@ -282,6 +283,31 @@ export function registerLaoMcpTools(
         });
       } catch (error) { return toolFailure(error); }
     });
+
+    server.registerTool("lao_write_validate", {
+      title: "Validate supervised write without executing code",
+      description: "Re-read persisted worktree evidence and perform bounded integrity, scope, whitespace and syntax checks. Does not run tests, verify acceptance criteria, approve or merge.",
+      inputSchema: {
+        workspace_id: z.string().min(1),
+        task_id: z.string().uuid(),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    }, async ({ workspace_id, task_id }) => {
+      try {
+        return await withStore(context.stateDir, async store => {
+          const workspace = await context.workspaces.getWorkspace(workspace_id);
+          const task = store.get(task_id);
+          if (!task || task.workspaceId !== workspace_id) {
+            throw new Error("Write task not accessible");
+          }
+          const record = store.getWriteEvidence(task_id).at(-1);
+          if (!record) throw new Error("No persisted write evidence");
+          const result = await validateLaoStaticWrite(task, workspace, context.worktreeRoot!, record);
+          return asToolResult({ ...result, requires_review: true });
+        });
+      } catch (error) { return toolFailure(error); }
+    });
+
   }
 
   server.registerTool("lao_result", {

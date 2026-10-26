@@ -104,6 +104,23 @@ test("MCP supervisor prepares isolated worktree, runs model patch, persists diff
     assert.equal(git(repo, "status", "--porcelain"), "");
     assert.equal(existsSync(join(worktrees[0], "src", "feature.ts")), true);
 
+    const validated = await invoke("lao_write_validate", {
+      workspace_id: workspaceId, task_id: taskId,
+    });
+    assert.equal(validated.structuredContent.staticChecksPassed, true);
+    assert.equal(validated.structuredContent.fingerprintMatches, true);
+    assert.equal(validated.structuredContent.testsExecuted, false);
+    assert.equal(validated.structuredContent.criteriaVerified, false);
+    assert.deepEqual(validated.structuredContent.syntaxChecks, [
+      { path: "src/feature.ts", outcome: "passed", errors: 0 },
+    ]);
+    writeFileSync(join(worktrees[0], "src", "feature.ts"), "export const feature = false;\n");
+    const tampered = await invoke("lao_write_validate", {
+      workspace_id: workspaceId, task_id: taskId,
+    });
+    assert.equal(tampered.structuredContent.staticChecksPassed, false);
+    assert.equal(tampered.structuredContent.fingerprintMatches, false);
+    writeFileSync(join(worktrees[0], "src", "feature.ts"), "export const feature = true;\n");
     const reviewed = await invoke("lao_result", { workspace_id: workspaceId, task_id: taskId });
     assert.equal(reviewed.structuredContent.runs.length, 1);
     assert.equal(reviewed.structuredContent.runs[0].toolCalls, 1);
@@ -142,10 +159,24 @@ test("MCP supervisor prepares isolated worktree, runs model patch, persists diff
     assert.equal(existsSync(join(worktrees[2], "src", "feature.ts")), false);
     assert.equal(git(repo, "status", "--porcelain"), "");
 
+    const fourth = await prepare();
+    currentPatch = "*** Begin Patch\n*** Add File: src/feature.ts\n+export const feature = ;\n*** End Patch";
+    const malformed = await invoke("lao_write_run", {
+      workspace_id: fourth.structuredContent.workspace_id,
+      task_id: fourth.structuredContent.task_id,
+    });
+    assert.equal(malformed.structuredContent.status, "awaiting_review");
+    const badSyntax = await invoke("lao_write_validate", {
+      workspace_id: fourth.structuredContent.workspace_id,
+      task_id: fourth.structuredContent.task_id,
+    });
+    assert.equal(badSyntax.structuredContent.fingerprintMatches, true);
+    assert.equal(badSyntax.structuredContent.staticChecksPassed, false);
+    assert.equal(badSyntax.structuredContent.syntaxChecks[0].outcome, "failed");
     git(repo, "branch", "-m", "main");
     const stableBlocked = await prepare();
     assert.equal(stableBlocked.isError, true, "main checkout must not be accepted as a source");
-    assert.equal(created, 3);
+    assert.equal(created, 4);
   } finally {
     for (const path of worktrees) {
       try { git(repo, "worktree", "remove", "--force", path); } catch { /* local test cleanup */ }
