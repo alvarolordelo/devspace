@@ -551,3 +551,12 @@ auditavel, autenticar cada pacote por chave de confianca, implementar
 instalacao/upgrade/rollback/desinstalacao opcionais e validar em Windows
 limpo com WinSW autentico e aprovacao operacional explicita. A branch
 `main` e o DevSpace original v1.0.8 permanecem protegidos.
+
+### F6-03 - Amostragem local de recursos (26/10/2026)
+
+Dashboard passa a consultar um endpoint autenticado de CPU, RAM, memoria
+do daemon, GPU NVIDIA e VRAM, sem GPU nula tratada como zero.
+O painel existente foi preservado e recebeu apenas novo card de
+diagnostico. Sem comandos arbitrarios, sem dados privados e sem rede.
+Pendente finalizar alertas, notificacoes, integracao da bandeja, teste
+visual em navegador e diagnostico do modelo; F6 continua parcial.

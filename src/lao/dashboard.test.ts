@@ -60,6 +60,7 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
       assert.doesNotMatch(html, new RegExp(token));
       const api = url + "/dashboard/api/tasks";
       assert.equal((await fetch(api)).status, 401);
+      assert.equal((await fetch(url + "/dashboard/api/metrics")).status, 401);
       assert.equal((await fetch(api, { headers: {
         Authorization: "Bearer wrong",
       } })).status, 401);
@@ -118,6 +119,23 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
       assert.equal((await fetch(url + "/dashboard/api/status", {
         headers: { Authorization: "Bearer " + token },
       })).status, 200);
+      const metricsResponse = await fetch(url + "/dashboard/api/metrics", {
+        headers: { Authorization: "Bearer " + token },
+      });
+      assert.equal(metricsResponse.status, 200);
+      assert.equal(metricsResponse.headers.get("cache-control"), "no-store");
+      const metrics = await metricsResponse.json() as Record<string, any>;
+      assert.ok(metrics.cpu.logicalCores > 0);
+      assert.ok(metrics.ram.totalBytes > 0);
+      assert.ok(metrics.process.rssBytes > 0);
+      assert.equal(metrics.token, undefined);
+      assert.equal(metrics.goal, undefined);
+      assert.equal((await fetch(url + "/dashboard/api/metrics?token=" + token, {
+        headers: { Authorization: "Bearer " + token },
+      })).status, 403);
+      assert.equal((await fetch(url + "/dashboard/api/metrics", {
+        method: "POST", headers: { Authorization: "Bearer " + token },
+      })).status, 403);
       assert.equal((await fetch(url + "/dashboard/api/missing", {
         headers: { Authorization: "Bearer " + token },
       })).status, 404);
@@ -159,4 +177,9 @@ test("dashboard markup has a parseable offline script and does not expose tokens
   assert.match(html, /id="detail-panel"/);
   assert.match(html, /renderTasks/);
   assert.match(html, /showDetails/);
+  assert.match(html, /id="cpu"/);
+  assert.match(html, /id="ram"/);
+  assert.match(html, /id="gpu"/);
+  assert.match(html, /id="vram"/);
+  assert.match(html, /\/dashboard\/api\/metrics/);
 });

@@ -27,6 +27,12 @@ fechar a aba. O token e enviado somente no cabecalho Authorization.
 - Lista das 200 tarefas mais recentes, com identificador, status,
   modelo, revisoes e ultima atualizacao.
 - Atualizacao automatica a cada 10 segundos.
+- Card "Recursos locais" com CPU, RAM, uso GPU NVIDIA e VRAM, mais
+  memoria RSS do daemon. Os valores sao amostrados em cada atualizacao,
+  com primeiro valor de CPU indicado como "Calculando amostra...".
+- `GET /dashboard/api/metrics` usa o mesmo Bearer/Host/CSP do painel;
+  devolve somente numeros agregados de uso, sem identificadores da GPU,
+  processos de terceiros, comandos, dados de tarefas ou credenciais.
 - Sem permissoes de execucao, aprovacao, commit ou alteracao no Git.
 
 ## Limites e protecoes
@@ -41,6 +47,12 @@ fechar a aba. O token e enviado somente no cabecalho Authorization.
   nao sao retornados pela API de lista.
 - Sem assets externos, CDN ou requests a servidores remotos.
 - O painel nao substitui autenticacao do protocolo MCP.
+- Uma GPU indisponivel, NVML nao inicializada, multipla GPU nao suportada
+  ou comando `nvidia-smi` ausente e exibida como "Nao disponivel", nunca
+  como consumo zero. O comando fixo `nvidia-smi` tem timeout de 1,5 s,
+  argumentos imutaveis e um ambiente restrito sem secrets.
+- A interface de recursos recebeu testes de sintaxe e API, mas nao foi
+  validada visualmente/interativamente num navegador real nesta etapa.
 
 Nao instalar no boot, configurar conta Windows, gerenciar credenciais,
 expor tunel, nem ativar URL publica automaticamente. Tais operacoes

@@ -5,6 +5,9 @@ import type { LaoTaskStore } from "./task-store.js";
 import type { LaoConfig } from "./config.js";
 import { measureLaoReadiness } from "./health.js";
 import { dashboardHtml } from "./dashboard-ui.js";
+import { createLaoResourceMonitor } from "./resource-metrics.js";
+
+const readResourceMetrics = createLaoResourceMonitor();
 
 export interface LaoDashboardOptions {
   token: string;
@@ -96,11 +99,15 @@ export async function handleLaoDashboard(
     return true;
   }
   const detailMatch = /^\/dashboard\/api\/tasks\/([a-f0-9-]{36})$/.exec(path);
-  if (path !== "/dashboard/api/status" && path !== "/dashboard/api/tasks" && !detailMatch) {
+  if (path !== "/dashboard/api/status" && path !== "/dashboard/api/tasks" &&
+      path !== "/dashboard/api/metrics" && !detailMatch) {
     json(res, 404, { error: "not_found" }); return true;
   }
   if (!authorized(req, options.token)) {
     json(res, 401, { error: "unauthorized" }); return true;
+  }
+  if (path === "/dashboard/api/metrics") {
+    json(res, 200, await readResourceMetrics()); return true;
   }
   if (detailMatch) {
     const id = detailMatch[1];

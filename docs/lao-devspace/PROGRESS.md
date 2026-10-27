@@ -582,3 +582,24 @@ politica de chaves, assinatura Windows e validacao em maquina limpa.
 8 ignorados, 0 falhas**; `pnpm typecheck`, `pnpm build`, verificador
 de pin DevSpace 1.0.8 e `git diff --check` aprovados. CI da nova entrega
 precisa ser conferida apos o push.
+
+## F6-03 - Diagnostico autenticado de CPU/RAM/GPU/VRAM (26/10/2026)
+
+**F6 permanece [~].** O dashboard local inclui agora um card de recursos
+que consulta `GET /dashboard/api/metrics` sob o Bearer existente:
+amostragem de CPU (sem inventar carga no primeiro ponto), RAM, memoria
+do proprio daemon, GPU NVIDIA e VRAM. GPU ausente/NVML indisponivel
+retorna `null`; nunca zero enganoso. A chamada `nvidia-smi` e fixa,
+sem shell, sem comandos de modelo, timeout de 1,5 s e ambiente restrito.
+
+Testes de calculo CPU, parser GPU, ausencia de GPU e API HTTP autenticada
+passaram; tokens e detalhes privados nao sao devolvidos. Uma consulta
+real `nvidia-smi` no Windows local confirmou numeros de GPU/VRAM;
+o card nao recebeu teste de interacao em navegador real.
+**Pendentes F6:** alertas/notificacoes, integracao visual com bandeja,
+diagnostico do modelo, testes GUI e UX de longa duracao.
+**Regressao desta entrega F6:** `pnpm test` 241 testes (233 aprovados,
+8 ignorados, zero falhas), `pnpm typecheck`, `pnpm build`,
+`lao-verify-devspace-pin.mjs` e `git diff --check` aprovados.
+O teste real do monitor confirmou leituras de GPU NVIDIA e VRAM via
+NVML no Windows local; CI hospedada precisa ser confirmada apos push.
