@@ -561,3 +561,24 @@ operacional separada. Nao ha evidencia de stop real pelo Windows SCM.
 Testes direcionados Windows de release e plano: 4/4 aprovados;
 `pnpm typecheck` e pin da base verificados. O pacote permanece sem
 instalador e sem validacao WinSW genuina.
+
+## F7-06 - Autenticidade de release destacada (26/10/2026)
+
+**F7 permanece [~].** Criados `release-auth-sign.mjs` e
+`release-auth-verify.mjs`: ferramentas offline que assinam o manifesto
+verificado com Ed25519 e conferem assinatura e integridade usando chave
+publica **externa e previamente confiavel**. Chave privada, chave publica
+e assinatura ficam fora do candidato; nenhuma chave real e versionada.
+Nao requer download, instalacao, boot ou mudanca no DevSpace original.
+
+O teste `release-auth.test.ts` gerou uma chave efemera e aprovou o
+fluxo positivo, recusando sobrescrita, assinatura interna, chave publica
+incorreta, assinatura adulterada, manifesto modificado e arquivo
+adulterado: **1/1 aprovado**. A etapa de autenticidade e ainda opcional;
+um instalador futuro devera exigi-la com chave publica distribuida por
+canal confiavel. **Pendencias F7:** runtime Node integrado, instalador,
+politica de chaves, assinatura Windows e validacao em maquina limpa.
+**Regressao desta entrega:** `pnpm test`: **238 casos, 230 aprovados,
+8 ignorados, 0 falhas**; `pnpm typecheck`, `pnpm build`, verificador
+de pin DevSpace 1.0.8 e `git diff --check` aprovados. CI da nova entrega
+precisa ser conferida apos o push.

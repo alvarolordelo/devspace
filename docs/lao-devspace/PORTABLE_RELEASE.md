@@ -54,6 +54,41 @@ Valida manifest, SHA-256 do WinSW, Node ABI e SQLite nativo. Nunca
 chama sc.exe, WinSW install, Start-Service ou schtasks, nunca
 modifica boot, registro, credenciais ou servicos do Windows.
 
+## Autenticidade externa opcional (F7-06)
+
+O SHA-256 registrado no manifesto detecta arquivos alterados em relacao
+ao **proprio manifesto**, mas um invasor poderia substituir ambos. Para
+autenticar a origem existe agora um procedimento **offline e explicito**
+de assinatura destacada Ed25519. Ele exige chaves criadas e mantidas
+por um operador de confianca **fora do repositorio e do release**.
+O LAO **nao** gera nem distribui uma chave de producao automaticamente.
+
+Execute os scripts abaixo **sempre de um checkout do LAO previamente
+confiavel**, nao de um release recebido de terceiros. O operador precisa
+obter o PEM publico por um canal confiavel e confirmar sua identidade;
+um PEM fornecido junto ao pacote sem essa verificacao nao estabelece
+autenticidade. Exemplo com caminhos absolutos ilustrativos:
+
+```cmd
+node src/lao/release-auth-sign.mjs --dir C:\TEMP\lao-portable-novo --key C:\CHAVES\lao-ed25519-private.pem --out C:\TEMP\lao-portable.sig.json
+node src/lao/release-auth-verify.mjs --dir C:\TEMP\lao-portable-novo --signature C:\TEMP\lao-portable.sig.json --public-key C:\CHAVES\lao-ed25519-public-CONFIAVEL.pem
+```
+
+O assinador verifica primeiro a integridade do candidato e produz
+assinatura do conteudo exato de `RELEASE_MANIFEST.json`, incluindo
+fingerprint SHA-256 da chave publica. O verificador confere a assinatura
+Ed25519 com a **chave publica independente** e, depois, os arquivos
+listados no manifesto. Ambos rejeitam chave/assinatura guardadas dentro
+do release; o arquivo de assinatura nao pode ser sobrescrito.
+Testes de chaves temporarias exercitam sucesso, chave trocada,
+assinatura adulterada, manifesto alterado e arquivos alterados.
+
+**Isto nao e code signing de executaveis do Windows** nem instala
+automaticamente o pacote; tambem nao substitui uma cadeia de distribuicao
+confiavel, controle de acesso a chave privada, politica de rotacao,
+instalador que exija assinatura valida e teste operacional em maquina limpa.
+As etapas acima sao opcionais e nao instalam servicos ou modificam boot.
+
 ## Gates faltantes
 
 Validar WinSW real em VM descartavel, instalacao e desinstalacao,

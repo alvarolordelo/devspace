@@ -533,3 +533,21 @@ executou SQLite nativo no diretorio portavel, sem fonte original.
 O planejador lao-service-plan.ps1 confere pacote, ABI, integridade
 de um WinSW informado com SHA-256 e produz XML com startmode Manual.
 Nenhuma instalacao/SCM/boot foi modificada. F5 e F7 seguem parciais.
+
+### F4-13 / F5-05 / F7-06 - Gates adicionados (26/10/2026)
+
+- F4: smoke isolado autenticado OAuth MCP com **Granite real + Docker real**,
+  declarative acceptance, aprovacao roteirizada e promocao auditada de
+  um arquivo passou em repositorio descartavel. Continua faltando review
+  humano operacional, crash recovery e robustez concorrente.
+- F5: plano WinSW continua offline, agora fixa `LocalService` como conta
+  de menor privilegio e `stoptimeout=30sec`; sem instalacao nem ACLs.
+- F7: assinatura externa opcional **Ed25519** do manifesto e verificacao
+  dos arquivos com chave publica obtida separadamente. Testes de
+  adulteracao passaram; instalador nao exige ainda a assinatura.
+
+**Proximos gates de release:** empacotar runtime Node de proveniencia
+auditavel, autenticar cada pacote por chave de confianca, implementar
+instalacao/upgrade/rollback/desinstalacao opcionais e validar em Windows
+limpo com WinSW autentico e aprovacao operacional explicita. A branch
+`main` e o DevSpace original v1.0.8 permanecem protegidos.
