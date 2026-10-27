@@ -13,6 +13,37 @@ const run = promisify(execFile);
 const tray = fileURLToPath(new URL("./windows/lao-tray.ps1", import.meta.url));
 const token = "lao-test-local-monitor-access-token-12345";
 
+test("LAO native action icons are supplied as approved vector-origin image assets", () => {
+  const assetRoot = fileURLToPath(new URL("../../docs/lao-devspace/assets/icons/", import.meta.url));
+  const sources = ["abrir-painel", "logs", "reiniciar", "configuracoes",
+    "revisao", "chevron-direita", "documento"];
+  const outputs = ["abrir-painel", "logs", "reiniciar", "configuracoes",
+    "revisao", "chevron-direita", "documento-verde", "documento-amarelo",
+    "documento-vermelho"];
+  for (const icon of sources) {
+    const svg = readFileSync(join(assetRoot, "actions", icon + ".svg"), "utf8");
+    assert.match(svg, /viewBox="0 0 24 24"/);
+    assert.match(svg, /<(path|rect|circle)\b/);
+    const body = svg.replace('xmlns="http://www.w3.org/2000/svg"', "");
+    assert.doesNotMatch(body, /<(text|image|use|script|foreignObject)\b|<\!DOCTYPE|https?:\/\//i,
+      `${icon}: only locally maintained vector geometry is allowed`);
+  }
+  for (const icon of outputs) {
+    const bitmap = readFileSync(join(assetRoot, "png", `lao-action-${icon}-64.png`));
+    assert.ok(bitmap.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex")), icon);
+    assert.equal(bitmap.readUInt32BE(16), 64, `${icon}: wrong raster width`);
+    assert.equal(bitmap.readUInt32BE(20), 64, `${icon}: wrong raster height`);
+    assert.ok(bitmap.byteLength > 350, `${icon}: empty or missing artwork`);
+  }
+  const popup = readFileSync(fileURLToPath(new URL("./windows/lao-popup.ps1", import.meta.url)), "utf8");
+  assert.match(popup, /\[IO\.File\]::ReadAllBytes\(\$assetPath\)/);
+  assert.match(popup, /\[Drawing\.Bitmap\]::new\(\$sourceImage\)/);
+  assert.match(popup, /\$settings\.Tag=\$assets\['configuracoes'\]/);
+  assert.match(popup, /\$cardIcon\.Image=\$assets\['documento-verde'\]/);
+  assert.doesNotMatch(popup, /Text\s*=\s*'⚙'|DrawText\(\$_\.Graphics,'›'/,
+    "Do not regress to OS-dependent font glyphs for approved icons");
+});
+
 test("Windows PowerShell 5.1 entrypoints keep the UTF-8 BOM when non-ASCII labels are present", () => {
   const dirs = [dirname(tray), fileURLToPath(new URL("../../scripts/", import.meta.url))];
   for (const directory of dirs) {

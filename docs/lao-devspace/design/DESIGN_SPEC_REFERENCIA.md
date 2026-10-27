@@ -72,3 +72,13 @@ Estado mínimo de cada componente: `name`, `status (online|offline|degraded|unkn
 Usar as quatro capturas originais em revisão lado a lado. Validar os alinhamentos horizontais, espaço entre linhas, estilo dos ícones, legibilidade em 100%, 125%, 150% DPI, popup ancorado ao tray e exibição sem cortar itens. Não limitar-se à renderização do browser: conferir a integração real com a bandeja do Windows.
 
 O conteúdo numérico dos mockups é **fictício**; em produção os valores virão dos provedores de estado, com indicação de horário da última coleta.
+
+## 9. Contrato dos ícones oficiais (Design First)
+
+Os ícones da identidade do LAO e os ícones dos controles não são caracteres Unicode nem dependem de Segoe UI Symbol, emojis ou desenhos ocasionais de GDI+. O projeto mantém **uma fonte SVG versionada por ícone** em `docs/lao-devspace/assets/icons/actions/`. Estes ícones são reproduções vetoriais da referência aprovada, não recortes do fundo da imagem conceitual.
+
+O script `scripts/build-lao-action-icons.ps1` usa WPF nativo do Windows para renderizar os SVGs em PNGs transparentes de 64 px, sem rede nem dependências externas. Os PNGs resultantes são versionados em `assets/icons/png/lao-action-*-64.png` e são **os mesmos** consumidos pela interface WinForms e pelo Dashboard web. A bandeja continua utilizando os `.ico` multirresolução oficiais já existentes.
+
+O rodapé do popup deve consumir SVG/PNG de **Abrir painel, Logs, Reiniciar, Configurações, Revisão e Chevron**. O card de tarefa consome o mesmo documento em variantes de cor para estados verde/amarelo/vermelho. O Dashboard consome os mesmos ícones, acrescidos de Status, Modelos, Ollama e Recursos, todos em SVG/PNG; textos e nomes de tarefas não substituem esses recursos. O endpoint `/dashboard/assets/icons/{nome}.png` tem lista de nomes explicitamente permitidos, sem permitir diretórios ou arquivos arbitrários.
+
+**Regressões proibidas:** substituir qualquer ícone aprovado por texto Unicode, redesenhá-lo diretamente no evento `Paint`, incluir ícones de terceiros, armazenar ícones somente na imagem do mockup ou exigir instalar fontes para exibi-los. Para qualquer atualização, alterar primeiramente o SVG-fonte e regenerar os PNGs; executar os testes de integridade de assets e comparar a captura real do Windows com a referência.

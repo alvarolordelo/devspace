@@ -24,7 +24,7 @@ box-shadow:0 10px 52px #0f172a10}
 .nav{display:flex;flex-direction:column;gap:5px}.nav button{width:100%;text-align:left;border:0;background:transparent;color:#344054;
 padding:13px 13px;border-radius:10px;font-weight:600;display:flex;align-items:center;gap:12px}
 .nav button[aria-current="page"]{background:#e4f0ff;color:#0752bd;box-shadow:inset 3px 0 #0b66ea}
-.nav button:hover{background:#eaf2fe}.nav svg{width:19px;height:19px;flex-shrink:0;stroke:currentColor;stroke-width:1.8;fill:none}
+.nav button:hover{background:#eaf2fe}.nav img{width:19px;height:19px;flex-shrink:0;object-fit:contain}
 .sidebar-note{margin-top:auto;border-top:1px solid var(--border);padding:15px 8px;color:var(--muted);font-size:12px;line-height:1.6}
 .main{min-width:0;padding:28px clamp(17px,3vw,40px) 26px}
 .header{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:26px;flex-wrap:wrap}
@@ -47,6 +47,9 @@ h2{font-size:18px;margin:0;letter-spacing:-.25px}.subtitle{font-size:13px;color:
 .status-grid .panel{min-height:125px;padding:18px 17px}
 .tile-icon{width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;
 font-size:22px;color:var(--navy);margin-bottom:8px}
+.tile-icon img{width:24px;height:24px;object-fit:contain}
+.inline-icon{width:20px;height:20px;vertical-align:-4px;margin-right:7px;object-fit:contain}
+.action img{width:18px;height:18px;vertical-align:-4px;margin-right:7px;object-fit:contain}
 .tile-label{font-size:13px;font-weight:700;margin-bottom:9px}
 .tile-value{display:flex;align-items:center;gap:8px;font-size:13px;line-height:1.45;overflow-wrap:anywhere}
 .resource-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
@@ -59,6 +62,8 @@ font-size:22px;color:var(--navy);margin-bottom:8px}
 .row:last-child{border-bottom:0}
 .row-icon{width:33px;height:33px;border-radius:9px;background:#e7f7ec;color:#159447;
 font-size:17px;display:grid;place-items:center;flex-shrink:0}
+.row-icon img{width:23px;height:23px;object-fit:contain}
+.row-icon.tone-warn{background:#fff4d6}.row-icon.tone-bad{background:#ffe5e6}
 .row-content{flex:1;min-width:0}.row-content strong{font-size:13px;display:block;overflow-wrap:anywhere}
 .row-content small{display:block;color:var(--muted);font-size:12px;margin-top:4px}
 .row-status{font-size:12px;font-weight:700;border-radius:999px;padding:7px 10px;background:#edf2f7;color:#344054;white-space:nowrap}
@@ -109,11 +114,11 @@ max-height:430px;overflow:auto;background:#f4f7fb;padding:14px;border-radius:9px
  <aside class="sidebar" aria-label="Menu principal">
   <div class="brand"><img src="/dashboard/assets/logo.png" alt="" width="54" height="54"><div><strong>LAO DevSpace</strong><small>Monitor local</small></div></div>
   <nav class="nav" aria-label="Seções do painel">
-   <button type="button" data-section="status" aria-current="page"><span aria-hidden="true">⌂</span> Status</button>
-   <button type="button" data-section="tarefas"><span aria-hidden="true">▤</span> Tarefas</button>
-   <button type="button" data-section="modelos"><span aria-hidden="true">⬡</span> Modelos</button>
-   <button type="button" data-section="logs"><span aria-hidden="true">☷</span> Logs</button>
-   <button type="button" data-section="configuracoes"><span aria-hidden="true">⚙</span> Configurações</button>
+   <button type="button" data-section="status" aria-current="page"><img src="/dashboard/assets/icons/status.png" alt="" aria-hidden="true"> Status</button>
+   <button type="button" data-section="tarefas"><img src="/dashboard/assets/icons/logs.png" alt="" aria-hidden="true"> Tarefas</button>
+   <button type="button" data-section="modelos"><img src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"> Modelos</button>
+   <button type="button" data-section="logs"><img src="/dashboard/assets/icons/revisao.png" alt="" aria-hidden="true"> Logs</button>
+   <button type="button" data-section="configuracoes"><img src="/dashboard/assets/icons/configuracoes.png" alt="" aria-hidden="true"> Configurações</button>
   </nav>
   <div class="sidebar-note">Acesso somente local<br>Leitura autenticada<br>Sem execução automática</div>
  </aside>
@@ -123,13 +128,13 @@ max-height:430px;overflow:auto;background:#f4f7fb;padding:14px;border-radius:9px
   </header>
   <div id="section-status">
    <section class="section"><div class="status-grid">
-    <div class="panel"><div class="tile-icon" aria-hidden="true">⚙</div><div class="tile-label">LAO Service</div><div class="tile-value"><span id="lao-dot" class="dot"></span><span id="lao-service">Verificando...</span></div></div>
-    <div class="panel"><div class="tile-icon" aria-hidden="true">↗</div><div class="tile-label">DevSpace MCP</div><div class="tile-value"><span id="mcp-dot" class="dot"></span><span id="devspace-mcp">Não verificado</span></div></div>
-    <div class="panel"><div class="tile-icon" aria-hidden="true">♧</div><div class="tile-label">Ollama</div><div class="tile-value"><span id="ollama-dot" class="dot"></span><span id="ollama-state">Não verificado</span></div></div>
-    <div class="panel"><div class="tile-icon" aria-hidden="true">⬡</div><div class="tile-label">Modelo padrão</div><div id="model-name" class="tile-value">—</div></div>
+    <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/status.png" alt="" aria-hidden="true"></div><div class="tile-label">LAO Service</div><div class="tile-value"><span id="lao-dot" class="dot"></span><span id="lao-service">Verificando...</span></div></div>
+    <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/abrir-painel.png" alt="" aria-hidden="true"></div><div class="tile-label">DevSpace MCP</div><div class="tile-value"><span id="mcp-dot" class="dot"></span><span id="devspace-mcp">Não verificado</span></div></div>
+    <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/ollama.png" alt="" aria-hidden="true"></div><div class="tile-label">Ollama</div><div class="tile-value"><span id="ollama-dot" class="dot"></span><span id="ollama-state">Não verificado</span></div></div>
+    <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"></div><div class="tile-label">Modelo padrão</div><div id="model-name" class="tile-value">—</div></div>
    </div></section>
    <section class="section panel">
-    <div class="section-title"><h2>▥ &nbsp; Recursos do sistema</h2><button data-section="configuracoes" class="link" type="button">Ver detalhes ›</button></div>
+    <div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/recursos.png" alt="" aria-hidden="true"> Recursos do sistema</h2><button data-section="configuracoes" class="link" type="button">Ver detalhes</button></div>
     <div class="resource-grid">
      <div class="resource"><strong>GPU</strong><div class="value" id="gpu">—</div><div class="progress"><span id="gpu-bar"></span></div><small>Utilização NVIDIA</small></div>
      <div class="resource"><strong>VRAM</strong><div class="value" id="vram">—</div><div class="progress"><span id="vram-bar"></span></div><small>Memória da GPU</small></div>
@@ -140,12 +145,12 @@ max-height:430px;overflow:auto;background:#f4f7fb;padding:14px;border-radius:9px
     <div class="fineprint">Amostras locais reais. Percentual de GPU não representa camadas do modelo carregadas em GPU.</div>
    </section>
    <section class="section panel">
-    <div class="section-title"><h2>▤ &nbsp; Tarefas</h2><button class="link" type="button" data-section="tarefas">Ver todas ›</button></div>
+    <div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/logs.png" alt="" aria-hidden="true"> Tarefas</h2><button class="link" type="button" data-section="tarefas">Ver todas</button></div>
     <div id="task-summary"></div><div id="summary-empty" class="empty">Nenhuma tarefa registrada.</div>
    </section>
    <div class="two-columns section">
-    <section class="panel models"><div class="section-title"><h2>⬡ &nbsp; Modelos locais</h2><button class="link" type="button" data-section="modelos">Ver modelos ›</button></div><div id="model-summary" class="empty">Aguardando dados do modelo padrão.</div></section>
-    <section class="panel events"><div class="section-title"><h2>▤ &nbsp; Eventos recentes</h2><button class="link" type="button" data-section="logs">Ver todos ›</button></div><div id="event-summary" class="empty">Nenhum evento disponível.</div></section>
+    <section class="panel models"><div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"> Modelos locais</h2><button class="link" type="button" data-section="modelos">Ver modelos</button></div><div id="model-summary" class="empty">Aguardando dados do modelo padrão.</div></section>
+    <section class="panel events"><div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/revisao.png" alt="" aria-hidden="true"> Eventos recentes</h2><button class="link" type="button" data-section="logs">Ver todos</button></div><div id="event-summary" class="empty">Nenhum evento disponível.</div></section>
    </div>
   </div>
   <section id="section-tarefas" class="section panel hidden">
@@ -158,7 +163,7 @@ max-height:430px;overflow:auto;background:#f4f7fb;padding:14px;border-radius:9px
   </section>
   <section id="section-modelos" class="section panel hidden">
    <h2>Modelos locais</h2><p class="muted">Modelo configurado não significa que o modelo esteja carregado em VRAM.</p>
-   <div class="row"><div class="row-icon" aria-hidden="true">⬡</div><div class="row-content"><strong id="model-detail">—</strong><small>Modelo selecionado no LAO</small></div><span id="model-capability" class="row-status">Não verificado</span></div>
+   <div class="row"><div class="row-icon"><img src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"></div><div class="row-content"><strong id="model-detail">—</strong><small>Modelo selecionado no LAO</small></div><span id="model-capability" class="row-status">Não verificado</span></div>
    <p class="fineprint">A listagem de modelos instalados e o estado de carregamento ainda não estão disponíveis nesta API somente-leitura. Não indicamos “carregado” sem confirmação.</p>
   </section>
   <section id="section-logs" class="section panel hidden"><h2>Eventos recentes</h2><p class="muted">Resumo sanitizado dos registros de tarefas. Sem logs brutos, prompts ou credenciais.</p><div id="events"></div></section>
@@ -171,10 +176,10 @@ max-height:430px;overflow:auto;background:#f4f7fb;padding:14px;border-radius:9px
   </section>
   <section id="detail-panel" class="panel hidden" aria-live="polite"><div class="section-title"><h2>Execuções, testes e revisão</h2><button type="button" id="close-detail" class="link">Fechar</button></div><p class="fineprint">Evidência resumida, sem prompts nem diffs brutos.</p><pre id="detail"></pre></section>
   <div class="actions">
-    <button type="button" class="action primary" disabled title="Envio de tarefas requer integração autenticada e aprovação">＋ Nova tarefa</button>
-    <button type="button" class="action" data-section="logs">▤ Ver eventos</button>
-    <button type="button" id="restart-lao" class="action" disabled title="Reinício disponível somente quando o daemon LAO confirmar suporte">↻ Reiniciar LAO</button>
-    <button type="button" class="action" data-section="configuracoes">⚙ Configurações</button>
+    <button type="button" class="action primary" disabled title="Envio de tarefas requer integração autenticada e aprovação">+ Nova tarefa</button>
+    <button type="button" class="action" data-section="logs"><img src="/dashboard/assets/icons/revisao.png" alt="" aria-hidden="true"> Ver eventos</button>
+    <button type="button" id="restart-lao" class="action" disabled title="Reinício disponível somente quando o daemon LAO confirmar suporte"><img src="/dashboard/assets/icons/reiniciar.png" alt="" aria-hidden="true"> Reiniciar LAO</button>
+    <button type="button" class="action" data-section="configuracoes"><img src="/dashboard/assets/icons/configuracoes.png" alt="" aria-hidden="true"> Configurações</button>
   </div>
   <div class="footer"><span>LAO DevSpace · Atualiza a cada 10 s · Sem autoaprovação</span><button id="logout" class="link" type="button">Sair</button></div>
  </main>
@@ -210,6 +215,15 @@ const sections=["status","tarefas","modelos","logs","configuracoes"];
 const names={status:"Painel de status",tarefas:"Tarefas",modelos:"Modelos locais",logs:"Eventos e logs",configuracoes:"Configurações"};
 const date=s=>{const d=new Date(s);return Number.isNaN(d.getTime())?"—":d.toLocaleString("pt-BR");};
 const node=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
+const taskIcon=t=>{
+ const box=node("div","row-icon");
+ const name=["failed","rejected"].includes(t.status)?"documento-vermelho":
+  t.status==="awaiting_review"?"documento-amarelo":"documento-verde";
+ if(name==="documento-vermelho")box.classList.add("tone-bad");
+ if(name==="documento-amarelo")box.classList.add("tone-warn");
+ const img=node("img");img.src="/dashboard/assets/icons/"+name+".png";
+ img.alt="";img.setAttribute("aria-hidden","true");box.appendChild(img);return box;
+};
 const percent=(value)=>Number.isFinite(value)?Math.min(100,Math.max(0,value)):null;
 const pctbar=(id,value)=>{$(id).style.width=value===null?"0%":String(value)+"%";};
 function section(name){
@@ -239,7 +253,7 @@ function renderTasks(){
  const items=loadedTasks.filter(t=>val==="all"||t.status===val);
  const root=$("tasks");root.replaceChildren();
  for(const t of items){
-  const row=node("div","row");row.appendChild(node("div","row-icon","▤"));
+  const row=node("div","row");row.appendChild(taskIcon(t));
   const info=node("div","row-content");info.appendChild(node("strong","",t.id));
   info.appendChild(node("small","",String(t.model||"Modelo não informado")+" · "+date(t.updatedAt)));
   row.appendChild(info);
@@ -252,7 +266,7 @@ function renderTasks(){
  $("empty").classList.toggle("hidden",items.length>0);
  const summary=$("task-summary");summary.replaceChildren();
  for(const t of loadedTasks.slice(0,3)){
-  const row=node("div","row");row.appendChild(node("div","row-icon","▤"));
+  const row=node("div","row");row.appendChild(taskIcon(t));
   const info=node("div","row-content");info.appendChild(node("strong","",t.id.slice(0,8)+"…"));
   info.appendChild(node("small","",String(t.model||"Modelo desconhecido")+" · "+date(t.updatedAt)));
   row.appendChild(info);const [label,cls]=rowStatus(t);

@@ -16,6 +16,25 @@ function Set-LaoRoundedControlRegion($control,[int]$radius) {
 }
 function New-LaoPopup {
     param([string]$LogoPath)
+    # Use vector-origin PNG assets, never font glyphs or improvised drawings.
+    $assetDir = [IO.Path]::GetDirectoryName($LogoPath)
+    $assets = @{}
+    foreach($name in @('abrir-painel','logs','reiniciar','configuracoes','revisao',
+                       'chevron-direita','documento-verde','documento-amarelo',
+                       'documento-vermelho')) {
+        $assetPath=Join-Path $assetDir ("lao-action-" + $name + "-64.png")
+        if(-not [IO.File]::Exists($assetPath)){
+            throw "LAO approved icon missing: $name. Run scripts/build-lao-action-icons.ps1"
+        }
+        # Clone into managed memory so the GUI does not lock the asset on disk.
+        # Assets can then be rebuilt without closing DevSpace or the daemon.
+        $stream=[IO.MemoryStream]::new([IO.File]::ReadAllBytes($assetPath),$false)
+        try {
+            $sourceImage=[Drawing.Image]::FromStream($stream)
+            try { $assets[$name]=[Drawing.Bitmap]::new($sourceImage) }
+            finally { $sourceImage.Dispose() }
+        } finally { $stream.Dispose() }
+    }
     $form = [Windows.Forms.Form]::new()
     $form.Text = 'LAO DevSpace - Monitor'
     $form.FormBorderStyle = [Windows.Forms.FormBorderStyle]::None
@@ -92,15 +111,19 @@ function New-LaoPopup {
     $heading.ForeColor = $colors.gray
     $header.Controls.Add($heading)
     $settings = [Windows.Forms.Button]::new()
-    $settings.Text = '⚙'
+    $settings.Text = ''
     $settings.AccessibleName = 'Configurações'
+    $settings.Tag=$assets['configuracoes']
     $settings.FlatStyle = [Windows.Forms.FlatStyle]::Flat
     $settings.FlatAppearance.BorderSize = 0
     $settings.ForeColor = $colors.muted
     $settings.BackColor = [Drawing.Color]::White
-    $settings.Font = [Drawing.Font]::new('Segoe UI Symbol',21)
     $settings.Location = [Drawing.Point]::new(365,28)
     $settings.Size = [Drawing.Size]::new(42,42)
+    $settings.Add_Paint({
+        $_.Graphics.InterpolationMode=[Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $_.Graphics.DrawImage($this.Tag,[Drawing.Rectangle]::new(7,7,28,28))
+    })
     $header.Controls.Add($settings)
     LaoLine $header 95
     $rows = @{}
@@ -158,28 +181,13 @@ function New-LaoPopup {
     $iconBox.BackColor=[Drawing.ColorTranslator]::FromHtml('#E9F8EE')
     $card.Controls.Add($iconBox)
     Set-LaoRoundedControlRegion $iconBox 12
-    $cardIcon=LaoLabel '' 0 0 55 55 22 $true
-    $cardIcon.ForeColor=$colors.green
-    $cardIcon.TextAlign=[Drawing.ContentAlignment]::MiddleCenter
+    $cardIcon=[Windows.Forms.PictureBox]::new()
+    $cardIcon.Location=[Drawing.Point]::new(8,8)
+    $cardIcon.Size=[Drawing.Size]::new(39,39)
+    $cardIcon.BackColor=[Drawing.Color]::Transparent
+    $cardIcon.SizeMode=[Windows.Forms.PictureBoxSizeMode]::Zoom
+    $cardIcon.Image=$assets['documento-verde']
     $iconBox.Controls.Add($cardIcon)
-    $cardIcon.Add_Paint({
-        $pen=[Drawing.Pen]::new($this.ForeColor,2)
-        $ink=[Drawing.Drawing2D.GraphicsPath]::new()
-        try {
-            $_.Graphics.SmoothingMode=[Drawing.Drawing2D.SmoothingMode]::AntiAlias
-            $ink.AddLine(18,10,33,10)
-            $ink.AddLine(33,10,39,17)
-            $ink.AddLine(39,17,39,43)
-            $ink.AddLine(39,43,18,43)
-            $ink.AddLine(18,43,18,10)
-            $_.Graphics.DrawPath($pen,$ink)
-            $_.Graphics.DrawLine($pen,33,10,33,18)
-            $_.Graphics.DrawLine($pen,33,18,39,18)
-            $_.Graphics.DrawLine($pen,22,26,34,26)
-            $_.Graphics.DrawLine($pen,22,32,34,32)
-            $_.Graphics.DrawLine($pen,22,38,31,38)
-        } finally {$pen.Dispose();$ink.Dispose()}
-    })
     $cardCaption=LaoLabel 'Situação atual' 85 16 277 24 10.6 $false
     $cardCaption.ForeColor=$colors.muted
     $card.Controls.Add($cardCaption)
@@ -189,16 +197,16 @@ function New-LaoPopup {
     $cardDetails.ForeColor=$colors.muted
     $card.Controls.Add($cardDetails)
     $actions=@{}
-    $items=@(@('dashboard','Abrir painel','↗'),
-             @('logs','Ver logs','▤'),
-             @('context','Ver revisão','↻'),
-             @('settings','Configurações','⚙'))
+    $items=@(@('dashboard','Abrir painel','abrir-painel'),
+             @('logs','Ver logs','logs'),
+             @('context','Ver revisão','reiniciar'),
+             @('settings','Configurações','configuracoes'))
     $pos=$y+172
     foreach($item in $items) {
         $button=[Windows.Forms.Button]::new()
         $button.Text=[string]$item[1]
         $button.AccessibleName=[string]$item[1]
-        $button.Tag=[string]$item[2]
+        $button.Tag=$assets[[string]$item[2]]
         $button.FlatStyle=[Windows.Forms.FlatStyle]::Flat
         $button.FlatAppearance.BorderSize=0
         $button.TextAlign=[Drawing.ContentAlignment]::MiddleLeft
@@ -210,23 +218,16 @@ function New-LaoPopup {
         $button.Padding=[Windows.Forms.Padding]::new(50,0,0,0)
         $scroll.Controls.Add($button)
         $button.Add_Paint({
-            $font=[Drawing.Font]::new('Segoe UI Symbol',20)
-            $arrowFont=[Drawing.Font]::new('Segoe UI',18)
-            try {
-                [Windows.Forms.TextRenderer]::DrawText($_.Graphics,[string]$this.Tag,$font,
-                    [Drawing.Rectangle]::new(9,0,35,$this.Height),
-                    [Drawing.ColorTranslator]::FromHtml('#344054'),
-                    [Windows.Forms.TextFormatFlags]::VerticalCenter)
-                [Windows.Forms.TextRenderer]::DrawText($_.Graphics,'›',$arrowFont,
-                    [Drawing.Rectangle]::new($this.Width-30,0,25,$this.Height),
-                    [Drawing.ColorTranslator]::FromHtml('#667085'),
-                    [Windows.Forms.TextFormatFlags]::VerticalCenter)
-            } finally {$font.Dispose();$arrowFont.Dispose()}
+            $_.Graphics.InterpolationMode=[Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $_.Graphics.DrawImage($this.Tag,[Drawing.Rectangle]::new(9,7,26,26))
+            $_.Graphics.DrawImage($this.Parent.Tag,
+                [Drawing.Rectangle]::new($this.Width-30,12,16,16))
         })
         LaoLine $scroll ($pos+40)
         $actions[[string]$item[0]]=$button
         $pos+=40
     }
+    $scroll.Tag=$assets['chevron-direita']
     $freshness=LaoLabel 'Aguardando coleta · — = não verificado' 20 ($pos+2) 365 14 8 $false
     $freshness.ForeColor=$colors.muted
     $scroll.Controls.Add($freshness)
@@ -237,7 +238,8 @@ function New-LaoPopup {
     return @{Form=$form;Logo=$logo;Brand=$brand;HeaderDot=$dot;HeaderText=$heading;
       Rows=$rows;Colors=$colors;Card=$card;CardIcon=$cardIcon;
       CardCaption=$cardCaption;CardTitle=$cardTitle;CardDetails=$cardDetails;
-      Actions=$actions;Settings=$settings;IconBox=$iconBox;Freshness=$freshness}
+      Actions=$actions;Settings=$settings;IconBox=$iconBox;Freshness=$freshness;
+      Assets=$assets}
 }
 
 function Set-LaoPopupRow($popup,[string]$name,[string]$text,[string]$kind) {
@@ -298,10 +300,10 @@ function Update-LaoPopup($popup,$snapshot) {
     if($null -ne $snapshot.pendingReviews -and $snapshot.pendingReviews -gt 0){
         $popup.Actions.context.Enabled=$true
         $popup.Actions.context.Text='Ver revisão'
-        $popup.Actions.context.Tag='▤'
+        $popup.Actions.context.Tag=$popup.Assets['revisao']
         $popup.Rows.last.Title.Text='Pendências'
         Set-LaoPopupRow $popup last "$($snapshot.pendingReviews) revisão(ões)" review
-        $popup.CardIcon.ForeColor=$popup.Colors.yellow
+        $popup.CardIcon.Image=$popup.Assets['documento-amarelo']
         $popup.IconBox.BackColor=[Drawing.ColorTranslator]::FromHtml('#FFF3D2')
         $popup.CardCaption.Text='Ação necessária'
         $popup.CardTitle.Text='Aguardando revisão'
@@ -310,10 +312,10 @@ function Update-LaoPopup($popup,$snapshot) {
     }elseif($null -ne $snapshot.activeTasks -and $snapshot.activeTasks -gt 0){
         $popup.Actions.context.Enabled=$false
         $popup.Actions.context.Text='Reiniciar LAO (tarefa ativa)'
-        $popup.Actions.context.Tag='↻'
+        $popup.Actions.context.Tag=$popup.Assets['reiniciar']
         $popup.Rows.last.Title.Text='Última execução'
         Set-LaoPopupRow $popup last 'Execução em andamento' good
-        $popup.CardIcon.ForeColor=$popup.Colors.green
+        $popup.CardIcon.Image=$popup.Assets['documento-verde']
         $popup.IconBox.BackColor=[Drawing.ColorTranslator]::FromHtml('#E9F8EE')
         $popup.CardCaption.Text='Tarefa atual'
         $popup.CardTitle.Text=$(if($snapshot.lastTaskId){
@@ -331,7 +333,7 @@ function Update-LaoPopup($popup,$snapshot) {
     }else{
         $canRestart=$live -and $snapshot.statusAuthenticated -and ($snapshot.restartAvailable -eq $true)
         $popup.Actions.context.Enabled=$canRestart
-        $popup.Actions.context.Tag='↻'
+        $popup.Actions.context.Tag=$popup.Assets['reiniciar']
         $popup.Actions.context.Text=$(if($canRestart){
             'Reiniciar LAO'
         }elseif($live){
@@ -339,7 +341,11 @@ function Update-LaoPopup($popup,$snapshot) {
         }else{'Iniciar LAO (indisponível)'})
         $popup.Rows.last.Title.Text='Última execução'
         Set-LaoPopupRow $popup last '—' unknown
-        $popup.CardIcon.ForeColor=$(if($live){$popup.Colors.green}else{$popup.Colors.red})
+        $popup.CardIcon.Image=$(if($live){
+            $popup.Assets['documento-verde']
+        }else{
+            $popup.Assets['documento-vermelho']
+        })
         $popup.IconBox.BackColor=$(if($live){
             [Drawing.ColorTranslator]::FromHtml('#E9F8EE')
         }else{[Drawing.ColorTranslator]::FromHtml('#FFE6E8')})

@@ -115,8 +115,16 @@ if ($UiCheckOnly) {
             $ui.Rows.service.Dot.Font.Size -lt 13 -or
             $ui.Rows.service.Title.Font.Size -lt 13 -or
             $ui.Card.Height -lt 150 -or
-            $ui.Actions.dashboard.Tag -ne '↗') {
+            $ui.Assets.Count -ne 9 -or
+            $ui.Actions.dashboard.Tag -isnot [Drawing.Image] -or
+            $ui.Settings.Tag -isnot [Drawing.Image] -or
+            $ui.CardIcon.Image -isnot [Drawing.Image]) {
             throw 'Approved popup visual hierarchy, spacing or icon order differs'
+        }
+        foreach ($action in $ui.Actions.Values) {
+            if ($action.Tag -isnot [Drawing.Image]) {
+                throw 'Native action uses a font glyph instead of an approved image asset'
+            }
         }
         foreach ($state in @('active','offline','review','idle')) {
             $snapshot = [pscustomobject]@{
@@ -140,8 +148,14 @@ if ($UiCheckOnly) {
             if ($state -eq 'review' -and
                 (-not $ui.Actions.context.Enabled -or
                  $ui.CardTitle.Text -ne 'Aguardando revisão' -or
+                 $ui.Actions.context.Tag -ne $ui.Assets['revisao'] -or
+                 $ui.CardIcon.Image -ne $ui.Assets['documento-amarelo'] -or
                  $ui.Rows.last.Title.Text -ne 'Pendências')) {
                 throw 'Review popup did not expose its approval context'
+            }
+            if ($state -eq 'offline' -and
+                $ui.CardIcon.Image -ne $ui.Assets['documento-vermelho']) {
+                throw 'Offline popup must use the approved red document asset'
             }
             if ($state -ne 'review' -and $ui.Actions.context.Enabled) {
                 throw 'Uninstalled service control must remain disabled'
@@ -154,6 +168,7 @@ if ($UiCheckOnly) {
         }
         Update-LaoPopup $ui $restartSnapshot
         if (-not $ui.Actions.context.Enabled -or
+            $ui.Actions.context.Tag -ne $ui.Assets['reiniciar'] -or
             $ui.Actions.context.Text -notmatch 'Reiniciar LAO') {
             throw 'Available LAO-only restart must be enabled on native monitor'
         }
@@ -205,6 +220,7 @@ if ($UiCheckOnly) {
     } finally {
         $ui.Logo.Image.Dispose()
         $ui.Form.Dispose()
+        foreach ($asset in $ui.Assets.Values) { $asset.Dispose() }
         foreach ($icon in $icons.Values) { $icon.Dispose() }
     }
     return
@@ -522,7 +538,7 @@ if ($script:popup) {
                 [Windows.Forms.MessageBoxIcon]::Question)
             if ($choice -ne [Windows.Forms.DialogResult]::Yes) { return }
             $script:popup.Actions.context.Enabled=$false
-            $script:popup.Actions.context.Text='↻  Reiniciando LAO…'
+            $script:popup.Actions.context.Text='Reiniciando LAO…'
             try {
                 $script:restartTask=$privateClient.PostAsync(
                     $script:baseUrl + '/dashboard/api/restart', [Net.Http.HttpContent]$null)
@@ -571,6 +587,7 @@ try {
         $script:popup.Form.Hide()
         $script:popup.Logo.Image.Dispose()
         $script:popup.Form.Dispose()
+        foreach ($asset in $script:popup.Assets.Values) { $asset.Dispose() }
     }
     $timer.Dispose()
     $publicClient.CancelPendingRequests()

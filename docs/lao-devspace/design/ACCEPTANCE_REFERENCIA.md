@@ -112,3 +112,15 @@ O usuário apresentou lado a lado a captura **aprovada** (`tray-active-panel.png
 - [ ] Receber captura do popup real reiniciado na máquina do usuário e confirmar visualmente os estados ativo, revisão e offline.
 
 **Importante:** os valores `GPU 100%`, `5,7/6,0 GB`, `2 tarefas` e `Validar CPF no cadastro` da captura aprovada são exemplos ilustrativos. **Não** devem ser copiados para a UI em produção quando as métricas/tarefas reais não correspondem. O valor `Modelo padrão` também não deve ser rotulado `Modelo ativo` sem prova de carregamento efetivo do modelo.
+
+## Ícones: fonte vetorial única na implementação — 27/10/2026
+
+- [x] Criado pacote com SVGs **vetorizados com base no mockup aprovado**, de **Abrir painel, Logs, Reiniciar, Configurações, Revisão, Chevron, Documento, Status, Modelos, Ollama e Recursos**. Os arquivos ainda exigem aprovação visual final do usuário.
+- [x] PNGs de 64 px gerados diretamente dos SVGs por `scripts/build-lao-action-icons.ps1` usando WPF nativo e fundo transparente, sem web e sem dependências adicionais.
+- [x] Monitor WinForms atualizado para **carregar as imagens dos assets oficiais** no cabeçalho, nas quatro ações e no card contextual, sem Unicode/ícones de fonte nem desenhos independentes no evento de pintura.
+- [x] Card contextual utiliza variações cromáticas de um mesmo SVG (verde, amarelo, vermelho), conforme status.
+- [x] Dashboard web atualizado para reaproveitar **os mesmos PNGs** na navegação, cartões, seções, ações e registros de tarefas, sem manter outra implementação visual concorrente.
+- [x] Empacotamento de release passa a incluir SVGs-fonte e imagens PNG oficiais; testes impedem arquivos ausentes, arte ilegível e retorno de caracteres Unicode nos controles.
+- [ ] **Aprovação visual do usuário** após reiniciar o Monitor e conferir lado a lado com o mockup. A correção técnica dos ícones não equivale automaticamente ao aceite do design.
+
+Esta etapa altera somente os assets e sua aplicação visual, preservando a lógica de monitoramento, os números reais e o DevSpace original.

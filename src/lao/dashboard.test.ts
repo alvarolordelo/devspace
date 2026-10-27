@@ -69,6 +69,20 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
       const logoBuffer = Buffer.from(await logo.arrayBuffer());
       assert.equal(logoBuffer.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
       assert.equal((await fetch(url + "/dashboard/assets/logo.png?token=" + token)).status, 403);
+      assert.match(html, /\/dashboard\/assets\/icons\/configuracoes\.png/);
+      for (const key of ["configuracoes", "abrir-painel", "logs", "reiniciar",
+                         "documento-verde", "modelos", "ollama", "status"]) {
+        const icon = await fetch(url + "/dashboard/assets/icons/" + key + ".png");
+        assert.equal(icon.status, 200, `missing approved dashboard icon: ${key}`);
+        assert.equal(icon.headers.get("content-type"), "image/png");
+        const bytes = Buffer.from(await icon.arrayBuffer());
+        assert.equal(bytes.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+      }
+      assert.equal((await fetch(url + "/dashboard/assets/icons/unknown.png")).status, 404);
+      assert.equal((await fetch(url + "/dashboard/assets/icons/logs.png?token=" + token)).status, 403);
+      assert.equal((await fetch(url + "/dashboard/assets/icons/logs.png", {
+        method: "POST",
+      })).status, 403);
       const api = url + "/dashboard/api/tasks";
       assert.equal((await fetch(api)).status, 401);
       assert.equal((await fetch(url + "/dashboard/api/metrics")).status, 401);

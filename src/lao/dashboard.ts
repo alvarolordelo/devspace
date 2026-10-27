@@ -241,6 +241,28 @@ export async function handleLaoDashboard(
     res.end(logo);
     return true;
   }
+  const iconMatch = /^\/dashboard\/assets\/icons\/([a-z-]+)\.png$/.exec(path);
+  if (iconMatch) {
+    // Only explicitly approved, local vector-origin PNG files are public.
+    // Never interpret an arbitrary path/filename from the request.
+    const allowed = new Set(["abrir-painel", "logs", "reiniciar", "configuracoes",
+      "revisao", "chevron-direita", "documento-verde", "documento-amarelo",
+      "documento-vermelho", "status", "modelos", "ollama", "recursos"]);
+    if (!allowed.has(iconMatch[1])) {
+      json(res, 404, { error: "not_found" }); return true;
+    }
+    const png = await readFile(fileURLToPath(new URL(
+      "../../docs/lao-devspace/assets/icons/png/lao-action-" + iconMatch[1] + "-64.png",
+      import.meta.url,
+    )));
+    res.writeHead(200, {
+      "content-type": "image/png", "content-length": png.length,
+      "cache-control": "private, max-age=3600",
+      "x-content-type-options": "nosniff", "cross-origin-resource-policy": "same-origin",
+    });
+    res.end(png);
+    return true;
+  }
   const detailMatch = /^\/dashboard\/api\/tasks\/([a-f0-9-]{36})$/.exec(path);
   if (path !== "/dashboard/api/status" && path !== "/dashboard/api/tasks" &&
       path !== "/dashboard/api/metrics" && !detailMatch) {

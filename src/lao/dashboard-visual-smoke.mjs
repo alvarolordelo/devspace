@@ -21,7 +21,7 @@ if (![1,1.25,1.5].includes(scale)) throw new Error("Unsupported QA DPI scale");
 const url = new URL(args[1]);
 if (url.protocol !== "http:" || !["localhost", "127.0.0.1"].includes(url.hostname) ||
     url.pathname !== "/dashboard" || url.search || url.hash ||
-    url.username || url.password || !["", "80", "7877", "7878", "7888", "7890"].includes(url.port)) {
+    url.username || url.password || !["", "80", "7877", "7878", "7888", "7890", "7894"].includes(url.port)) {
   throw new Error("Visual smoke accepts only the local LAO dashboard URL");
 }
 const [tokenFile, chrome, output] = [args[3], args[5], args[7]].map(path => resolve(path));
@@ -121,6 +121,19 @@ try {
       layout.logo !== true || layout.tokenDisplayed !== false) {
     throw new Error("Approved dashboard DOM/visual contract failed");
   }
+  await until(async () => await evaluate(
+    "Array.from(document.images).every(img => img.complete && img.naturalWidth > 0)"));
+  const iconContract = JSON.parse(await evaluate("JSON.stringify((() => {" +
+    "const nav=Array.from(document.querySelectorAll('.nav [data-section]'));" +
+    "return {navImages:nav.filter(button=>button.querySelector('img')).length," +
+    "totalIcons:document.querySelectorAll('img[src^=\"/dashboard/assets/icons/\"]').length," +
+    "allLoaded:Array.from(document.images).every(img=>img.complete&&img.naturalWidth>0)," +
+    "noIconGlyphs:nav.every(button=>!button.querySelector('span'))};" +
+    "})())"));
+  if (iconContract.navImages !== 5 || iconContract.totalIcons < 15 ||
+      !iconContract.allLoaded || !iconContract.noIconGlyphs) {
+    throw new Error("Approved vector-origin dashboard icons did not render");
+  }
   const saved = JSON.parse(await evaluate("JSON.stringify((() => {" +
     "const item=JSON.parse(sessionStorage.getItem('lao-dashboard-session-v1')||'null');" +
     "return {ticketPresent:typeof item?.sessionToken==='string'&&item.sessionToken.length===43," +
@@ -207,6 +220,7 @@ try {
     statusCards: layout.cards, scale, mobileWidth: mobile.width, screenshot: output,
     navigationChecked: 5, disabledControlsChecked: true, f5PreservesSession: true,
     logoutClearsSession: true, operatorTokenNotStored: true, nativeLaunchAutoLogin: true,
+    iconAssetsLoaded: iconContract.totalIcons,
     noTokenInOutput: true, noSoftwareInstalled: true,
   }));
 } finally {
