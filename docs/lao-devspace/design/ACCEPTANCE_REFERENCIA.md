@@ -62,3 +62,14 @@
 **Testes executados:** 104 testes direcionados/gerais do LAO (103 aprovados, 1 ignorado por limitação do Windows, nenhum falhou); Chrome CDP autenticado em 100%, 125% e 150% com login inicial, F5 mantendo a sessão, logout limpando o ticket e abertura automática simulada a partir de uma autorização nativa (sem token na URL). Instância de teste na porta 7888, independente da porta 7877 já em uso. A aplicação que já estava executando em 7877 continua com o código carregado anteriormente; precisa de reinício controlado do **LAO**, sem tocar no DevSpace original, para carregar a alteração nesta porta.
 
 **Segurança:** a liberação automática da bandeja é temporária e destinada exclusivamente ao host loopback. Ações que escrevem arquivos ou gerenciam serviços continuam bloqueadas ou exigem aprovação independente. O ticket de sessão dá acesso **somente às mesmas APIs de leitura** do Dashboard. A extensão ainda pressupõe um Windows local confiável: um processo malicioso com acesso ao mesmo usuário precisa ser tratado no sistema operacional. Não se instala serviço, não se adiciona auto-start e não se modifica o DevSpace original.
+
+## Reabrir o Monitor após escolher “Sair” — 27/10/2026
+
+- [x] Atalho **LAO DevSpace Monitor** criado na Área de Trabalho do usuário Windows.
+- [x] Atalho criado no menu **Iniciar**, pesquisável pelo nome LAO DevSpace Monitor.
+- [x] Ambos utilizam o ícone oficial `assets/icons/ico/lao-tray-idle.ico` e abrem `scripts/launch-lao-monitor.ps1` sem incluir credenciais nos argumentos.
+- [x] A criação é idempotente e recusa sobrescrever atalhos não relacionados; instalação e remoção reversíveis por `scripts/install-lao-shortcuts.ps1` (usar `-Remove` para remover apenas os atalhos gerenciados).
+- [x] Atalho validado em Windows real: monitor foi reaberto e reconhecido pelo mutex da bandeja.
+- [x] Nenhum serviço Windows, autostart, agendamento ou DevSpace upstream alterado.
+
+**Comportamento intencional:** escolher **Sair do monitor** encerra o processo da bandeja. Para voltar a exibir o ícone próximo ao relógio, basta clicar duas vezes no novo atalho da Área de Trabalho ou pesquisar pelo nome no menu Iniciar. A fixação opcional na barra de tarefas é realizada manualmente pelo usuário.
