@@ -128,6 +128,11 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
       assert.ok(metrics.cpu.logicalCores > 0);
       assert.ok(metrics.ram.totalBytes > 0);
       assert.ok(metrics.process.rssBytes > 0);
+      assert.equal(metrics.alerts.advisoryOnly, true);
+      assert.equal(metrics.alerts.requiredSamples, 3);
+      assert.ok(Array.isArray(metrics.alerts.warnings));
+      assert.equal(metrics.alerts.warnings.length, 0,
+        "the first sample cannot trigger resource alerts");
       assert.equal(metrics.token, undefined);
       assert.equal(metrics.goal, undefined);
       assert.equal((await fetch(url + "/dashboard/api/metrics?token=" + token, {
@@ -182,4 +187,6 @@ test("dashboard markup has a parseable offline script and does not expose tokens
   assert.match(html, /id="gpu"/);
   assert.match(html, /id="vram"/);
   assert.match(html, /\/dashboard\/api\/metrics/);
+  assert.match(html, /id="resource-alerts"/);
+  assert.match(html, /Sem alertas de recursos confirmados/);
 });

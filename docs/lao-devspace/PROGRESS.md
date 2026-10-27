@@ -627,7 +627,7 @@ com 245 testes: 237 aprovados, 8 ignorados, zero falhas;
 o total inclui um teste F8 ainda nao versionado na mesma worktree.
 Build, typecheck e pin fixo da versao 1.0.8 tambem passaram.
 **Teste GUI interativo, alerta
-visual, sonda assíncrona para nao bloquear WinForms, painel com controle
+visual, painel com controle
 de servico e autostart ainda pendentes.** Este modulo nao esta pronto
 para instalacao final.
 
@@ -652,3 +652,49 @@ embora o Docker Linux Engine estivesse online. Nao iniciar o Ollama
 ou trocar o modelo automaticamente. O estudo simples nao valida
 multi-arquivos, taxas de sucesso de agentes MCP nem failover.
 Ver BENCHMARK_CODING.md para procedimento de reproducao.
+
+## F5-07 - Monitor responsivo durante falhas de rede (27/10/2026)
+
+**F5 continua parcial.** O monitor manual na bandeja deixou de fazer
+chamadas Invoke-RestMethod **sincronas no timer WinForms**. A nova
+maquina de estados dirige chamadas HttpClient assincronas em etapas
+health/live, health/ready e API autenticada de tarefas (quando ativa).
+Timeout por etapa, sem requests concorrentes; atualizacao da UI
+continua restrita ao thread STA. Na saida cancela e descarta clientes.
+
+Testes Windows direcionados passaram (6/6), incluindo:
+sondagem assincrona com atraso de 1250 ms, comprovando seis ou mais
+eventos do timer durante a espera; contagens autenticadas; exclusao
+de token em redirecionamento; daemon indisponivel e parser/ativos.
+A flag -AsyncProbeOnly valida a mesma logica sem abrir icone.
+**Ainda faltam:** testes GUI manuais de icone/menus/baloes,
+integracao com servico Windows real, inicializacao apos login e
+instalador/rollback. Nenhum componente SCM, tarefa agendada ou
+autostart foi alterado nesta entrega.
+
+## F6-04 - Alertas locais de pressao de memoria/CPU (27/10/2026)
+
+**F6 continua parcial.** O endpoint ja autenticado
+`/dashboard/api/metrics` agora acrescenta alertas orientativos de
+pressao: RAM >=90%, VRAM >=90% ou CPU >=95%. Sao exigidas 3 amostras
+consecutivas com intervalo minimo de 8 segundos; chamadas repetidas
+rapidamente nao fabricam alertas. Uma leitura abaixo do limite limpa
+o estado, e interrupcao maior que 60 segundos reinicia a contagem.
+CPU desconhecida e GPU indisponivel nao viram falso zero.
+
+O navegador mostra os avisos no card de recursos usando exclusivamente
+`textContent` e mensagens estaticas, sem HTML injetavel, dados brutos
+de processos ou tokens. A API marca `advisoryOnly=true`, sem comando
+automatico para desligar, iniciar ou alterar sistemas externos.
+Testes de subida, manutencao, limpeza, amostras invalidas, intervalo
+minimo, API autenticada e sintaxe do script de dashboard foram aprovados.
+
+**Pendencias F6:** teste interativo visual com o browser do usuario,
+notificacoes de recurso na bandeja, preferencias configuraveis e
+historico persistente de alertas.
+
+**Validacao consolidada F5-07 e F6-04:** `pnpm test` no Windows local:
+**251 testes, 243 aprovados, 8 ignorados, zero falhas**.
+`pnpm build`, `pnpm typecheck`, verificacao DevSpace v1.0.8
+e `git diff --check`: todos aprovados. O CI remoto devera
+ser conferido apos o push.

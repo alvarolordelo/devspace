@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { cpus, freemem, totalmem } from "node:os";
 import { promisify } from "node:util";
+import { createLaoResourceAlertEvaluator } from "./resource-alerts.js";
 
 const execFileAsync = promisify(execFile);
 type CpuReading = Readonly<{ idle: number; total: number }>;
@@ -61,6 +62,7 @@ async function readNvidiaGpu(): Promise<LaoGpuMetrics | null> {
 /** Read-only local diagnostics behind the existing dashboard Bearer token. */
 export function createLaoResourceMonitor(gpuProbe: () => Promise<LaoGpuMetrics | null> = readNvidiaGpu) {
   let lastCpu: CpuReading | null = null;
+  const assessPressure = createLaoResourceAlertEvaluator();
   return async () => {
     const currentCpu = sampleCpu();
     const cpuPercent = cpuUsagePercent(lastCpu, currentCpu);
@@ -69,7 +71,7 @@ export function createLaoResourceMonitor(gpuProbe: () => Promise<LaoGpuMetrics |
     const freeRam = freemem();
     const usedRam = Math.max(0, totalRam - freeRam);
     const node = process.memoryUsage();
-    return {
+    const reading = {
       checkedAt: new Date().toISOString(),
       cpu: { utilizationPercent: cpuPercent, logicalCores: cpus().length },
       ram: { usedBytes: usedRam, totalBytes: totalRam,
@@ -77,5 +79,6 @@ export function createLaoResourceMonitor(gpuProbe: () => Promise<LaoGpuMetrics |
       process: { rssBytes: node.rss, heapUsedBytes: node.heapUsed },
       gpu: await gpuProbe(),
     };
+    return { ...reading, alerts: assessPressure(reading) };
   };
 }

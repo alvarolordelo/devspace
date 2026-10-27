@@ -30,6 +30,14 @@ fechar a aba. O token e enviado somente no cabecalho Authorization.
 - Card "Recursos locais" com CPU, RAM, uso GPU NVIDIA e VRAM, mais
   memoria RSS do daemon. Os valores sao amostrados em cada atualizacao,
   com primeiro valor de CPU indicado como "Calculando amostra...".
+- Alertas informativos somente apos **3 amostras** com pressao de recursos:
+  RAM >= 90%, VRAM >= 90% ou CPU >= 95%. Amostras precisam estar
+  separadas por pelo menos 8 segundos; varias abas simultaneas nao
+  contam como varias observacoes. Um sinal normal limpa sua sequencia,
+  e uma pausa >60 segundos reinicia a confirmacao.
+- Alertas sao exibidos no card local em area `aria-live=polite`.
+  Nenhum limite aciona processo, bloqueia modelo ou altera Ollama.
+  Ausencia de GPU/CPU desconhecida nao gera falso alarme.
 - `GET /dashboard/api/metrics` usa o mesmo Bearer/Host/CSP do painel;
   devolve somente numeros agregados de uso, sem identificadores da GPU,
   processos de terceiros, comandos, dados de tarefas ou credenciais.
@@ -51,6 +59,8 @@ fechar a aba. O token e enviado somente no cabecalho Authorization.
   ou comando `nvidia-smi` ausente e exibida como "Nao disponivel", nunca
   como consumo zero. O comando fixo `nvidia-smi` tem timeout de 1,5 s,
   argumentos imutaveis e um ambiente restrito sem secrets.
+- `/dashboard/api/metrics` devolve apenas codigos estaticos de alerta
+  e `advisoryOnly=true`, sem nomes de processo, comandos ou segredos.
 - A interface de recursos recebeu testes de sintaxe e API, mas nao foi
   validada visualmente/interativamente num navegador real nesta etapa.
 
