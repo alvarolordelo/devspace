@@ -13,14 +13,16 @@ if (!(await lstat(base)).isDirectory()) throw new Error("Release directory must 
 const raw = await readFile(join(base, "RELEASE_MANIFEST.json"));
 if (raw.length > 300_000) throw new Error("Manifest exceeds verification budget");
 const manifest = JSON.parse(raw.toString("utf8"));
-const portable = manifest.kind === "lao-devspace-portable-candidate";
+const standalone = manifest.kind === "lao-devspace-standalone-candidate";
+const portable = standalone || manifest.kind === "lao-devspace-portable-candidate";
 if (manifest.schemaVersion !== 1 ||
-    !["lao-devspace-release-candidate", "lao-devspace-portable-candidate"].includes(manifest.kind) ||
+    !["lao-devspace-release-candidate", "lao-devspace-portable-candidate",
+      "lao-devspace-standalone-candidate"].includes(manifest.kind) ||
     manifest.stableDevspaceVersion !== "1.0.8" ||
     manifest.installed !== false || manifest.serviceInstalled !== false ||
     manifest.autostartEnabled !== false || manifest.nodeModulesIncluded !== portable ||
     manifest.requiresOfflineFrozenDependencies !== !portable ||
-    !Array.isArray(manifest.files) || manifest.files.length < 10 || manifest.files.length > 2500) {
+    !Array.isArray(manifest.files) || manifest.files.length < 10 || manifest.files.length > 2501) {
   throw new Error("Unrecognized or unsafe release manifest");
 }
 const allowedRuntimePackages = new Map([
@@ -40,15 +42,35 @@ if (portable && (!manifest.runtime ||
       allowedRuntimePackages.get(name) !== version))) {
   throw new Error("Portable candidate runtime metadata invalid");
 }
+if (standalone) {
+  const embedded = manifest.runtime.embeddedNode;
+  if (manifest.runtime.platform !== "win32" ||
+      !embedded || Object.keys(embedded).sort().join(",") !==
+      "arch,nodeAbi,nodeVersion,path,sha256" ||
+      embedded.path !== "runtime/node.exe" ||
+      !/^v(?:22|24|26)\.\d+\.\d+$/.test(embedded.nodeVersion) ||
+      embedded.arch !== manifest.runtime.arch ||
+      embedded.nodeAbi !== manifest.runtime.nodeAbi ||
+      !/^[a-f0-9]{64}$/.test(embedded.sha256) ||
+      !manifest.files.some(item => item.path === embedded.path &&
+        item.sha256 === embedded.sha256 &&
+        item.bytes >= 10 * 1024 * 1024 && item.bytes <= 160 * 1024 * 1024)) {
+    throw new Error("Standalone candidate Node runtime metadata invalid");
+  }
+} else if (manifest.runtime?.embeddedNode !== undefined) {
+  throw new Error("Embedded Node runtime not allowed in this release kind");
+}
 const validName = name => typeof name === "string" &&
   name.length > 0 && name.length <= 260 &&
   !name.includes("\\") && !name.includes(":") && !name.startsWith("/") &&
   !win32.isAbsolute(name) && !name.split("/").some(part =>
     part === "" || part === "." || part === ".." || part === ".git") &&
   (portable
-    ? (!name.includes("/node_modules/") &&
+    ? (standalone && name === "runtime/node.exe" ||
+      (!name.includes("/node_modules/") &&
+      !name.startsWith("runtime/") &&
       (!name.startsWith("node_modules/") ||
-        allowedRuntimePackages.has(name.split("/")[1]) && name.split("/").length > 2))
+        allowedRuntimePackages.has(name.split("/")[1]) && name.split("/").length > 2)))
     : !name.split("/").includes("node_modules"));
 const manifestPaths = new Set();
 let budget = 0;
@@ -62,7 +84,8 @@ for (const item of manifest.files) {
   if (manifestPaths.has(key)) throw new Error("Duplicate release path");
   manifestPaths.add(key);
   budget += item.bytes;
-  if (budget > 120 * 1024 * 1024) throw new Error("Release verification budget exceeded");
+  if (budget > (standalone ? 240 : 120) * 1024 * 1024)
+    throw new Error("Release verification budget exceeded");
 }
 const seen = new Set();
 async function walk(directory) {

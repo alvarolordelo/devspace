@@ -73,9 +73,17 @@ if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf) -or
   throw 'Release candidate lacks manifest, verifier or daemon launcher'
 }
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-if ($manifest.kind -ne 'lao-devspace-portable-candidate' -or
+if ($manifest.kind -notin @('lao-devspace-portable-candidate', 'lao-devspace-standalone-candidate') -or
     $manifest.installed -ne $false -or $manifest.serviceInstalled -ne $false) {
-  throw 'Only an uninstalled, verified portable candidate may be staged'
+  throw 'Only an uninstalled, verified portable or standalone candidate may be staged'
+}
+# For standalone candidates, the service MUST use the same embedded, hash-
+# verified Node executable; an outside Node path could bypass its runtime
+# provenance and ABI claims. Portable candidates retain the explicit input.
+if ($manifest.kind -eq 'lao-devspace-standalone-candidate' -and
+    -not $node.Equals((Canonical (Join-Path $release 'runtime\node.exe')),
+      [StringComparison]::OrdinalIgnoreCase)) {
+  throw 'Standalone service must use the embedded runtime/node.exe'
 }
 $verified = & $node $verifierPath --dir $release 2>&1
 if ($LASTEXITCODE -ne 0) { throw 'Portable package integrity verification failed' }

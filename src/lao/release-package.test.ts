@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,6 +10,9 @@ import test from "node:test";
 const executable = fileURLToPath(new URL("./release-package.mjs", import.meta.url));
 const verifier = fileURLToPath(new URL("./release-verify.mjs", import.meta.url));
 const portable = fileURLToPath(new URL("./release-portable.mjs", import.meta.url));
+const standalone = fileURLToPath(new URL("./release-standalone.mjs", import.meta.url));
+const signer = fileURLToPath(new URL("./release-auth-sign.mjs", import.meta.url));
+const authVerifier = fileURLToPath(new URL("./release-auth-verify.mjs", import.meta.url));
 test("release candidate is noninstalling, hash manifest agrees and no overwrite is possible", () => {
   const root = mkdtempSync(join(tmpdir(), "lao-rc-"));
   const output = join(root, "candidate");
@@ -160,5 +163,107 @@ test("offline portable daemon candidate has fixed native runtime and isolated SQ
     assert.throws(() => execFileSync(process.execPath, [portable, "--out", output], {
       timeout: 30_000, windowsHide: true, stdio: "pipe",
     }), /EEXIST|already exists|inside/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("offline standalone Windows candidate includes verified Node and runs bundled SQLite",
+  { skip: process.platform !== "win32" }, () => {
+  const root = mkdtempSync(join(tmpdir(), "lao-standalone-"));
+  const output = join(root, "standalone");
+  const hash = createHash("sha256").update(readFileSync(process.execPath)).digest("hex");
+  const cmd = ["--out", output, "--node-exe", process.execPath, "--node-sha256", hash];
+  const verify = () => execFileSync(process.execPath, [verifier, "--dir", output], {
+    encoding: "utf8", timeout: 30_000, windowsHide: true, stdio: "pipe",
+  });
+  try {
+    const invalid = [...cmd]; invalid[5] = "0".repeat(64);
+    assert.throws(() => execFileSync(process.execPath, [standalone, ...invalid], {
+      timeout: 20_000, windowsHide: true, stdio: "pipe",
+    }), /Node executable SHA-256 mismatch/);
+    assert.equal(existsSync(output), false, "Unverified Node cannot create output");
+
+    const result = JSON.parse(execFileSync(process.execPath, [standalone, ...cmd], {
+      encoding: "utf8", timeout: 100_000, windowsHide: true, stdio: "pipe",
+    }));
+    assert.equal(result.kind, "lao-devspace-standalone-candidate");
+    assert.equal(result.sqliteSmoke, "passed");
+    assert.equal(result.serviceInstalled, false);
+    assert.equal(result.autostartEnabled, false);
+    assert.equal(result.independentSignatureRequired, true);
+    const manifestPath = join(output, "RELEASE_MANIFEST.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    assert.equal(manifest.runtime.embeddedNode.path, "runtime/node.exe");
+    assert.equal(manifest.runtime.embeddedNode.sha256, hash);
+    assert.equal(manifest.runtime.embeddedNode.nodeAbi, process.versions.modules);
+    assert.equal(manifest.runtime.embeddedNode.nodeVersion, process.version);
+    assert.equal(verify() && true, true);
+    assert.equal(readFileSync(join(output, "runtime", "node.exe")).equals(readFileSync(process.execPath)), true);
+    assert.throws(() => execFileSync(process.execPath, [standalone, ...cmd], {
+      timeout: 20_000, windowsHide: true, stdio: "pipe",
+    }), /Standalone output already exists/);
+
+    const saved = readFileSync(manifestPath);
+    manifest.runtime.embeddedNode.sha256 = "f".repeat(64);
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    assert.throws(verify, /Node runtime metadata invalid/);
+    writeFileSync(manifestPath, saved);
+
+    // The standalone build has no built-in signing identity. A separately
+    // trusted operator can authenticate the ENTIRE manifest and Node hash.
+    const { privateKey, publicKey } = generateKeyPairSync("ed25519", {
+      privateKeyEncoding: { format: "pem", type: "pkcs8" },
+      publicKeyEncoding: { format: "pem", type: "spki" },
+    });
+    const privateFile = join(root, "private.pem");
+    const publicFile = join(root, "trusted-public.pem");
+    const signatureFile = join(root, "standalone.sig.json");
+    writeFileSync(privateFile, privateKey, { mode: 0o600 });
+    writeFileSync(publicFile, publicKey);
+    execFileSync(process.execPath, [
+      signer, "--dir", output, "--key", privateFile, "--out", signatureFile,
+    ], { timeout: 30_000, windowsHide: true, stdio: "pipe" });
+    const verifySigned = () => execFileSync(process.execPath, [
+      authVerifier, "--dir", output, "--signature", signatureFile,
+      "--public-key", publicFile,
+    ], { timeout: 30_000, windowsHide: true, encoding: "utf8", stdio: "pipe" });
+    assert.equal(JSON.parse(verifySigned()).authenticated, true);
+
+    const nodeFile = join(output, "runtime", "node.exe");
+    const nodeBytes = readFileSync(nodeFile);
+    writeFileSync(nodeFile, Buffer.concat([nodeBytes, Buffer.from("modified")]));
+    assert.throws(verify, /size mismatch/);
+    assert.throws(verifySigned, /Command failed/);
+    writeFileSync(nodeFile, nodeBytes);
+    assert.doesNotThrow(verify);
+    assert.equal(JSON.parse(verifySigned()).authenticated, true);
+
+    const wrapper = join(root, "winsw-fixture.exe");
+    const wrapperBytes = Buffer.from("TEST ONLY - NOT A REAL SERVICE WRAPPER");
+    writeFileSync(wrapper, wrapperBytes);
+    const wrapperHash = createHash("sha256").update(wrapperBytes).digest("hex");
+    const serviceDir = join(root, "standalone-service-plan");
+    const planned = JSON.parse(execFileSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+      join(output, "src", "lao", "windows", "lao-service-plan.ps1"),
+      "-ReleaseDir", output, "-OutputDir", serviceDir,
+      "-WinSWExe", wrapper, "-WinSWSha256", wrapperHash,
+      "-NodeExe", nodeFile,
+    ], { encoding: "utf8", timeout: 60_000, windowsHide: true }));
+    assert.equal(planned.installed, false);
+    assert.equal(planned.serviceStarted, false);
+    const xml = readFileSync(join(serviceDir, "LAODevSpaceService.xml"), "utf8");
+    assert.match(xml, /runtime\\node\.exe/);
+    assert.match(xml, /<startmode>Manual<\/startmode>/);
+    const rejectedDir = join(root, "standalone-bad-service-plan");
+    assert.throws(() => execFileSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+      join(output, "src", "lao", "windows", "lao-service-plan.ps1"),
+      "-ReleaseDir", output, "-OutputDir", rejectedDir,
+      "-WinSWExe", wrapper, "-WinSWSha256", wrapperHash,
+      "-NodeExe", process.execPath,
+    ], { timeout: 60_000, windowsHide: true, stdio: "pipe" }),
+    /Standalone service must use the embedded runtime/);
+    assert.equal(existsSync(rejectedDir), false,
+      "service plan must not be created when Node is outside standalone candidate");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -42,6 +42,7 @@ const approved = [
   "src/lao/windows/lao-service-plan.ps1",
   "src/lao/release-verify.mjs",
   "src/lao/release-portable.mjs",
+  "src/lao/release-standalone.mjs",
   "docs/lao-devspace/assets/icons/ico",
 ];
 const releaseFiles = [];

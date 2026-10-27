@@ -698,3 +698,35 @@ historico persistente de alertas.
 `pnpm build`, `pnpm typecheck`, verificacao DevSpace v1.0.8
 e `git diff --check`: todos aprovados. O CI remoto devera
 ser conferido apos o push.
+
+## F7-07 - Runtime Node offline no candidato Windows (27/10/2026)
+
+**F7 continua parcial; nenhum instalador foi executado.** Criado
+`release-standalone.mjs`, staging Windows de candidato autonomo com
+`node.exe` fornecido explicitamente pelo operador e preso a hash
+SHA-256 exato. O projeto preserva o candidato portavel sem Node
+como alternativa. O novo tipo `lao-devspace-standalone-candidate`
+inclui o executavel no manifesto, com metadados de versao, ABI,
+arquitetura e digest. O verificador nega binario alterado, extras,
+metadata incoerente e runtime inexistente, sem executar scripts
+do candidato recebido.
+
+O fluxo de staging verifica o binario ANTES de criar pasta de release;
+entao monta dependencias nativas de versao fixa, copia runtime,
+revalida hashes e executa um smoke de SQLite a partir do
+`runtime/node.exe` copiado, sem npm/pnpm install, downloads ou rede.
+A assinatura Ed25519 destacada permanece exigencia futura para
+distribuicao confiavel; SHA-256 de binario sozinho nao prova origem.
+
+**Pendencias F7:** cadeia de confianca e assinatura Windows do Node,
+WinSW genuino/versionado, instalador, desinstalacao/rollback, prova
+com conta LocalService, verificacao autentica do originador do release,
+VM Windows limpa e testes SCM/boot. O DevSpace 1.0.8 permanece fixo.
+
+**Validacao F7-07:** regressao completa no Windows local: **252 testes,
+244 aprovados, 8 ignorados, 0 falhas**. O teste Windows do standalone
+executou o Node copiado e carregou SQLite nativo do pacote;
+assinatura Ed25519 externa foi aceita somente com chave independente,
+adulteracao de Node e metadados foi recusada, e o plano manual WinSW
+aceitou somente `runtime/node.exe` embutido, negando Node externo.
+Nenhum servico Windows foi instalado ou iniciado pelo roteiro.

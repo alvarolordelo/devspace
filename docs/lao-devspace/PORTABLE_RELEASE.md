@@ -13,6 +13,53 @@ pasta nova, sem node_modules do checkout fonte. F5 prepara o arquivo
 XML de servico para um WinSW fornecido por operador e validado por hash.
 Nenhum WinSW genuino ou servico SCM foi instalado/testado.
 
+## F7-07 - Candidato autonomo offline com Node empacotado
+
+Para deixar de depender do Node preinstalado na maquina de destino,
+existe agora uma **opcao de staging exclusiva do Windows**, sem
+instalacao: `release-standalone.mjs`. Ela aproveita o pacote portavel
+e copia um `node.exe` explicitamente aprovado (versao e ABI
+compativeis com o build), identificado por **SHA-256 completo**.
+Nao baixa, atualiza ou executa instaladores.
+
+Exemplo no CMD, usando um executavel Node local previamente
+**autenticado por canal independente** e um digest confirmado pelo
+operador:
+
+```cmd
+cd /d D:\desenvolvimento\lao-devspace
+pnpm build
+node scripts/lao-verify-devspace-pin.mjs
+node src/lao/release-standalone.mjs --out C:\TEMP\lao-autonomo-novo --node-exe "C:\Program Files\nodejs\node.exe" --node-sha256 <SHA256_AUTENTICADO_64_HEXA>
+node src/lao/release-verify.mjs --dir C:\TEMP\lao-autonomo-novo
+```
+
+O arquivo `runtime/node.exe` fica no novo candidato e tem hash e
+tamanho validados pelo verificador, alem de metadados de versao, ABI e
+arquitetura em `runtime.embeddedNode`. O script executa smoke
+com **esse Node copiado** e com SQLite nativo empacotado, sem
+dependencias do checkout fonte. O teste automatizado tambem simula a
+preparacao do plano manual WinSW apontando para
+`C:\TEMP\lao-autonomo-novo\runtime\node.exe`, mantendo
+`startmode=Manual` e a conta `LocalService`.
+
+**Verificar o SHA-256 de um executavel local NAO comprova, sozinho,
+que ele veio da Node.js Foundation.** A origem/distribuicao e a
+assinatura Authenticode do executavel precisam de uma politica de
+confianca separada. A integridade do manifesto tambem nao autentica
+a origem do candidato; antes de distribuir, utilizar assinatura
+Ed25519 destacada com chave publica confiavel, conforme secao abaixo.
+O smoke testa apenas a capacidade de executar Node/SQLite; nao
+certifica que o binario ou suas dependencias sejam seguros.
+
+Nao e um instalador: nao configura PATH, servicos, boot, registro,
+atualizacoes ou gerenciamento de processos. O monitor tray ainda
+exige sessoes graficas e integracao apropriada no instalador futuro.
+Antes de qualquer distribuicao publica ou comercial sera necessario
+incluir os avisos de licenca do runtime Node.js e seus componentes
+terceirizados, revisar a origem e conferir a assinatura do executavel
+e testar a instalacao em uma VM limpa.
+
 ## Requisitos e geracao
 
 - Branch feature/lao-devspace, Node >=22.19 e <27, pnpm 11.25.0;
