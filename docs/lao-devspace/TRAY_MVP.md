@@ -34,7 +34,8 @@ Nao e apropriado para sessao nao-interativa de servico.
 - Icone active quando pronta, idle se a dependencia nao esta pronta,
   offline se o daemon nao responde e review quando ha revisoes
   autenticadas e o daemon esta pronto. Sem falsos positivos de autenticacao.
-- Clique duplo ou menu "Abrir painel LAO" abre o browser local.
+- Clique esquerdo abre/fecha o popup nativo; menu de clique direito
+  ainda oferece "Abrir painel LAO".
 - "Copiar diagnostico" copia apenas hora, status e endpoint loopback.
 - "Sair do monitor" fecha somente o tray; o daemon nao e afetado.
 - Mutex por SID evita segundo monitor da mesma conta Windows.
@@ -76,9 +77,11 @@ cada etapa. O timer de 200 ms mantem a interface responsiva durante
 falhas lentas de daemon, Ollama ou API. A janela entre sondagens
 completas continua de 15 segundos, com timeout de 3 segundos por
 endpoint; consultas concorrentes sao impedidas pela maquina de estados
-`live -> ready -> tasks -> done`.
+  `live -> ready -> status -> metrics -> tasks -> done` quando
+  autenticada; sem token termina apos ready.
 
 Tokens so sao adicionados ao cliente HTTP privado para
+`/dashboard/api/status`, `/dashboard/api/metrics` e
 `/dashboard/api/tasks`; o cliente usado pelos dois healthchecks
 nao tem token. Os dois clientes proíbem redirecionamento automatico.
 No encerramento, requisicoes pendentes sao canceladas e os objetos
@@ -103,3 +106,32 @@ Parser PowerShell passou sem erros; o comando manual \`-CheckOnly\`
 carregou WinForms em STA e todos os arquivos ICO aprovados no Windows.
 O teste automatizado \`src/lao/windows-tray.test.ts\` tambem passou.
 Isto NAO substitui teste de interacao visual em sessao grafica.
+
+## F5-08 - Popup WinForms do design aprovado (27/10/2026)
+
+Popup nativo `src/lao/windows/lao-popup.ps1` com logo original,
+fonte Segoe UI, painel branco, 420 DIP ideais, cantos 16 px,
+oito linhas de estado, card contextual para andamento/revisao/falha
+e quatro acoes. Foi testado na sessao grafica em captura real
+temporaria (fora da area de trabalho) e revisado contra os mockups
+`tray-active-panel.png`, `tray-offline-panel.png` e
+`tray-review-panel.png`. Os estados compartilham estrutura mas
+sempre mostram valores atuais, nao os numeros ficticios do mock.
+
+O botao de servico ainda nao pode executar instalacao/reinicio:
+e mostrado desabilitado (com texto explicito) ate haver servico
+Windows instalado mediante autorizacao. Clique externo e Esc
+fecham; clique esquerdo alterna o popup; clicando nas acoes
+habilitadas abre a secao do dashboard com hash. O popup usa
+a area util do monitor onde esta o cursor, reposiciona-se para
+nao sair dos limites e permite rolagem quando a altura disponivel
+for pequena. Nenhum item chama DevSpace/Ollama para iniciar.
+
+O modo `-UiCheckOnly` instancia o layout sem exibir janela, verifica
+420 DIP, 8 linhas, 4 acoes, teclado e transicoes de cor e revisao
+em quatro estados. Os scripts PowerShell usam UTF-8 com BOM para
+preservar acentos no Windows PowerShell 5.1.
+
+**Pendente para aceite final:** usuario conferir popup real,
+click-away/Esc com o mouse, DPI do Windows 100/125/150%,
+multiplos monitores e indicacao de alerta na bandeja.

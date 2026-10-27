@@ -1,10 +1,11 @@
-# LAO DevSpace tray - Windows, foreground and entirely opt-in.
+﻿# LAO DevSpace tray - Windows, foreground and entirely opt-in.
 # Launch manually with: powershell.exe -NoProfile -STA -File <this script>
 # Exit closes ONLY the tray monitor, not the LAO daemon, DevSpace or Ollama.
 [CmdletBinding()]
 param(
     [ValidateRange(1024,65535)][int]$Port = 7877,
     [switch]$CheckOnly,
+    [switch]$UiCheckOnly,
     [switch]$ProbeOnly,
     [switch]$AsyncProbeOnly,
     [switch]$EnableNotifications
@@ -93,9 +94,63 @@ foreach ($state in @('active','idle','offline','review')) {
     }
     $icons[$state] = [Drawing.Icon]::new($path)
 }
+. (Join-Path $PSScriptRoot 'lao-popup.ps1')
 if ($CheckOnly) {
     foreach ($icon in $icons.Values) { $icon.Dispose() }
     Write-Output 'LAO tray check passed: Windows STA, WinForms and approved icons available.'
+    return
+}
+if ($UiCheckOnly) {
+    $logoPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\docs\lao-devspace\assets\icons\png\lao-logo-64.png'))
+    $ui = New-LaoPopup -LogoPath $logoPath
+    try {
+        if ($ui.Form.ClientSize.Width -ne 420 -or $ui.Rows.Count -ne 8 -or
+            $ui.Actions.Count -ne 4) {
+            throw 'LAO native popup layout contract failed'
+        }
+        foreach ($state in @('active','offline','review','idle')) {
+            $snapshot = [pscustomobject]@{
+                status=$state; statusAuthenticated=$true
+                reasons=@('devspace_unverified','ollama_unavailable')
+                modelConfigured='granite4.2-8b:gpu'
+                gpuPercent=25; vramUsedMiB=1024; vramTotalMiB=6144
+                tasksAuthenticated=$true; activeTasks=0
+                pendingReviews=$(if($state -eq 'review'){1}else{0})
+            }
+            Update-LaoPopup $ui $snapshot
+            $expectedColor = switch ($state) {
+                'active' { $ui.Colors.green }
+                'offline' { $ui.Colors.red }
+                'review' { $ui.Colors.yellow }
+                default { $ui.Colors.gray }
+            }
+            if ($ui.HeaderDot.ForeColor.ToArgb() -ne $expectedColor.ToArgb()) {
+                throw "Popup status color incorrect: $state"
+            }
+            if ($state -eq 'review' -and
+                (-not $ui.Actions.context.Enabled -or
+                 $ui.CardTitle.Text -ne 'Aguardando revisão' -or
+                 $ui.Rows.last.Title.Text -ne 'Pendências')) {
+                throw 'Review popup did not expose its approval context'
+            }
+            if ($state -ne 'review' -and $ui.Actions.context.Enabled) {
+                throw 'Uninstalled service control must remain disabled'
+            }
+        }
+        [pscustomobject]@{
+            validated=$true
+            widthDip=$ui.Form.ClientSize.Width
+            healthRows=$ui.Rows.Count
+            actions=$ui.Actions.Count
+            keyboardEscape=$ui.Form.KeyPreview
+            lastHeader=$ui.HeaderText.Text
+            fontFamily=$ui.HeaderText.Font.FontFamily.Name
+        } | ConvertTo-Json -Compress
+    } finally {
+        $ui.Logo.Image.Dispose()
+        $ui.Form.Dispose()
+        foreach ($icon in $icons.Values) { $icon.Dispose() }
+    }
     return
 }
 if ($ProbeOnly) {
@@ -122,6 +177,11 @@ $notify = [Windows.Forms.NotifyIcon]::new()
 $notify.Icon = $icons['offline']
 $notify.Text = 'LAO DevSpace - offline'
 $notify.Visible = (-not $AsyncProbeOnly)
+$script:popup = $null
+if (-not $AsyncProbeOnly) {
+    $logoPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\docs\lao-devspace\assets\icons\png\lao-logo-64.png'))
+    $script:popup = New-LaoPopup -LogoPath $logoPath
+}
 $menu = [Windows.Forms.ContextMenuStrip]::new()
 $openItem = $menu.Items.Add('Abrir painel LAO')
 $stateItem = $menu.Items.Add('Status: offline')
@@ -171,6 +231,13 @@ function Start-LaoAsyncPoll {
         activeTasks = $null
         pendingReviews = $null
         tasksAuthenticated = $false
+        statusAuthenticated = $false
+        reasons = @()
+        modelConfigured = $null
+        gpuPercent = $null
+        vramUsedMiB = $null
+        vramTotalMiB = $null
+        lastTaskModel = $null
         checkedAt = $null
     }
     $script:pollStage = 'live'
@@ -214,6 +281,24 @@ function Advance-LaoAsyncPoll {
                 Finish-LaoAsyncPoll
                 return
             }
+            $script:pollStage = 'status'
+            $script:pollTask = $privateClient.GetStringAsync($script:baseUrl + '/dashboard/api/status')
+        }
+        'status' {
+            if ($null -ne $payload -and $null -ne $payload.blockingReasons) {
+                $script:pollSnapshot.statusAuthenticated = $true
+                $script:pollSnapshot.reasons = @($payload.blockingReasons)
+                $script:pollSnapshot.modelConfigured = $payload.modelConfigured
+            }
+            $script:pollStage = 'metrics'
+            $script:pollTask = $privateClient.GetStringAsync($script:baseUrl + '/dashboard/api/metrics')
+        }
+        'metrics' {
+            if ($null -ne $payload -and $null -ne $payload.gpu) {
+                $script:pollSnapshot.gpuPercent = $payload.gpu.utilizationPercent
+                $script:pollSnapshot.vramUsedMiB = $payload.gpu.vramUsedMiB
+                $script:pollSnapshot.vramTotalMiB = $payload.gpu.vramTotalMiB
+            }
             $script:pollStage = 'tasks'
             $script:pollTask = $privateClient.GetStringAsync($script:baseUrl + '/dashboard/api/tasks')
         }
@@ -228,6 +313,12 @@ function Advance-LaoAsyncPoll {
                 $script:pollSnapshot.activeTasks = $active
                 $script:pollSnapshot.pendingReviews = $reviews
                 $script:pollSnapshot.tasksAuthenticated = $true
+                $latest = @($payload.tasks | Where-Object {
+                    $_.status -in @('running','validating','preparing')
+                } | Select-Object -First 1)
+                if ($latest.Count -gt 0) {
+                    $script:pollSnapshot.lastTaskModel = [string]$latest[0].model
+                }
                 if ($script:pollSnapshot.status -eq 'active' -and $reviews -gt 0) {
                     $script:pollSnapshot.status = 'review'
                     $script:pollSnapshot.label = 'Aguardando revisao'
@@ -242,6 +333,7 @@ function Advance-LaoAsyncPoll {
 
 function Update-LaoTray($snapshot) {
         $script:trayStatus = $snapshot.status
+        if ($script:popup) { Update-LaoPopup $script:popup $snapshot }
         $script:lastCheck = Get-Date
         $notify.Icon = $icons[$snapshot.status]
         $stateItem.Text = "Status: $($snapshot.label)"
@@ -294,9 +386,33 @@ $timer.Add_Tick({
 $openItem.Add_Click({
     Start-Process ($script:baseUrl + '/dashboard') | Out-Null
 })
-$notify.Add_DoubleClick({
-    Start-Process ($script:baseUrl + '/dashboard') | Out-Null
-})
+if ($script:popup) {
+    $notify.Add_MouseClick({
+        if ($_.Button -eq [Windows.Forms.MouseButtons]::Left) {
+            Toggle-LaoPopup $script:popup
+        }
+    })
+    $script:popup.Actions.dashboard.Add_Click({
+        $script:popup.Form.Hide()
+        Start-Process ($script:baseUrl + '/dashboard') | Out-Null
+    })
+    $script:popup.Actions.context.Add_Click({
+        $script:popup.Form.Hide()
+        Start-Process ($script:baseUrl + '/dashboard#tarefas') | Out-Null
+    })
+    $script:popup.Actions.logs.Add_Click({
+        $script:popup.Form.Hide()
+        Start-Process ($script:baseUrl + '/dashboard#logs') | Out-Null
+    })
+    $script:popup.Actions.settings.Add_Click({
+        $script:popup.Form.Hide()
+        Start-Process ($script:baseUrl + '/dashboard#configuracoes') | Out-Null
+    })
+    $script:popup.Settings.Add_Click({
+        $script:popup.Form.Hide()
+        Start-Process ($script:baseUrl + '/dashboard#configuracoes') | Out-Null
+    })
+}
 $copyItem.Add_Click({
     $stamp = if ($null -eq $script:lastCheck) { 'never' } else {
         $script:lastCheck.ToString('s')
@@ -315,6 +431,11 @@ try {
 } finally {
     $timer.Stop()
     $notify.Visible = $false
+    if ($script:popup) {
+        $script:popup.Form.Hide()
+        $script:popup.Logo.Image.Dispose()
+        $script:popup.Form.Dispose()
+    }
     $timer.Dispose()
     $publicClient.CancelPendingRequests()
     $privateClient.CancelPendingRequests()

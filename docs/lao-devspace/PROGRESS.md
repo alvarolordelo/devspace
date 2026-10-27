@@ -730,3 +730,38 @@ assinatura Ed25519 externa foi aceita somente com chave independente,
 adulteracao de Node e metadados foi recusada, e o plano manual WinSW
 aceitou somente `runtime/node.exe` embutido, negando Node externo.
 Nenhum servico Windows foi instalado ou iniciado pelo roteiro.
+
+## F5-08 e F6-05 - Design visual de referencia implementado (27/10/2026)
+
+**Prioridade solicitada pelo usuario:** entregar a interface aprovada
+ANTES de voltar a instalador, servico e novas funcionalidades do
+orquestrador. Implementado em duas superfícies:
+
+1. **Tray nativo WinForms**: popup 420 DIP, branco, Segoe UI, logo
+   original, cantos arredondados, quatro estados contextuais,
+   oito linhas de componente/uso, tarefa/revisao e quatro acoes.
+   Clique esquerdo alterna popup; Esc/clique fora fecham;
+   links abrem secoes especificas do dashboard. Acoes SCM nao
+   implementadas ficam desabilitadas e nao reiniciam processos.
+   Faz sondagem assincrona autenticada de status/metricas/tarefas
+   sem expor token. `-UiCheckOnly` testou dimensoes, transicoes de
+   cor e revisao com controles nativos sem janela visivel.
+2. **Dashboard**: substituida interface escura anterior pelo design
+   claro referenciado em `dashboard-panel.png`, com sidebar de
+   5 secoes, 4 cards de dependencias, CPU/RAM/GPU/VRAM, tarefas,
+   modelo configurado, eventos sanitizados e configuracoes.
+   Logo aprovado servido localmente com CSP. Nao exibimos nomes de
+   tarefas inventados nem confundimos modelo configurado com loaded.
+
+**Prova de renderizacao real:** teste com Chrome headless autenticado
+em 100%, 125% e 150%, screenshot do painel branco e inspecao DOM de
+5 secoes, 4 cards e logo, sem overflow em viewport de 390px;
+arquivos apenas em TEMP do usuario,
+nao no checkout Git. Popup WinForms renderizado em janela offscreen
+e inspecionado lado a lado com a hierarquia da referencia.
+Pacote portavel inclui novo script nativo do popup.
+
+**Nao marcar como aceite final ainda:** testes manuais de interacao
+com o icone, ancora em barra Windows movida/multiplos monitores,
+legibilidade DPI real do Windows 11, rolamento em telas pequenas e
+avaliacao do usuario. Nao instalar service, nao habilitar autostart.

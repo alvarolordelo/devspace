@@ -20,6 +20,23 @@ test("LAO Windows tray uses approved icons and parses without opening a GUI",
     // The operator must still explicitly start the monitor in an interactive session.
   });
 
+test("native LAO popup matches the approved 420 DIP structure without opening a window",
+  { skip: process.platform !== "win32" }, () => {
+    const stdout = execFileSync("powershell.exe", [
+      "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File", tray, "-UiCheckOnly",
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    const layout = JSON.parse(stdout) as {
+      validated: boolean; widthDip: number; healthRows: number;
+      actions: number; keyboardEscape: boolean; fontFamily: string;
+    };
+    assert.equal(layout.validated, true);
+    assert.equal(layout.widthDip, 420);
+    assert.equal(layout.healthRows, 8);
+    assert.equal(layout.actions, 4);
+    assert.equal(layout.keyboardEscape, true);
+    assert.equal(layout.fontFamily, "Segoe UI");
+  });
+
 test("LAO Windows tray polls loopback status and reads task counts only with a Bearer token",
   { skip: process.platform !== "win32" }, async () => {
     let tokenUsed = false;

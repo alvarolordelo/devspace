@@ -6,6 +6,8 @@ import type { LaoConfig } from "./config.js";
 import { measureLaoReadiness } from "./health.js";
 import { dashboardHtml } from "./dashboard-ui.js";
 import { createLaoResourceMonitor } from "./resource-metrics.js";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 const readResourceMetrics = createLaoResourceMonitor();
 
@@ -91,11 +93,26 @@ export async function handleLaoDashboard(
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store", "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer", "x-frame-options": "DENY",
-      "content-security-policy": "default-src 'none'; script-src 'nonce-" + nonce +
+      "content-security-policy": "default-src 'none'; img-src 'self'; script-src 'nonce-" + nonce +
         "'; style-src 'nonce-" + nonce +
         "'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     });
     res.end(dashboardHtml(nonce));
+    return true;
+  }
+  if (path === "/dashboard/assets/logo.png") {
+    if (req.method !== "GET" || req.url !== path) {
+      json(res, 403, { error: "forbidden" }); return true;
+    }
+    const logo = await readFile(fileURLToPath(new URL(
+      "../../docs/lao-devspace/assets/icons/png/lao-logo-64.png", import.meta.url,
+    )));
+    res.writeHead(200, {
+      "content-type": "image/png", "content-length": logo.length,
+      "cache-control": "private, max-age=3600",
+      "x-content-type-options": "nosniff", "cross-origin-resource-policy": "same-origin",
+    });
+    res.end(logo);
     return true;
   }
   const detailMatch = /^\/dashboard\/api\/tasks\/([a-f0-9-]{36})$/.exec(path);
@@ -127,6 +144,6 @@ export async function handleLaoDashboard(
   const status = await measureLaoReadiness(config, {
     devspaceReady: options.devspaceReady(),
   });
-  json(res, 200, status);
+  json(res, 200, { ...status, modelConfigured: config.defaultModel });
   return true;
 }

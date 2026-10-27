@@ -54,10 +54,21 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
       assert.match(csp, /connect-src 'self'/);
       assert.equal(home.headers.get("cache-control"), "no-store");
       const html = await home.text();
-      assert.match(html, /Central de operacoes/);
+      assert.match(html, /Painel de status/);
+      assert.match(html, /LAO DevSpace/);
+      assert.match(html, /Modelos locais/);
+      assert.match(html, /Eventos recentes/);
+      assert.match(html, /class="sidebar"/);
       assert.match(html, /textContent/);
       assert.doesNotMatch(html, /alert\('unsafe'\)/);
       assert.doesNotMatch(html, new RegExp(token));
+      assert.match(csp, /img-src 'self'/);
+      const logo = await fetch(url + "/dashboard/assets/logo.png");
+      assert.equal(logo.status, 200);
+      assert.match(logo.headers.get("content-type") ?? "", /image\/png/);
+      const logoBuffer = Buffer.from(await logo.arrayBuffer());
+      assert.equal(logoBuffer.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+      assert.equal((await fetch(url + "/dashboard/assets/logo.png?token=" + token)).status, 403);
       const api = url + "/dashboard/api/tasks";
       assert.equal((await fetch(api)).status, 401);
       assert.equal((await fetch(url + "/dashboard/api/metrics")).status, 401);
@@ -189,4 +200,10 @@ test("dashboard markup has a parseable offline script and does not expose tokens
   assert.match(html, /\/dashboard\/api\/metrics/);
   assert.match(html, /id="resource-alerts"/);
   assert.match(html, /Sem alertas de recursos confirmados/);
+  for (const tab of ["status", "tarefas", "modelos", "logs", "configuracoes"]) {
+    assert.match(html, new RegExp('data-section="' + tab + '"'));
+    assert.match(html, new RegExp('id="section-' + tab + '"'));
+  }
+  assert.match(html, /Modelo configurado · carregamento não verificado/);
+  assert.match(html, /Controles que alteram serviços exigirão confirmação/);
 });

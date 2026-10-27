@@ -7,8 +7,8 @@
 - [ ] Popup ativo reproduz a hierarquia visual de `tray-active-panel.png`.
 - [ ] Popup parado reproduz a hierarquia visual de `tray-offline-panel.png`.
 - [ ] Popup aguardando revisão reproduz `tray-review-panel.png`.
-- [ ] Dashboard apresenta quatro cards de resumo, recursos, tarefas, modelos e logs segundo `dashboard-panel.png`.
-- [ ] Nenhuma imagem de Windows/Tailscale é embutida como interface funcional.
+- [x] Dashboard apresenta quatro cards de resumo, recursos, tarefas, modelos e logs segundo `dashboard-panel.png` (Chrome autenticado 100/125/150%).
+- [x] Nenhuma imagem de Windows/Tailscale é embutida como interface funcional.
 
 ## Comportamento
 
@@ -16,8 +16,8 @@
 - [ ] Clique no ícone da bandeja expande/recolhe o menu; click-away/Esc fecham.
 - [ ] Verde somente para saúde validada; vermelho em falha real; amarelo para revisão; cinza desconhecido.
 - [ ] Offline e reconnect não provocam reinício automático não solicitado de DevSpace ou Ollama.
-- [ ] Modelo selecionado distinto de modelo efetivamente carregado em VRAM.
-- [ ] GPU (%) distinguida de porcentagem de camadas do modelo na GPU.
+- [x] Modelo selecionado distinto de modelo efetivamente carregado em VRAM.
+- [x] GPU (%) distinguida de porcentagem de camadas do modelo na GPU.
 - [ ] Métricas indisponíveis mostram `—` com timestamp e motivo, sem valores inventados.
 - [ ] Ações de iniciar/parar/reiniciar possuem confirmação quando pertinente e mostram resultado efetivo.
 - [ ] Operações que alteram arquivos são feitas apenas em worktree aprovado e aguardam revisão.

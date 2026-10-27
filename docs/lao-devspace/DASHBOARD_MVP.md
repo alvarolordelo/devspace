@@ -1,7 +1,8 @@
 # F6-01 - Painel operacional local (MVP)
 
-Estado: painel funcional somente-leitura, opt-in; tray, notificacoes,
-controle da fila e UI de revisao de patches continuam pendentes.
+Estado: painel funcional somente-leitura, opt-in, agora com layout
+visual de referencia implementado. Controle de fila e UI de aprovacao/
+edicao de patches continuam pendentes.
 
 ## Abrir o painel
 
@@ -61,9 +62,38 @@ fechar a aba. O token e enviado somente no cabecalho Authorization.
   argumentos imutaveis e um ambiente restrito sem secrets.
 - `/dashboard/api/metrics` devolve apenas codigos estaticos de alerta
   e `advisoryOnly=true`, sem nomes de processo, comandos ou segredos.
-- A interface de recursos recebeu testes de sintaxe e API, mas nao foi
-  validada visualmente/interativamente num navegador real nesta etapa.
+- O layout foi testado em Chrome headless autenticado, mas a interacao
+  humana e o aceite visual final permanecem pendentes.
 
 Nao instalar no boot, configurar conta Windows, gerenciar credenciais,
 expor tunel, nem ativar URL publica automaticamente. Tais operacoes
 dependem de uma etapa separada, de verificacao e autorizacao.
+
+## F6-05 - Dashboard com o design aprovado (27/10/2026)
+
+Interface reconstruida de acordo com
+`docs/lao-devspace/assets/references/dashboard-panel.png`:
+paleta e fontes da especificacao, sidebar com Status, Tarefas, Modelos,
+Logs e Configuracoes; quatro cards de saude, recursos com barras reais,
+resumos de tarefas, modelos, eventos e rodape de acoes.
+
+O logo original e servido por `/dashboard/assets/logo.png` com
+`img-src 'self'` na CSP. Continua no loopback e somente-leitura,
+com API Bearer e texto de registros colocado por `textContent`.
+Modelo selecionado nao implica carregado. Botoes que exigem escrita
+ou integracao com servico Windows aparecem explicitamente desabilitados.
+Hash links permitem abrir secoes a partir da bandeja.
+
+Smoke visual REAL em Chrome headless autenticado, sem gravar token em
+capturas ou URLs, validou 5 secoes, 4 cards, logo e painel branco
+nas escalas 100%, 125% e 150%, alem de verificar que a pagina
+nao extravasa horizontalmente em viewport movel de 390 px.
+PNGs locais de evidencia ficam
+somente no TEMP do usuario: `lao-approved-dashboard-visual-27oct2026.png`,
+`lao-approved-dashboard-dpi125-27oct2026.png` e
+`lao-approved-dashboard-dpi150-27oct2026.png`.
+Reproducao via `src/lao/dashboard-visual-smoke.mjs` (Chrome
+ja instalado, nenhuma instalacao adicional ou processo persistente).
+
+Falta aceite visual/interativo em uma sessao normal, testes com varias
+tarefas, conteudo longo e experiencia tatil real em dispositivos moveis.
