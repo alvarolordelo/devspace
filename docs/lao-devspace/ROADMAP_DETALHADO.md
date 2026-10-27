@@ -500,3 +500,16 @@ extras e ausencia de arquivos, caminhos inseguros e links simbolicos.
 Nao instala servicos, dependencias, altera registro nem habilita boot.
 Integridade do manifesto ainda exige uma assinatura confiavel no futuro:
 hashes armazenados dentro do mesmo pacote NAO comprovam autenticidade.
+
+### F4-11 - Registro de aprovacao mediante confirmacao do supervisor
+
+A operacao lao_write_approve so e publicada com segundo opt-in explicito
+LAO_WRITE_APPROVAL_ENABLED=true. Requer frase APPROVE <task_id> <sha256>
+e nota de revisao. O servidor revalida worktree e aceite declarativo
+contra evidencia de teste Docker persistida antes de gravar approved.
+SQLite lease impede revisao concorrente; ausencia de testes, resultados
+nao verificados, token vencido e adulteracao mantem awaiting_review.
+A confirmacao do host nao substitui autenticacao humana independente;
+o operador continua responsavel por revisar cada diff.
+O registro de aprovacao **nao promove o patch** nem altera a origem.
+O gate de promocao segura continua pendente.

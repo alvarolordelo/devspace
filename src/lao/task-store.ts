@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { LaoPatchOutcome } from "./worktree-patch.js";
 import type { LaoSandboxTestEvidence } from "./write-test-sandbox.js";
+import type { LaoAcceptanceAssessment } from "./write-acceptance.js";
 import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
@@ -213,6 +214,70 @@ export class LaoTaskStore {
       this.save(updated, current.status);
       this.sqlite.prepare("insert into lao_reviews(task_id, record_json) values (?, ?)")
         .run(current.id, JSON.stringify(decision));
+      return updated;
+    }).immediate();
+  }
+
+  /**
+   * Separate, narrowly gated path for a host-supervised write decision.
+   * Only records approval of an isolated patch; NEVER copies it to source,
+   * commits, pushes or merges. Caller must have revalidated files before
+   * obtaining this task-specific lease. Ordinary lao_review stays fail-closed.
+   */
+  approveVerifiedWrite(
+    review: LaoReview, report: LaoAcceptanceAssessment,
+    leaseToken: string,
+  ): LaoTask {
+    const decision = laoReviewSchema.parse(review);
+    if (decision.decision !== "approved" || decision.reviewer !== "supervisor" ||
+        !decision.criteriaVerified || !decision.note.trim() ||
+        !report.allCriteriaVerified || !report.staticChecksPassed ||
+        !report.humanReviewRequired || report.approvalAllowed !== false ||
+        report.promotionAllowed !== false ||
+        report.taskId !== decision.taskId ||
+        !/^[a-f0-9]{64}$/.test(report.contentFingerprint) ||
+        report.criteria.length < 2 ||
+        report.criteria.some(item => item.status !== "passed") ||
+        !report.criteria.some(item => item.check === "node_test")) {
+      throw new Error("Verified write approval prerequisites missing");
+    }
+    return this.sqlite.transaction(() => {
+      const task = this.requireTask(decision.taskId);
+      assertLaoTransition(task.status, "approved", "review");
+      if (task.permissions.write !== "isolated_worktree" ||
+          task.status !== "awaiting_review" ||
+          task.acceptanceCriteria.length !== report.criteria.length ||
+          task.acceptanceCriteria.some((c, i) => c !== report.criteria[i]?.criterion)) {
+        throw new Error("Write approval criteria or state changed");
+      }
+      const lease = this.sqlite.prepare(
+        "select lease_token, expires_at_ms from lao_write_test_leases where task_id = ?"
+      ).get(task.id) as { lease_token: string; expires_at_ms: number } | undefined;
+      if (!lease || lease.lease_token !== leaseToken || lease.expires_at_ms <= Date.now()) {
+        throw new Error("Verified write approval lease missing or expired");
+      }
+      const latest = this.getWriteEvidence(task.id).at(-1);
+      const run = this.getRuns(task.id).at(-1);
+      if (!latest || !run || run.status !== "completed" ||
+          run.id !== latest.runId || run.id !== report.runId ||
+          latest.evidence.contentFingerprint !== report.contentFingerprint ||
+          !decision.evidence.includes("run:" + run.id) ||
+          !decision.evidence.includes("sha256:" + report.contentFingerprint)) {
+        throw new Error("Write approval fingerprint or run is stale");
+      }
+      const tests = this.getTestEvidence(task.id);
+      if (!tests.some(test => test.runId === run.id &&
+          test.contentFingerprint === report.contentFingerprint &&
+          test.executed && test.passed && test.exitCode === 0 &&
+          test.integrityMaintained && test.failureCode === "none")) {
+        throw new Error("Write approval requires successful recorded isolated tests");
+      }
+      const updated: LaoTask = {
+        ...task, status: "approved", updatedAt: decision.decidedAt,
+      };
+      this.save(updated, task.status);
+      this.sqlite.prepare("insert into lao_reviews(task_id, record_json) values (?, ?)")
+        .run(task.id, JSON.stringify(decision));
       return updated;
     }).immediate();
   }

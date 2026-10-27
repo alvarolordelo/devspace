@@ -72,3 +72,26 @@ cd /d D:\desenvolvimento\lao-devspace
 set DEVSPACE_LAO_ENABLED=true&& node scripts/lao-write-live-smoke.mjs
 ```
 O script cria repositório e worktree temporários, executa Granite de verdade, valida somente o arquivo permitido, reabre SQLite e descarta apenas sua própria área temporária.
+
+## Atualizacao do fluxo de revisao (F4-11, 26/10/2026)
+
+As observacoes de bloqueio de aprovacao acima descrevem as fases historicas.
+Atualmente o fluxo isolado e:
+
+1. Preparar e executar patch em worktree autorizado.
+2. Executar validacao estatica e suite node:test isolada no Docker.
+3. Avaliar os criterios declarativos e revisar manualmente o diff.
+4. Somente se o operador decidir aprovar aquele patch especifico,
+   iniciar a instancia da feature com dois opt-ins:
+   DEVSPACE_LAO_ENABLED=true e LAO_WRITE_APPROVAL_ENABLED=true.
+5. Chamar lao_write_approve com workspace_id, task_id, review_note e
+   confirmation exatamente no formato APPROVE <task_id> <sha256>.
+   O SHA-256 aparece no resultado lao_write_assess.
+
+Sem o segundo opt-in a ferramenta nao existe no catalogo. A confirmacao
+exigida pelo servidor e fornecida pelo host supervisor; nao e prova
+criptografica de presenca humana, portanto requer procedimento humano
+explicito de revisao. O modelo local nao recebe ferramentas MCP.
+Aprovacao so muda o estado SQLite da tarefa. O patch **nao e aplicado
+ao checkout original**, nao e promovido nem recebe commit/push/merge.
+Nenhuma autorizacao de instalacao ou alteracao de servico e implicada.

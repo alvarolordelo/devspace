@@ -12,7 +12,7 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F1 Núcleo LAO | [x] | Schemas, estados, SQLite, tarefas/runs/eventos, health e MCP opt-in; LAO OFF manteve tool surface e regressao DevSpace sem falhas |
 | F2 Ollama | [x] | Granite real executou leitura pelo MCP HTTP OAuth de teste (2026-07-28), tarefa persistida e aguardando revisao; configuracao padrao preservada |
 | F3 Escrita isolada | [x] | Granite real escreveu patch em worktree destacado via MCP HTTP OAuth de teste; integridade/sintaxe conferidas, checkout original intacto e aprovacao negada |
-| F4 Avaliação/revisão | [~] | `lao_result` inclui diff persistido; `lao_write_validate` revalida SHA-256, HEAD, allowlist, whitespace e sintaxe TS/JS/JSON sem executar codigo; smoke Docker real validado; aceite, suites completas e MCP autenticado pendentes; aprovacao de escrita bloqueada |
+| F4 Avaliacao/revisao | [~] | Integracao OAuth MCP/Granite/Docker validada; aprovacao de patch isolado disponivel somente mediante segundo opt-in, confirmacao do supervisor e evidencia de testes. Promocao segura continua pendente |
 | F5 Serviço e tray | [~] | Daemon opt-in em foreground; tray Windows manual com icones aprovados, sem instalacao SCM, autostart ou teste GUI interativo |
 | F6 Painel | [~] | Dashboard HTTP local autenticado, status, filtro por estado e detalhe de execuções, eventos, testes e evidências resumidas; tray, notificações e teste visual interativo pendentes |
 | F7 Release | [~] | CI Windows anterior validado; adicionado gate de versao fixa ANTES de instalar dependencias e `pnpm install --frozen-lockfile`; CI Windows run `40260097979` aprovada com gate da base antes do install; instalador e rollback pendentes |
@@ -30,7 +30,7 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-06 Executar agente | [x] | Granite real executou leitura e escrita supervisionadas via MCP autenticado em HTTP local, persistiu run e aguardou review; sem ferramentas no modelo |
 | RF-07 Avaliar com provas | [~] | lao_write_assess mapeia criterios declarativos a fingerprint/sintaxe e suite Docker real no mesmo run; linguagem natural nao aprovada; gate de promocao pendente |
 | RF-08 Correcoes limitadas | [~] | lao_retry read-only e lao_write_retry para escrita, ambos com feedback explicito e maximo de 2 revisoes; teste Granite de duas correcoes pendente |
-| RF-09 Aprovação explícita | [~] | Teste MCP confirmou que `lao_review` rejeita aprovação de escrita mesmo quando critérios são alegados verdadeiros; pipeline determinístico e promoção mediante aprovação ainda pendentes |
+| RF-09 Aprovacao explicita | [~] | lao_review segue negando escrita; lao_write_approve separado registra aprovacao por run/fingerprint apos confirmacao e aceite Docker verificado, sem promover ou alterar origem |
 | RF-10 Persistência/reconsulta | [~] | `lao_result` lê SQLite com runs, eventos, revisões e artefatos de escrita persistidos; reabertura testada; recuperação autônoma de tarefas no boot pendente |
 | RF-11 Boot | [ ] | Não instalado |
 | RF-12 Saúde | [~] | `monitor-status.ts`, `health.ts`, `lao_status`, daemon experimental testado; faltam probe MCP autenticado e serviço Windows |
@@ -424,3 +424,29 @@ confianca, dependencias offline e teste em maquina limpa continuam pendentes.
 225 aprovados, 8 ignorados, zero falhas**; pnpm typecheck, pnpm build,
 verificador de pin e git diff --check aprovados. Testes de navegador GUI,
 instalador e maquina limpa nao executados.
+
+## F4-11 - Aprovacao auditada sem promocao (26/10/2026)
+
+**Status F4 [~]:** aprovacao de escrita isolada pode ser registrada pela
+ferramenta MCP lao_write_approve, **desativada por padrao** e exposta
+somente com DEVSPACE_LAO_ENABLED=true e LAO_WRITE_APPROVAL_ENABLED=true.
+Requer confirmacao especifica por taskId + SHA-256 e nota do supervisor.
+O handler revalida HEAD, hash, escopo, whitespace, sintaxe e criterios
+declarativos, incluindo ao menos uma suite node:test isolada verde do run.
+
+Uma lease SQLite por tarefa impede concorrencia com suites ou revisoes
+durante a checagem. A transicao approved e o registro da decisao sao
+atomicos, vinculados ao run/fingerprint; o lao_review antigo continua
+recusando aprovacoes de escrita sem esse fluxo.
+Teste com worktree e SQLite reais verificou recusa de confirmacao errada,
+adulteracao posterior, lease invalida e prova insuficiente; aprovacao
+positiva preservou a origem sem modificacoes.
+
+**Limite:** confirmacao fornecida pelo host MCP nao e autenticacao
+humana independente. O operador precisa revisar o diff deliberadamente.
+Aprovacao nao significa promocao: sem copia, commit, push ou merge
+automatico. Revalidacao na promocao ainda e obrigatoria e pendente.
+
+**Regressao apos F4-11:** pnpm test: **234 testes, 226 aprovados,
+8 ignorados, zero falhas**. Typecheck e verificador da versao fixa
+1.0.8 aprovados. Build de producao executado na mesma rodada.

@@ -431,6 +431,73 @@ export function registerLaoMcpTools(
       });
     } catch (error) { return toolFailure(error); }
     });
+
+    // A second, explicit operator opt-in is required to expose the approval
+    // action. Granite receives no MCP tools, and no evaluation can call this.
+    // This records a reviewed patch; it NEVER promotes to the source checkout.
+    if (process.env.LAO_WRITE_APPROVAL_ENABLED === "true") {
+      server.registerTool("lao_write_approve", {
+        title: "Record supervisor-approved isolated patch (no promotion)",
+        description: "Only after explicit per-patch operator confirmation: enter APPROVE <task_id> <contentFingerprint> from lao_write_assess and provide a review note. Revalidates SHA-256, scope and isolated node:test acceptance under a fenced lease. Records approval but does not copy files, commit, push or merge. Not an automated model action.",
+        inputSchema: {
+          workspace_id: z.string().min(1),
+          task_id: z.string().uuid(),
+          confirmation: z.string().min(1).max(256),
+          review_note: z.string().trim().min(1).max(8000),
+        },
+        annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      }, async ({ workspace_id, task_id, confirmation, review_note }) => {
+        try {
+          return await withStore(context.stateDir, async store => {
+            const workspace = await context.workspaces.getWorkspace(workspace_id);
+            const task = store.get(task_id);
+            if (!task || task.workspaceId !== workspace_id ||
+                task.status !== "awaiting_review" ||
+                task.permissions.write !== "isolated_worktree") {
+              throw new Error("Pending isolated write task not accessible");
+            }
+            const record = store.getWriteEvidence(task_id).at(-1);
+            if (!record) throw new Error("No persisted write evidence");
+            // Explicit per-task, per-fingerprint decision; not a global toggle
+            // and never a string generated or requested by the local model.
+            const required = "APPROVE " + task_id + " " + record.evidence.contentFingerprint;
+            if (confirmation !== required) throw new Error("Per-patch confirmation mismatch");
+            const lease = store.acquireTestLease(task_id);
+            try {
+              const validation = await validateLaoStaticWrite(
+                task, workspace, context.worktreeRoot!, record,
+              );
+              const assessment = assessLaoWriteAcceptance(
+                task, record, validation, store.getTestEvidence(task_id),
+              );
+              if (!assessment.allCriteriaVerified ||
+                  !assessment.criteria.some(criterion => criterion.check === "node_test")) {
+                throw new Error("Deterministic acceptance incomplete; approval denied");
+              }
+              const review: LaoReview = {
+                schemaVersion: 1, taskId: task_id, decision: "approved",
+                reviewer: "supervisor", criteriaVerified: true,
+                evidence: [
+                  "run:" + record.runId,
+                  "sha256:" + assessment.contentFingerprint,
+                  ...assessment.criteria.map(criterion => criterion.criterion),
+                ],
+                note: review_note, decidedAt: new Date().toISOString(),
+              };
+              const updated = store.approveVerifiedWrite(review, assessment, lease);
+              return asToolResult({
+                task_id, status: updated.status, review,
+                approved_fingerprint: assessment.contentFingerprint,
+                source_checkout_modified: false, promotion_performed: false,
+                commit_performed: false, merge_performed: false,
+              });
+            } finally {
+              store.releaseTestLease(task_id, lease);
+            }
+          });
+        } catch (error) { return toolFailure(error); }
+      });
+    }
   }
 
   server.registerTool("lao_result", {
