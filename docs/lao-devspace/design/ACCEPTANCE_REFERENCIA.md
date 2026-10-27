@@ -4,9 +4,9 @@
 
 - [ ] Ícone de bandeja reconhecível nos tamanhos 16/20/24/32 px, claro e escuro.
 - [ ] Verde/vermelho/amarelo/cinza representados em `.svg`, `.png`, `.ico` sem artefatos de antialiasing.
-- [x] Popup ativo usa a hierarquia aprovada, comparada ao mockup em captura WinForms (27/10).
-- [x] Popup parado usa a hierarquia aprovada, comparada ao mockup em captura WinForms (27/10).
-- [x] Popup aguardando revisão usa a hierarquia aprovada, comparada ao mockup em captura WinForms (27/10).
+- [ ] Popup ativo: geometria e tipografia ajustadas ao mockup em captura WinForms (27/10); **aceite final do usuário ainda pendente**.
+- [ ] Popup parado: estados semânticos presentes; **comparação visual real na bandeja ainda pendente**.
+- [ ] Popup aguardando revisão: ação de revisão presente; **comparação visual real na bandeja ainda pendente**.
 - [x] Dashboard apresenta quatro cards de resumo, recursos, tarefas, modelos e logs segundo `dashboard-panel.png` (Chrome autenticado 100/125/150%).
 - [x] Dashboard: navegação nas cinco seções, botões indisponíveis, ausência de overflow horizontal em 390px, 100/125/150% no Chrome (27/10).
 - [x] Nenhuma imagem de Windows/Tailscale é embutida como interface funcional.
@@ -98,3 +98,17 @@ Os painéis anteriores de teste nas portas 7878/7888/7890 não são a porta ofic
 - [ ] Captura física pelo usuário do popup reiniciado após carregar o script atualizado.
 
 **Operação:** apenas o Monitor da bandeja precisa ser fechado e aberto pelo atalho **LAO DevSpace Monitor**, pois o WinForms antigo conserva o texto já carregado em memória. O daemon na porta 7877, DevSpace MCP e Ollama não precisam ser reiniciados para corrigir este problema visual.
+
+## Fidelidade ao mockup oficial — correção após comparação do usuário
+
+O usuário apresentou lado a lado a captura **aprovada** (`tray-active-panel.png`) e o **popup real no Windows**. A primeira versão do WinForms não correspondia fielmente ao desenho: cabeçalho comprimido, pontos de saúde minúsculos, tipografia reduzida, ícones inadequados, card contextual visualmente simples e rodapé fora da ordem original. A aprovação anterior dizia respeito a estrutura/testes automáticos, **não ao aceite visual final**.
+
+- [x] Ajustados cabeçalho (96 DIP), logomarca, marca, subtítulo e engrenagem para as proporções da referência.
+- [x] Pontos de saúde circulares renderizados com antialiasing em tamanho legível, independentes da forma variável do caractere `●` nas fontes do Windows.
+- [x] Linhas com espaçamento de 40 DIP e tipografia maior; o card ganhou borda arredondada e ícone de documento desenhado como vetor.
+- [x] Ações reordenadas conforme a referência: **Abrir painel → Ver logs → Reiniciar LAO/Ver revisão → Configurações**; ícones separados dos rótulos e setas alinhadas à direita.
+- [x] Captura de controle WinForms **renderizada e inspecionada** com 420 × 768 px, comparada à referência de 629 × 1147 reduzida para 420 × 766 px.
+- [x] Quando há tarefa real, o card apresenta ID abreviado, executor e fase conhecidos; tempo ainda indisponível aparece explicitamente sem inventar valor.
+- [ ] Receber captura do popup real reiniciado na máquina do usuário e confirmar visualmente os estados ativo, revisão e offline.
+
+**Importante:** os valores `GPU 100%`, `5,7/6,0 GB`, `2 tarefas` e `Validar CPF no cadastro` da captura aprovada são exemplos ilustrativos. **Não** devem ser copiados para a UI em produção quando as métricas/tarefas reais não correspondem. O valor `Modelo padrão` também não deve ser rotulado `Modelo ativo` sem prova de carregamento efetivo do modelo.

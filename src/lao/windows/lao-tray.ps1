@@ -108,6 +108,16 @@ if ($UiCheckOnly) {
             $ui.Actions.Count -ne 4) {
             throw 'LAO native popup layout contract failed'
         }
+        if ($ui.Form.ClientSize.Height -ne 768 -or
+            $ui.Actions.dashboard.Top -ge $ui.Actions.logs.Top -or
+            $ui.Actions.logs.Top -ge $ui.Actions.context.Top -or
+            $ui.Actions.context.Top -ge $ui.Actions.settings.Top -or
+            $ui.Rows.service.Dot.Font.Size -lt 13 -or
+            $ui.Rows.service.Title.Font.Size -lt 13 -or
+            $ui.Card.Height -lt 150 -or
+            $ui.Actions.dashboard.Tag -ne '↗') {
+            throw 'Approved popup visual hierarchy, spacing or icon order differs'
+        }
         foreach ($state in @('active','offline','review','idle')) {
             $snapshot = [pscustomobject]@{
                 status=$state; statusAuthenticated=$true
@@ -157,9 +167,9 @@ if ($UiCheckOnly) {
         if ($ui.HeaderText.Right -ge $ui.Settings.Left) {
             throw 'Narrow popup header overlaps settings'
         }
-        $ui.Form.ClientSize=[Drawing.Size]::new(420,790)
+        $ui.Form.ClientSize=[Drawing.Size]::new(420,768)
         Resize-LaoPopupContents $ui 420
-        if ($ui.Freshness.Bottom -gt $ui.Form.ClientSize.Height-84-6) {
+        if ($ui.Freshness.Bottom -gt $ui.Form.ClientSize.Height-96-2) {
             throw 'Native popup footer is clipped at reference height'
         }
         $uiSamples=[ordered]@{
@@ -287,6 +297,8 @@ function Start-LaoAsyncPoll {
         vramUsedMiB = $null
         vramTotalMiB = $null
         lastTaskModel = $null
+        lastTaskId = $null
+        lastTaskPhase = $null
         restartAvailable = $false
         checkedAt = $null
     }
@@ -369,6 +381,8 @@ function Advance-LaoAsyncPoll {
                 } | Select-Object -First 1)
                 if ($latest.Count -gt 0) {
                     $script:pollSnapshot.lastTaskModel = [string]$latest[0].model
+                    $script:pollSnapshot.lastTaskId = [string]$latest[0].id
+                    $script:pollSnapshot.lastTaskPhase = [string]$latest[0].status
                 }
                 if ($script:pollSnapshot.status -eq 'active' -and $reviews -gt 0) {
                     $script:pollSnapshot.status = 'review'

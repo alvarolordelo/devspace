@@ -57,8 +57,8 @@ test("native LAO popup matches the approved 420 DIP structure without opening a 
     assert.equal(labels.model, "Modelo padrão");
     assert.equal(labels.last, "Última execução");
     assert.equal(labels.statusDot, "●");
-    assert.equal(labels.dashboardAction, "↗  Abrir painel");
-    assert.equal(labels.restartAction, "↻  Reiniciar LAO");
+    assert.equal(labels.dashboardAction, "Abrir painel");
+    assert.equal(labels.restartAction, "Reiniciar LAO");
     assert.equal(labels.idleHeading, "Atenção · parcialmente disponível");
   });
 
