@@ -11,7 +11,7 @@ function Get-LaoManagedService([string]$Kind) {
     return Get-Service -Name $name -ErrorAction SilentlyContinue
 }
 
-function New-LaoSettingsForm {
+function New-LaoSettingsForm($Assets) {
     $form=[Windows.Forms.Form]::new()
     $form.Text='LAO DevSpace · Configurações'
     $form.ClientSize=[Drawing.Size]::new(395,375)
@@ -36,8 +36,10 @@ function New-LaoSettingsForm {
     $toggle=[Windows.Forms.CheckBox]::new()
     $toggle.Appearance=[Windows.Forms.Appearance]::Button
     $toggle.FlatStyle=[Windows.Forms.FlatStyle]::Flat
-    $toggle.Location=[Drawing.Point]::new(260,91)
-    $toggle.Size=[Drawing.Size]::new(112,38)
+    $toggle.FlatAppearance.BorderSize=0
+    $toggle.FlatAppearance.MouseOverBackColor=[Drawing.Color]::White
+    $toggle.Location=[Drawing.Point]::new(226,91)
+    $toggle.Size=[Drawing.Size]::new(149,38)
     $toggle.TextAlign=[Drawing.ContentAlignment]::MiddleCenter
     $toggle.AccessibleName='Iniciar LAO e Monitor com Windows'
     $toggle.Checked=[bool](Get-LaoTrayAutostart)
@@ -45,19 +47,29 @@ function New-LaoSettingsForm {
     $toggle.Add_CheckedChanged({
         try {
             Set-LaoTrayAutostart ([bool]$this.Checked)
-            $this.Text=$(if($this.Checked){'● LIGADO'}else{'○ DESLIGADO'})
-            $this.BackColor=$(if($this.Checked){
-                [Drawing.ColorTranslator]::FromHtml('#DFF6E8')
-            }else{[Drawing.ColorTranslator]::FromHtml('#EDF2F7')})
+            $this.Text=$(if($this.Checked){'LIGADO'}else{'DESLIGADO'})
+            $this.Invalidate()
         } catch {
             $this.Checked=Get-LaoTrayAutostart
             [Windows.Forms.MessageBox]::Show($_.Exception.Message,'LAO DevSpace') | Out-Null
         }
     })
-    $toggle.Text=$(if($toggle.Checked){'● LIGADO'}else{'○ DESLIGADO'})
-    $toggle.BackColor=$(if($toggle.Checked){
-        [Drawing.ColorTranslator]::FromHtml('#DFF6E8')
-    }else{[Drawing.ColorTranslator]::FromHtml('#EDF2F7')})
+    $toggle.Text=$(if($toggle.Checked){'LIGADO'}else{'DESLIGADO'})
+    $toggle.TextAlign=[Drawing.ContentAlignment]::MiddleLeft
+    $toggle.BackColor=[Drawing.Color]::White
+    $toggle.Add_Paint({
+        $track=[Drawing.SolidBrush]::new($(if($this.Checked){
+            [Drawing.ColorTranslator]::FromHtml('#16A34A')
+        }else{[Drawing.ColorTranslator]::FromHtml('#CBD5E1')}))
+        $knob=[Drawing.SolidBrush]::new([Drawing.Color]::White)
+        try{
+            $_.Graphics.SmoothingMode=[Drawing.Drawing2D.SmoothingMode]::AntiAlias
+            $_.Graphics.FillRectangle($track,[Drawing.Rectangle]::new(111,8,22,23))
+            $_.Graphics.FillEllipse($track,99,8,24,23)
+            $_.Graphics.FillEllipse($track,123,8,24,23)
+            $_.Graphics.FillEllipse($knob,$(if($this.Checked){126}else{102}),11,17,17)
+        }finally{$track.Dispose();$knob.Dispose()}
+    })
     $services=AddText 'Reiniciar serviços gerenciados' 20 153 350 30
     $services.Font=[Drawing.Font]::new('Segoe UI',13,[Drawing.FontStyle]::Bold)
     $notice=AddText 'Reinicializações exigem confirmação. Serviços externos não são encerrados por PID.' 20 187 352 40
@@ -70,7 +82,14 @@ function New-LaoSettingsForm {
         $button.Tag=$kind
         $service=Get-LaoManagedService $kind
         $button.Enabled=($null -ne $service -and $service.Status -eq 'Running')
-        $button.Text='↻ '+$kind
+        $button.Text=$kind
+        $button.FlatStyle=[Windows.Forms.FlatStyle]::Flat
+        $button.FlatAppearance.BorderColor=[Drawing.ColorTranslator]::FromHtml('#CBD5E1')
+        if ($Assets -and $Assets['reiniciar']) {
+            $button.Image=[Drawing.Bitmap]::new($Assets['reiniciar'],[Drawing.Size]::new(24,24))
+            $button.ImageAlign=[Drawing.ContentAlignment]::MiddleLeft
+            $button.TextImageRelation=[Windows.Forms.TextImageRelation]::ImageBeforeText
+        }
         $button.AccessibleDescription=$(if($button.Enabled){
             'Reiniciar serviço Windows gerenciado com confirmação'
         }else{'Indisponível: serviço Windows não gerenciado ou parado'})
@@ -104,5 +123,10 @@ function New-LaoSettingsForm {
     }
     $foot=AddText 'Inicialização apenas na conta atual; DevSpace/Ollama independentes.' 20 332 353 34
     $foot.ForeColor=[Drawing.Color]::DimGray
+    $form.Add_FormClosed({
+        foreach($button in $this.Controls) {
+            if($button -is [Windows.Forms.Button] -and $button.Image) { $button.Image.Dispose() }
+        }
+    })
     return @{Form=$form;Switch=$toggle;Services=$controls}
 }

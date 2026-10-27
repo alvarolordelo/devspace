@@ -105,7 +105,7 @@ if ($CheckOnly) {
 if ($UiCheckOnly) {
     $logoPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\docs\lao-devspace\assets\icons\png\lao-logo-64.png'))
     $ui = New-LaoPopup -LogoPath $logoPath
-    $settingsUi = New-LaoSettingsForm
+    $settingsUi = New-LaoSettingsForm $ui.Assets
     try {
         if ($settingsUi.Switch.AccessibleName -ne 'Iniciar LAO e Monitor com Windows' -or
             $settingsUi.Services.Count -ne 2 -or
@@ -484,7 +484,7 @@ function Open-LaoSettings {
         $script:settingsWindow.Form.Activate()
         return
     }
-    $script:settingsWindow=New-LaoSettingsForm
+    $script:settingsWindow=New-LaoSettingsForm $script:popup.Assets
     $script:settingsWindow.Form.Add_FormClosed({$this.Dispose()})
     $script:settingsWindow.Form.Show()
 }
