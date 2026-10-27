@@ -634,3 +634,21 @@ para instalacao final.
 GitHub Actions da ultima entrega publicada, F6-03 commit f222657:
 run 40443284011 concluiu com success. Os resultados deste F5-06
 dependem da regressao e do CI apos o push correspondente.
+
+## F8-02 - Benchmark funcional de programacao (27/10/2026)
+
+**F8 permanece [~].** Preparado o roteiro experimental opt-in
+lao-coding-benchmark-live.mjs para comparar, sequencialmente, Granite
+e Spark em duas tarefas de JavaScript identicas, com criterios
+deterministicos. O candidato textual fica em pasta temporaria
+descartavel e so executa dentro de Docker sem rede, read-only,
+com imagem local pinada por SHA-256, memoria/CPU/PIDs limitados.
+Um container com nome exclusivo e removido forcadamente ate no
+timeout da CLI. O parser do candidato e bounded e tem teste.
+
+**Nao foram produzidas metricas comparativas nesta etapa:**
+Ollama em 127.0.0.1:11434 nao respondeu na verificacao real,
+embora o Docker Linux Engine estivesse online. Nao iniciar o Ollama
+ou trocar o modelo automaticamente. O estudo simples nao valida
+multi-arquivos, taxas de sucesso de agentes MCP nem failover.
+Ver BENCHMARK_CODING.md para procedimento de reproducao.
