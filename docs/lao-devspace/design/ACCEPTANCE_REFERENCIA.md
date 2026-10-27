@@ -2,6 +2,7 @@
 
 ## Identidade e referência
 
+- [x] **Usuário aprovou em 27/10/2026 a interface visual do popup em execução no Windows, conforme captura do estado de atenção** (LAO Service respondendo, Ollama respondendo, DevSpace MCP não verificado). Identidade, ícones, espaçamentos, card e ações inferiores aprovados; **congelar o desenho** até pedido de alteração.
 - [ ] Ícone de bandeja reconhecível nos tamanhos 16/20/24/32 px, claro e escuro.
 - [ ] Verde/vermelho/amarelo/cinza representados em `.svg`, `.png`, `.ico` sem artefatos de antialiasing.
 - [ ] Popup ativo: geometria e tipografia ajustadas ao mockup em captura WinForms (27/10); **aceite final do usuário ainda pendente**.

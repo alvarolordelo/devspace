@@ -93,6 +93,13 @@ export function verifyDevspacePin({ root = repoRoot, pin } = {}) {
     "scripts/lao-live-smoke.mjs", "scripts/lao-write-live-smoke.mjs",
     "scripts/lao-verify-devspace-pin.mjs",
     "scripts/lao-verify-devspace-pin.test.mjs",
+    // Explicit LAO-only Windows launchers/assets tooling. Do not grant an
+    // unrestricted scripts/ or scripts/lao-* exception to the pinned core.
+    "scripts/build-lao-action-icons.ps1",
+    "scripts/install-lao-shortcuts.ps1",
+    "scripts/launch-lao-daemon.ps1",
+    "scripts/launch-lao-monitor.cmd",
+    "scripts/launch-lao-monitor.ps1",
   ]);
   const forbidden = changed.filter(path => !exact.has(path) &&
     !path.startsWith("src/lao/") && !path.startsWith("docs/lao-devspace/"));

@@ -11,7 +11,7 @@ O LAO atualmente e uma extensao no **mesmo repositorio fonte** do DevSpace, nao 
 
 ## Regra obrigatoria para cada atualizacao LAO
 
-1. Alteracoes comuns ficam exclusivamente em `src/lao/`, `docs/lao-devspace/`, scripts `lao-*` previstos, `bin/devspace-laod.js` e o workflow especifico da feature.
+1. Alteracoes comuns ficam exclusivamente em `src/lao/`, `docs/lao-devspace/`, nos scripts LAO de **lista explicita** do verificador (`lao-*`, `launch-lao-*`, `build-lao-action-icons.ps1` e `install-lao-shortcuts.ps1` atualmente enumerados por nome), `bin/devspace-laod.js` e o workflow especifico da feature. A lista explicita NAO permite novos scripts arbitrarios.
 2. `src/server.ts` pode conter **apenas** as integracoes LAO explicitamente revisadas. O verificador compara o arquivo inteiro com a versao-base mais a integracao esperada.
 3. Modificar `package.json` (alem da unica entrada de binario), `pnpm-lock.yaml`, `pnpm-workspace.yaml` ou qualquer arquivo do core **falha a verificacao**.
 4. O GitHub Actions faz `node scripts/lao-verify-devspace-pin.mjs` e os testes negativos **antes de instalar dependencias**. A instalacao usa `pnpm install --frozen-lockfile`.

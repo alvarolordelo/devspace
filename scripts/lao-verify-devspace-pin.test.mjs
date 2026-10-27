@@ -62,6 +62,15 @@ test("pinned DevSpace core cannot be upgraded by LAO changes", async () => {
       '  registerLaoMcpTools(registrationTarget, loadLaoConfig(), { stateDir: config.stateDir, workspaces, worktreeRoot: config.worktreeRoot });\n\n' +
       '  registerAppTool(\n    registrationTarget,\n    "show_changes",'));
     write("src/lao/feature.ts", "export const safe = true;\n");
+    // Feature-side helpers used by the shipped LAO UI must not be confused
+    // with upgrades of the fixed DevSpace engine.
+    for (const name of ["build-lao-action-icons.ps1",
+                        "install-lao-shortcuts.ps1",
+                        "launch-lao-daemon.ps1",
+                        "launch-lao-monitor.cmd",
+                        "launch-lao-monitor.ps1"]) {
+      write("scripts/" + name, "# LAO-only launcher test fixture\n");
+    }
     git(project, "add", ".");
     git(project, "-c", "user.name=LAO Test", "-c", "user.email=test@example.invalid",
       "commit", "-m", "LAO feature only");

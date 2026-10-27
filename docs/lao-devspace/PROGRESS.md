@@ -1,6 +1,8 @@
 # LAO DevSpace — Progresso verificável
 
-**Atualizado:** 26/10/2026 · **Branch:** `feature/lao-devspace` · **Worktree:** `D:\desenvolvimento\lao-devspace`
+**Atualizado:** 27/10/2026 · **Branch:** `feature/lao-devspace` · **Worktree:** `D:\desenvolvimento\lao-devspace`
+
+**Design:** popup da bandeja em seu estado de atenção **aprovado visualmente pelo usuário em 27/10**, a partir de captura real do Windows. Não alterar a interface sem novo pedido. Para lacunas operacionais e evidências atuais, consultar [STATUS_FUNCIONAL_20261027.md](STATUS_FUNCIONAL_20261027.md). O bloqueio P0 atual é a conexão MCP não verificada: `devspaceReady` da execução standalone não recebe um probe autenticado.
 
 Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado parcialmente; **[ ]** pendente; **[!]** bloqueado. Nenhuma fase de produto é declarada concluída apenas por possuir arquivos ou testes unitários.
 
