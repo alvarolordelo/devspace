@@ -38,6 +38,7 @@ const approved = [
   "docs/lao-devspace/TRAY_MVP.md",
   "docs/lao-devspace/USO_EXPERIMENTAL.md",
   "src/lao/windows/lao-tray.ps1",
+  "src/lao/release-verify.mjs",
   "docs/lao-devspace/assets/icons/ico",
 ];
 const releaseFiles = [];

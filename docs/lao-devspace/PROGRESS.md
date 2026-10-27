@@ -14,7 +14,7 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F3 Escrita isolada | [x] | Granite real escreveu patch em worktree destacado via MCP HTTP OAuth de teste; integridade/sintaxe conferidas, checkout original intacto e aprovacao negada |
 | F4 Avaliação/revisão | [~] | `lao_result` inclui diff persistido; `lao_write_validate` revalida SHA-256, HEAD, allowlist, whitespace e sintaxe TS/JS/JSON sem executar codigo; smoke Docker real validado; aceite, suites completas e MCP autenticado pendentes; aprovacao de escrita bloqueada |
 | F5 Serviço e tray | [~] | Daemon opt-in em foreground; tray Windows manual com icones aprovados, sem instalacao SCM, autostart ou teste GUI interativo |
-| F6 Painel | [~] | MVP HTTP local do dashboard, autenticação Bearer por token forte, status Ollama/DevSpace e histórico de tarefas; tray, notificações e controles pendentes |
+| F6 Painel | [~] | Dashboard HTTP local autenticado, status, filtro por estado e detalhe de execuções, eventos, testes e evidências resumidas; tray, notificações e teste visual interativo pendentes |
 | F7 Release | [~] | CI Windows anterior validado; adicionado gate de versao fixa ANTES de instalar dependencias e `pnpm install --frozen-lockfile`; CI Windows run `40260097979` aprovada com gate da base antes do install; instalador e rollback pendentes |
 | F8 Multimodelo | [~] | Benchmark Ollama real 5x Granite vs Spark concluido; teste simples 2+2, simulacao de agente e failover pendentes |
 
@@ -39,7 +39,7 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-15 Tray | [~] | Monitor Windows manual em PowerShell/WinForms, usa icones aprovados, mutex e health local; teste GUI interativo ainda pendente |
 | RF-16 Autostart configurável | [ ] | Pendente |
 | RF-17 Notificações | [ ] | Pendente |
-| RF-18 Dashboard/histórico | [~] | Painel local consulta o SQLite e apresenta tarefas/estados com atualização a cada 10s; filtros, detalhes e histórico visual ampliado pendentes |
+| RF-18 Dashboard/histórico | [~] | Painel local consulta SQLite com filtro por estado, detalhes de runs, histórico de eventos, resumos de testes/diffs e decisão de revisão; validação visual e diagnósticos de consumo ainda pendentes |
 | RF-19 Multimodelo | [~] | Benchmark sequencial 5x real com modelos locais, acertos e latencias documentados em BENCHMARK_20261026.md; prova de codigo pendente |
 | RF-20 Failover | [ ] | Pendente |
 
@@ -401,3 +401,26 @@ rollback, alem de testes em maquina limpa.
 confirmou DevSpace 1.0.8 no commit fixo `13c99eec5ed43eb9aba3fdc457bd912d3ce82211`.
 O staging continua nao instalavel: nenhum teste de maquina limpa foi
 executado e nenhuma alteracao de servico/boot foi realizada.
+
+## F6-02 / F7-03 - Detalhes protegidos e integridade de pacote (26/10/2026)
+
+**F6 segue [~]:** dashboard recebeu filtros de tarefas e consulta autenticada
+por UUID que retorna historico de estados, execucoes, suites isoladas,
+fingerprints/resumos de alteracao e resultado de revisao. Nao retorna
+prompts, codigo de patches, notas de revisao, outputs do modelo ou segredos.
+O navegador usa exclusivamente textContent. Testes especificos de API,
+privacidade, rejeicao de acesso indevido e sintaxe do script passaram.
+
+**F7 segue [~]:** src/lao/release-verify.mjs verifica o staging sem gravar
+arquivos ou instalar componentes: versao-base 1.0.8, manifesto, lista estrita,
+SHA-256, tamanhos, arquivos extras/ausentes, links simbolicos e paths
+inseguros. O script tambem passa a integrar o staging como arquivo auditavel.
+Testes validaram pacote intacto e negaram corrupcao, arquivos extras,
+exclusao de arquivo e path traversal. **Manifesto sem assinatura nao
+autentica a origem contra adulteracao coordenada**; instalador, cadeia de
+confianca, dependencias offline e teste em maquina limpa continuam pendentes.
+
+**Regressao desta rodada F6-02/F7-03:** pnpm test executou **233 testes,
+225 aprovados, 8 ignorados, zero falhas**; pnpm typecheck, pnpm build,
+verificador de pin e git diff --check aprovados. Testes de navegador GUI,
+instalador e maquina limpa nao executados.

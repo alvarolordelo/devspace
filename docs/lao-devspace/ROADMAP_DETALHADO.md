@@ -477,3 +477,26 @@ Nao roda instalacao ou modifica sistema. Teste positivo e negativo de
 sobrescrita passaram em diretorio temporario. Nao e pacote operacional:
 faltam dependencias runtime instaladas offline, instalador, assinatura,
 servico Windows e rollback.
+
+### F6-02 - Historico detalhado protegido (26/10/2026)
+
+Dashboard continua opt-in e somente leitura: filtro local por estado e
+endpoint GET /dashboard/api/tasks/<UUID> protegido pelo mesmo Bearer.
+Exibe execucoes, transicoes, suites Docker, falhas codificadas, fingerprints,
+resumos de diff e decisao de revisao. Nao retorna objetivo, texto do modelo,
+conteudo de patch, logs brutos, notas de revisao ou credenciais.
+O navegador renderiza somente com textContent; a API rejeita query strings,
+Origin, hosts externos, metodos de escrita e tarefas inexistentes.
+Testes de API, privacidade e parser do script local adicionados.
+F6 permanece parcial: ainda faltam verificacao de UX em navegador real,
+notificacoes e painel de recursos.
+
+### F7-03 - Verificador read-only de candidato (26/10/2026)
+
+O candidato agora carrega src/lao/release-verify.mjs e pode ser verificado
+offline com node src/lao/release-verify.mjs --dir <diretorio-absoluto>.
+O verificador compara os hashes e tamanhos do manifesto, rejeita entradas
+extras e ausencia de arquivos, caminhos inseguros e links simbolicos.
+Nao instala servicos, dependencias, altera registro nem habilita boot.
+Integridade do manifesto ainda exige uma assinatura confiavel no futuro:
+hashes armazenados dentro do mesmo pacote NAO comprovam autenticidade.
