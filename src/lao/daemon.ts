@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { LaoTaskStore } from "./task-store.js";
 import type { LaoConfig } from "./config.js";
 import { startLaoHealthServer } from "./health-server.js";
-import { validateLaoDashboardToken } from "./dashboard.js";
+import { summarizeLaoTaskDetails, validateLaoDashboardToken } from "./dashboard.js";
 
 export interface LaoDaemonOptions {
   config: LaoConfig;
@@ -25,7 +25,10 @@ export async function startLaoDaemon(options: LaoDaemonOptions) {
   // Bind first: a second instance using the same port must not mutate tasks.
   const server = await startLaoHealthServer(options.config, {
     port: options.port, devspaceReady: ready,
-    dashboard: token ? { token, devspaceReady: ready, listTasks: () => store?.list() ?? [] } : undefined,
+    dashboard: token ? {
+      token, devspaceReady: ready, listTasks: () => store?.list() ?? [],
+      taskDetails: id => store ? summarizeLaoTaskDetails(store, id) : null,
+    } : undefined,
   });
   let recovered: number;
   let leaseToken = "";

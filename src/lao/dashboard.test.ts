@@ -89,6 +89,31 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
       assert.equal(payload.tasks[0]?.acceptanceCriteria, undefined);
       assert.equal(payload.tasks[0]?.permissions, undefined);
       assert.equal(payload.tasks[0]?.traceId, undefined);
+      const detailApi = api + "/" + task.id;
+      assert.equal((await fetch(detailApi)).status, 401);
+      assert.equal((await fetch(detailApi, { headers: {
+        Authorization: "Bearer incorrect",
+      } })).status, 401);
+      assert.equal((await fetch(detailApi + "?token=" + token, { headers: {
+        Authorization: "Bearer " + token,
+      } })).status, 403);
+      const details = await fetch(detailApi, { headers: {
+        Authorization: "Bearer " + token,
+      } });
+      assert.equal(details.status, 200);
+      const detailPayload = await details.json() as Record<string, any>;
+      assert.equal(detailPayload.task.id, task.id);
+      assert.deepEqual(detailPayload.runs, []);
+      assert.equal(detailPayload.task.goal, undefined);
+      assert.equal(detailPayload.task.traceId, undefined);
+      assert.equal(detailPayload.task.permissions, undefined);
+      assert.equal(detailPayload.review, null);
+      assert.equal((await fetch(api + "/00000000-0000-4000-8000-000000000001", {
+        headers: { Authorization: "Bearer " + token },
+      })).status, 404);
+      assert.equal((await fetch(api + "/not-a-uuid", {
+        headers: { Authorization: "Bearer " + token },
+      })).status, 404);
       assert.equal((await fetch(url + "/dashboard/api/status", {
         headers: { Authorization: "Bearer " + token },
       })).status, 200);
@@ -96,6 +121,27 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
         headers: { Authorization: "Bearer " + token },
       })).status, 404);
     } finally { await daemon.close(); }
+  } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("task detail redacts goals, review notes, raw patches and model output", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "lao-detail-"));
+  const store = new LaoTaskStore(dir);
+  try {
+    const task = store.create({
+      workspaceId: "ws", goal: "private user instruction: 123secret",
+      model: "granite4.2-8b:gpu", acceptanceCriteria: ["private check"],
+      permissions: { read: true, write: "none", shell: "none" },
+      limits: { maxRevisions: 0, maxToolCalls: 1, maxWallSeconds: 10 },
+      requireReview: true,
+    });
+    const { summarizeLaoTaskDetails } = await import("./dashboard.js");
+    const snapshot = summarizeLaoTaskDetails(store, task.id);
+    assert.ok(snapshot);
+    const raw = JSON.stringify(snapshot);
+    assert.doesNotMatch(raw, /123secret|private check|workspaceId|traceId/);
+    assert.match(raw, /granite4.2-8b/);
+    assert.equal(summarizeLaoTaskDetails(store, "00000000-0000-4000-8000-000000000001"), null);
   } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -108,4 +154,8 @@ test("dashboard markup has a parseable offline script and does not expose tokens
   assert.doesNotThrow(() => new Script(script));
   assert.doesNotMatch(html, /https?:\/\/[^/]+/);
   assert.doesNotMatch(html, /innerHTML\s*=/);
+  assert.match(html, /id="filter"/);
+  assert.match(html, /id="detail-panel"/);
+  assert.match(html, /renderTasks/);
+  assert.match(html, /showDetails/);
 });
