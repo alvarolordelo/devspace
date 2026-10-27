@@ -516,5 +516,48 @@ Continua exigindo hash exato e recusando wrapper adulterado, e permanece
 um **gerador de plano**, sem instalacao SCM, boot, registro ou credenciais.
 O teste especifico de pacote portavel e geracao de plano passou localmente
 (4/4), assim como o gate DevSpace 1.0.8, typecheck, build e a regressao
-completa (`pnpm test`: **237 casos, 229 aprovados, 8 ignorados, 0 falhas**). A correcao so
-sera considerada validada no runner hospedado apos novo workflow verde.
+completa (`pnpm test`: **237 casos, 229 aprovados, 8 ignorados, 0 falhas**).
+**CI Windows hospedada confirmada verde:** run `40440299950` no commit
+`531adab` concluiu com `success`, incluindo o teste anteriormente quebrado.
+
+## F4-13 - Fluxo real com aprovacao e promocao no mesmo E2E (26/10/2026)
+
+**Smoke de integracao [x] em repositorio DESCARTAVEL; F4 segue [~].**
+O teste opt-in `src/lao/mcp-http-e2e.test.ts` foi ampliado para exercitar
+MCP HTTP com OAuth/Bearer, Granite 4.2 real via Ollama local, patch gerado
+em worktree gerenciado, verificacao estatica, node:test real em Docker
+offline fixado por SHA-256, criterios declarativos, confirmacao de
+aprovacao por run/fingerprint, promocao supervisionada de um unico arquivo
+e consulta posterior ao ledger. Cada operacao passa pela API MCP real.
+
+O fixture foi criado numa branch feature temporaria, **fora do LAO e do
+DevSpace original**, e foi eliminado ao fim do teste. Foram comprovadas
+recusa de aprovacao/promocao com confirmacao incorreta, origem limpa
+antes da promocao, arquivo promovido sem commit nem merge, retencao de
+backup e recusa de repetir a operacao. Saida final:
+`MCP + real Granite + offline Docker + scripted review + single-file promotion: passed`.
+
+O supervisor neste teste e **simulado por roteiro deterministico** e nao
+constitui aprovacao humana operacional. O teste local nao prova recuperacao
+apos corte de energia, edicoes externas concorrentes durante rename, WinSW,
+instalador ou seguranca de producao. A suite normal nao habilita os flags
+de aprovacao e promocao e o smoke isolado exige opt-in explicito.
+**Validacao desta rodada:** smoke live opt-in 1/1, regressao completa
+`pnpm test` 237 testes (229 aprovados, 8 ignorados, 0 falhas),
+`pnpm typecheck`, `pnpm build` e gate DevSpace 1.0.8 aprovados.
+CI hospedada das novas alteracoes F4-13 ainda depende do push.
+
+## F5-05 - Privilegios minimos e parada no plano WinSW (26/10/2026)
+
+**F5 permanece [~].** O XML gerado pelo plano offline passa a especificar
+`NT AUTHORITY\LocalService` em vez de usar o default perigoso `LocalSystem`
+do WinSW. Adicionado `stoptimeout=30sec` para parada graciosa do Node;
+o recibo declara conta e tempo de parada. O teste de staging verifica
+o XML/JSON, ausencia de senha e que nenhuma instalacao/boot foi alterado.
+O gerador nao muda ACL, registro, servicos nem autostart. Uma futura
+instalacao exigira ACL explicita do estado para LocalService, wrapper WinSW
+genuino/versionado, teste SCM em ambiente descartavel e autorizacao
+operacional separada. Nao ha evidencia de stop real pelo Windows SCM.
+Testes direcionados Windows de release e plano: 4/4 aprovados;
+`pnpm typecheck` e pin da base verificados. O pacote permanece sem
+instalador e sem validacao WinSW genuina.

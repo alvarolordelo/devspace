@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { createServer as httpServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -13,6 +13,13 @@ import { createServer } from "../server.js";
 import { writeTestDevspaceConfig } from "../test-support/config.test.js";
 
 test("authenticated MCP runs LAO with bounded fake or optional live Ollama", async (t) => {
+  const live = process.env.LAO_MCP_LIVE === "true";
+  // Deliberately outside CI: a scripted supervisor may only promote a
+  // disposable fixture with real Ollama AND real offline Docker evidence.
+  const promotionLive = process.env.LAO_MCP_PROMOTION_LIVE === "true";
+  if (promotionLive && (!live || !process.env.LAO_SANDBOX_NODE_IMAGE)) {
+    throw new Error("Live promotion smoke requires LAO_MCP_LIVE and a pinned Docker image");
+  }
   const root = mkdtempSync(join(tmpdir(), "lao-http-e2e-"));
   const work = join(root, "project");
   mkdirSync(work);
@@ -34,7 +41,6 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   git("add", ".");
   git("-c", "user.name=LAO Test", "-c", "user.email=lao-test@example.invalid",
     "commit", "-m", "baseline");
-  const live = process.env.LAO_MCP_LIVE === "true";
   const called = { chat: 0, toolsFromModel: false };
   const mock = httpServer(async (req, res) => {
     const chunks: Uint8Array[] = [];
@@ -79,13 +85,23 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
     expiresAt: Math.floor(Date.now()/1000) + 3600, resource: bearer,
   });
   store.close();
-  const tracked = ["DEVSPACE_LAO_ENABLED", "DEVSPACE_LAO_OLLAMA_URL", "DEVSPACE_LAO_MODEL"];
+  const tracked = ["DEVSPACE_LAO_ENABLED", "DEVSPACE_LAO_OLLAMA_URL", "DEVSPACE_LAO_MODEL",
+    "LAO_WRITE_APPROVAL_ENABLED", "LAO_WRITE_PROMOTION_ENABLED"];
   const original = Object.fromEntries(tracked.map(k=>[k,process.env[k]])) as Record<string,string|undefined>;
   let running: ReturnType<typeof createServer>;
   try {
     process.env.DEVSPACE_LAO_ENABLED = "true";
     process.env.DEVSPACE_LAO_OLLAMA_URL = live ? "http://127.0.0.1:11434" : url;
     process.env.DEVSPACE_LAO_MODEL = live ? "granite4.2-8b:gpu" : "mock-granite:latest";
+    // This isolated server is the only place where the test permits these
+    // opt-ins; the normal listener never inherits approval/promotion rights.
+    if (promotionLive) {
+      process.env.LAO_WRITE_APPROVAL_ENABLED = "true";
+      process.env.LAO_WRITE_PROMOTION_ENABLED = "true";
+    } else {
+      delete process.env.LAO_WRITE_APPROVAL_ENABLED;
+      delete process.env.LAO_WRITE_PROMOTION_ENABLED;
+    }
     running = createServer(config);
   } finally {
     for (const key of tracked) {
@@ -123,7 +139,7 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
           "io.modelcontextprotocol/clientInfo": { name: "lao-http-e2e", version: "1" },
         }},
       }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(live ? 120000 : 15000),
     });
     const text = await response.text();
     return { status: response.status, data: JSON.parse(text) as {
@@ -136,6 +152,8 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   assert.equal(listed.status,200);
   assert.ok(listed.data.result?.tools?.some(x=>x.name==="lao_delegate"));
   assert.ok(listed.data.result?.tools?.some(x=>x.name==="lao_result"));
+  assert.equal(listed.data.result?.tools?.some(x=>x.name==="lao_write_approve"), promotionLive);
+  assert.equal(listed.data.result?.tools?.some(x=>x.name==="lao_write_promote"), promotionLive);
   const open = await rpc("tools/call",{ name:"open_workspace", arguments:{path:work} });
   assert.equal(open.status,200);
   const workspaceId = open.data.result?.structuredContent?.workspace_id;
@@ -205,14 +223,58 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
       assert.equal(assessed.data.result?.structuredContent?.approvalAllowed,false);
       assert.equal(assessed.data.result?.structuredContent?.promotionAllowed,false);
       console.log("Authenticated MCP + Docker test + declarative acceptance: passed, review blocked");
+      if (promotionLive) {
+        const fingerprint = assessed.data.result?.structuredContent?.contentFingerprint;
+        assert.match(fingerprint, /^[a-f0-9]{64}$/);
+        assert.equal(readFileSync(join(work,"README.md"), "utf8"),
+          "Temporary MCP test workspace");
+        assert.equal(existsSync(join(work,"src","fixture.ts")), false);
+        assert.equal(git("status","--porcelain"), "");
+        const approval = { workspace_id: managedId, task_id: writeTask,
+          review_note: "Test supervisor: inspected bounded fixture patch and Docker acceptance",
+          confirmation: "APPROVE " + writeTask + " " + fingerprint };
+        const badApproval = await rpc("tools/call", { name:"lao_write_approve",
+          arguments: { ...approval, confirmation: "APPROVE invalid" } });
+        assert.equal(badApproval.data.result?.isError, true);
+        const approved = await rpc("tools/call", { name:"lao_write_approve",
+          arguments: approval });
+        assert.equal(approved.data.result?.structuredContent?.status, "approved",
+          JSON.stringify(approved.data.result));
+        assert.equal(approved.data.result?.structuredContent?.source_checkout_modified, false);
+        assert.equal(git("status","--porcelain"), "");
+        const promotion = { workspace_id: managedId, task_id: writeTask,
+          confirmation: "PROMOTE " + writeTask + " " + fingerprint };
+        const badPromotion = await rpc("tools/call", { name:"lao_write_promote",
+          arguments: { ...promotion, confirmation: "PROMOTE invalid" } });
+        assert.equal(badPromotion.data.result?.isError, true);
+        assert.equal(git("status","--porcelain"), "");
+        const promoted = await rpc("tools/call", { name:"lao_write_promote",
+          arguments: promotion });
+        assert.equal(promoted.data.result?.structuredContent?.path, "src/fixture.ts",
+          JSON.stringify(promoted.data.result));
+        assert.equal(promoted.data.result?.structuredContent?.backupRetained, true);
+        assert.equal(promoted.data.result?.structuredContent?.committed, false);
+        assert.match(readFileSync(join(work,"src","fixture.ts"),"utf8"),
+          /fixture\s*=\s*true/);
+        assert.match(git("status","--porcelain","--untracked-files=all"), /src\/fixture\.ts/);
+        const recovered = await rpc("tools/call", { name:"lao_result", arguments: {
+          workspace_id: managedId, task_id: writeTask,
+        }});
+        assert.equal(recovered.data.result?.structuredContent?.task?.status, "approved");
+        assert.equal((await rpc("tools/call", { name:"lao_write_promote",
+          arguments: promotion })).data.result?.isError, true);
+        console.log("MCP + real Granite + offline Docker + scripted review + single-file promotion: passed (DISPOSABLE REPOSITORY ONLY)");
+      }
     }
     const deniedApproval = await rpc("tools/call",{name:"lao_review",arguments:{
       workspace_id:managedId,task_id:writeTask,decision:"approved",
       criteria_verified:true,evidence:["Not accepted"],note:"Test",
     }});
     assert.equal(deniedApproval.data.result?.isError,true);
-    assert.equal(existsSync(join(work,"src","fixture.ts")),false);
-    assert.equal(git("status","--porcelain"),"");
+    if (!promotionLive) {
+      assert.equal(existsSync(join(work,"src","fixture.ts")),false);
+      assert.equal(git("status","--porcelain"),"");
+    }
   }
   if (live) console.log("Authenticated MCP + real Granite: task persisted and awaiting review");
 });

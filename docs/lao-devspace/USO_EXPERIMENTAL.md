@@ -113,3 +113,26 @@ da tarefa pode ser consultado com lao_result. Em queda de energia, nao
 repetir a operacao: inspecionar arquivos de backup e o Git manualmente.
 O fluxo nao altera o DevSpace main e nao esta pronto para uso em
 repositorios de producao sem testes adicionais de recovery/concorrencia.
+
+## Prova ponta a ponta de promocao (F4-13, repositorio descartavel)
+
+O teste `src/lao/mcp-http-e2e.test.ts` possui modo **opt-in** que cria
+um Git checkout `feature/*` temporario e executa: OAuth MCP -> Granite
+local -> patch isolado -> Docker offline -> avaliacao declarativa ->
+confirmacao de aprovacao -> promocao de um arquivo -> auditoria -> limpeza.
+
+No CMD Windows, com Ollama/Docker ja em execucao, selecione uma imagem
+**local** com Node, fixada pelo SHA-256 exato (nunca usar `latest`):
+
+```cmd
+cd /d D:\desenvolvimento\lao-devspace
+set "LAO_MCP_LIVE=true"
+set "LAO_MCP_PROMOTION_LIVE=true"
+set "LAO_SANDBOX_NODE_IMAGE=<imagem-local>@sha256:<digest-confirmado>"
+pnpm exec tsx --test src/lao/mcp-http-e2e.test.ts
+```
+
+O smoke recusa execucao sem ambos os flags de teste e um digest de imagem.
+A confirmacao de aprovacao nesse fixture e **roteirizada**, nao equivale a
+uma revisao humana operacional. Nenhum servico WinSW, autostart ou
+instalador e ativado; o DevSpace original permanece intocado.
