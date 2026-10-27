@@ -19,6 +19,8 @@ export interface LaoDashboardOptions {
   sessions?: LaoDashboardSessions;
   /** Optional foreground LAO-only restart. Never controls DevSpace, Ollama or Windows SCM. */
   restartLao?: () => Promise<void>;
+  listModels?: () => Promise<string[]>;
+  selectModel?: (model: unknown) => Promise<"selected" | "not_installed" | "invalid">;
 }
 
 /** Short-lived, read-only browser tickets. The long-lived operator token is never stored in web storage. */
@@ -140,6 +142,17 @@ function json(res: ServerResponse, status: number, data: object): void {
   });
   res.end(JSON.stringify(data));
 }
+async function jsonBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for await (const chunk of req) {
+    const part = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    bytes += part.length;
+    if (bytes > 1024) throw new Error("body_too_large");
+    chunks.push(part);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
 export async function handleLaoDashboard(
   req: IncomingMessage, res: ServerResponse, config: LaoConfig,
   options?: LaoDashboardOptions,
@@ -208,6 +221,44 @@ export async function handleLaoDashboard(
     }
     json(res, 202, { restartScheduled: true });
     setTimeout(() => { void options.restartLao?.().catch(() => undefined); }, 150).unref();
+    return true;
+  }
+  if (path === "/dashboard/api/models") {
+    if (req.method !== "GET" || req.headers.origin || !authorized(req, options)) {
+      json(res, 403, { error: "forbidden" }); return true;
+    }
+    if (!options.listModels) { json(res, 503, { error: "models_unavailable" }); return true; }
+    try {
+      json(res, 200, { models: await options.listModels(), selected: config.defaultModel });
+    } catch {
+      json(res, 503, { error: "ollama_unavailable" });
+    }
+    return true;
+  }
+  if (path === "/dashboard/api/models/select") {
+    const sameOrigin = req.headers.origin === "http://" + req.headers.host &&
+      req.headers["sec-fetch-site"] === "same-origin";
+    const nativeOperator = !req.headers.origin && !req.headers["sec-fetch-site"] &&
+      operatorAuthorized(req, options.token);
+    if (req.method !== "POST" || !((sameOrigin && authorized(req, options)) || nativeOperator)) {
+      json(res, 403, { error: "forbidden" }); return true;
+    }
+    if (!options.selectModel || !req.headers["content-type"]?.startsWith("application/json")) {
+      json(res, 409, { error: "model_selection_unavailable" }); return true;
+    }
+    if (options.listTasks().some(task =>
+      ["preparing", "running", "validating"].includes(task.status))) {
+      json(res, 409, { error: "active_tasks" }); return true;
+    }
+    try {
+      const body = await jsonBody(req);
+      const outcome = await options.selectModel((body as { model?: unknown } | null)?.model);
+      json(res, outcome === "selected" ? 200 : 422, {
+        result: outcome, selected: config.defaultModel,
+      });
+    } catch {
+      json(res, 422, { error: "invalid_model_or_unavailable" });
+    }
     return true;
   }
   if (req.method !== "GET" || req.headers.origin) {

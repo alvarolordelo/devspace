@@ -170,6 +170,16 @@ try {
   if (Object.values(interactions).some(value => value !== true)) {
     throw new Error("Dashboard navigation, disabled controls or layout interaction failed");
   }
+  await evaluate("document.getElementById('model-name').click()");
+  await until(async () => await evaluate(
+    "Boolean(!document.getElementById('model-select').classList.contains('hidden') && " +
+    "!document.getElementById('model-select').disabled && " +
+    "document.getElementById('model-select').options.length > 0)"));
+  const modelsCount = await evaluate("document.getElementById('model-select').options.length");
+  if (!Number.isSafeInteger(modelsCount) || modelsCount < 1) {
+    throw new Error("Local Ollama model combo returned no installed options");
+  }
+  await evaluate("document.getElementById('model-select').classList.add('hidden')");
   const capture = await cmd("Page.captureScreenshot", {
     format: "png", fromSurface: true, captureBeyondViewport: true,
   });
@@ -221,6 +231,7 @@ try {
     navigationChecked: 5, disabledControlsChecked: true, f5PreservesSession: true,
     logoutClearsSession: true, operatorTokenNotStored: true, nativeLaunchAutoLogin: true,
     iconAssetsLoaded: iconContract.totalIcons,
+    modelComboOptionsLoaded: modelsCount,
     noTokenInOutput: true, noSoftwareInstalled: true,
   }));
 } finally {

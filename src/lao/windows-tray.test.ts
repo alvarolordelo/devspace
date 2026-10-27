@@ -44,6 +44,20 @@ test("LAO native action icons are supplied as approved vector-origin image asset
     "Do not regress to OS-dependent font glyphs for approved icons");
 });
 
+test("Windows tray preserves the approved popup and adds model/service interactions", () => {
+  const popup = readFileSync(fileURLToPath(new URL("./windows/lao-popup.ps1", import.meta.url)), "utf8");
+  const trayText = readFileSync(tray, "utf8");
+  const settings = readFileSync(fileURLToPath(new URL("./windows/lao-settings.ps1", import.meta.url)), "utf8");
+  assert.match(popup, /\$modelCombo\.DropDownStyle=\[Windows\.Forms\.ComboBoxStyle\]::DropDownList/);
+  assert.match(trayText, /dashboard\/api\/models\/select/);
+  assert.match(trayText, /function Open-LaoSettings/);
+  assert.match(settings, /Iniciar LAO e Monitor com Windows/);
+  assert.match(settings, /Restart-Service -Name \$service\.Name/);
+  assert.match(settings, /MessageBoxButtons\]::YesNo/);
+  assert.match(settings, /LAO_MANAGED_OLLAMA_SERVICE/);
+  assert.match(settings, /LAO_MANAGED_DEVSPACE_SERVICE/);
+});
+
 test("Windows PowerShell 5.1 entrypoints keep the UTF-8 BOM when non-ASCII labels are present", () => {
   const dirs = [dirname(tray), fileURLToPath(new URL("../../scripts/", import.meta.url))];
   for (const directory of dirs) {

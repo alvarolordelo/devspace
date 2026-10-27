@@ -95,6 +95,8 @@ foreach ($state in @('active','idle','offline','review')) {
     $icons[$state] = [Drawing.Icon]::new($path)
 }
 . (Join-Path $PSScriptRoot 'lao-popup.ps1')
+. (Join-Path $PSScriptRoot 'lao-autostart.ps1')
+. (Join-Path $PSScriptRoot 'lao-settings.ps1')
 if ($CheckOnly) {
     foreach ($icon in $icons.Values) { $icon.Dispose() }
     Write-Output 'LAO tray check passed: Windows STA, WinForms and approved icons available.'
@@ -103,7 +105,14 @@ if ($CheckOnly) {
 if ($UiCheckOnly) {
     $logoPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\docs\lao-devspace\assets\icons\png\lao-logo-64.png'))
     $ui = New-LaoPopup -LogoPath $logoPath
+    $settingsUi = New-LaoSettingsForm
     try {
+        if ($settingsUi.Switch.AccessibleName -ne 'Iniciar LAO e Monitor com Windows' -or
+            $settingsUi.Services.Count -ne 2 -or
+            $settingsUi.Services.Ollama.Text -notmatch 'Ollama' -or
+            $settingsUi.Services.DevSpace.Text -notmatch 'DevSpace') {
+            throw 'Switch and controlled dependency restart settings missing'
+        }
         if ($ui.Form.ClientSize.Width -ne 420 -or $ui.Rows.Count -ne 8 -or
             $ui.Actions.Count -ne 4) {
             throw 'LAO native popup layout contract failed'
@@ -125,6 +134,9 @@ if ($UiCheckOnly) {
             if ($action.Tag -isnot [Drawing.Image]) {
                 throw 'Native action uses a font glyph instead of an approved image asset'
             }
+        }
+        if ($ui.ModelCombo.DropDownStyle -ne [Windows.Forms.ComboBoxStyle]::DropDownList) {
+            throw 'Modelos locais devem usar uma lista de seleção, não texto arbitrário'
         }
         foreach ($state in @('active','offline','review','idle')) {
             $snapshot = [pscustomobject]@{
@@ -218,6 +230,7 @@ if ($UiCheckOnly) {
             uiTextBase64=$uiTextBase64
         } | ConvertTo-Json -Compress
     } finally {
+        $settingsUi.Form.Dispose()
         $ui.Logo.Image.Dispose()
         $ui.Form.Dispose()
         foreach ($asset in $ui.Assets.Values) { $asset.Dispose() }
@@ -279,6 +292,11 @@ $script:uiHeartbeatTicks = 0
 $script:launchTask = $null
 $script:launchTarget = $null
 $script:restartTask = $null
+$script:modelListTask = $null
+$script:modelSaveTask = $null
+$script:modelSaveContent = $null
+$script:modelChanging = $false
+$script:settingsWindow = $null
 
 # A PowerShell Invoke-RestMethod call on a WinForms timer blocks all menu
 # clicks for the duration of its network timeout. HttpClient tasks complete
@@ -461,9 +479,84 @@ function Open-LaoDashboard([string]$section = '') {
         Start-Process $destination | Out-Null
     }
 }
+function Open-LaoSettings {
+    if ($script:settingsWindow -and !$script:settingsWindow.Form.IsDisposed) {
+        $script:settingsWindow.Form.Activate()
+        return
+    }
+    $script:settingsWindow=New-LaoSettingsForm
+    $script:settingsWindow.Form.Add_FormClosed({$this.Dispose()})
+    $script:settingsWindow.Form.Show()
+}
+
+function Open-LaoModelCombo {
+    if (-not $script:popup -or -not $script:dashboardToken -or
+        $script:modelListTask -or $script:modelSaveTask) { return }
+    $script:popup.ModelCombo.Visible=$true
+    $script:popup.ModelCombo.Enabled=$false
+    $script:popup.ModelCombo.Items.Clear()
+    $script:popup.ModelCombo.Items.Add('Consultando modelos locais…') | Out-Null
+    $script:popup.ModelCombo.SelectedIndex=0
+    $script:modelChanging=$true
+    try {
+        $script:modelListTask=$privateClient.GetStringAsync(
+            $script:baseUrl + '/dashboard/api/models')
+    } catch {
+        $script:popup.ModelCombo.Visible=$false
+    }
+}
 
 $timer.Add_Tick({
     $script:uiHeartbeatTicks++
+    if ($script:modelListTask -and $script:modelListTask.IsCompleted) {
+        $task=$script:modelListTask
+        $script:modelListTask=$null
+        try {
+            $models=$task.GetAwaiter().GetResult() | ConvertFrom-Json
+            $names=@($models.models | Where-Object {
+                $_ -is [string] -and $_.Length -gt 0 -and $_.Length -le 200
+            })
+            $script:popup.ModelCombo.Items.Clear()
+            foreach ($name in $names) {
+                $script:popup.ModelCombo.Items.Add([string]$name) | Out-Null
+            }
+            if ($names.Count -eq 0) { throw 'Nenhum modelo local instalado.' }
+            $script:popup.ModelCombo.Enabled=$true
+            if ($names -contains $models.selected) {
+                $script:popup.ModelCombo.SelectedItem=[string]$models.selected
+            } else {
+                $script:popup.ModelCombo.SelectedIndex=-1
+            }
+            $script:modelChanging=$false
+            $script:popup.ModelCombo.DroppedDown=$true
+            $script:popup.ModelCombo.Focus()
+        } catch {
+            $script:popup.ModelCombo.Visible=$false
+            $script:modelChanging=$false
+            [Windows.Forms.MessageBox]::Show(
+                'Não foi possível consultar os modelos do Ollama.',
+                'Modelos locais LAO') | Out-Null
+        }
+    }
+    if ($script:modelSaveTask -and $script:modelSaveTask.IsCompleted) {
+        $task=$script:modelSaveTask
+        $script:modelSaveTask=$null
+        try {
+            $response=$task.GetAwaiter().GetResult()
+            $ok=$response.IsSuccessStatusCode
+            $response.Dispose()
+            if ($script:modelSaveContent) {
+                $script:modelSaveContent.Dispose()
+                $script:modelSaveContent=$null
+            }
+            if (-not $ok) { throw 'Seleção recusada pelo LAO' }
+            $script:nextPollAt=[DateTime]::MinValue
+        } catch {
+            [Windows.Forms.MessageBox]::Show(
+                'Não foi possível salvar o modelo selecionado.',
+                'Modelos locais LAO') | Out-Null
+        }
+    }
     if ($script:restartTask -and $script:restartTask.IsCompleted) {
         $task=$script:restartTask
         $script:restartTask=$null
@@ -518,6 +611,36 @@ $openItem.Add_Click({
     Open-LaoDashboard
 })
 if ($script:popup) {
+    foreach ($field in @('Title','Value')) {
+        $script:popup.Rows.model[$field].Add_Click({ Open-LaoModelCombo })
+    }
+    $script:popup.ModelCombo.Add_SelectedIndexChanged({
+        if ($script:modelChanging -or !$this.Enabled -or $script:modelSaveTask) { return }
+        $name=[string]$this.SelectedItem
+        if (!$name -or $name -eq [string]$script:pollSnapshot.modelConfigured) {
+            $this.Visible=$false
+            return
+        }
+        $this.Visible=$false
+        $content=[Net.Http.StringContent]::new(
+            '{"model":'+(ConvertTo-Json -InputObject $name -Compress)+'}',
+            [Text.Encoding]::UTF8,'application/json')
+        try {
+            $script:modelSaveContent=$content
+            $script:modelSaveTask=$privateClient.PostAsync(
+                $script:baseUrl + '/dashboard/api/models/select',$content)
+        } catch {
+            $content.Dispose()
+            $script:modelSaveContent=$null
+            [Windows.Forms.MessageBox]::Show('Falha ao enviar a escolha do modelo.','LAO DevSpace') | Out-Null
+        }
+    })
+    foreach ($key in @('mcp','ollama')) {
+        $script:popup.Rows[$key].Title.Cursor=[Windows.Forms.Cursors]::Hand
+        $script:popup.Rows[$key].Value.Cursor=[Windows.Forms.Cursors]::Hand
+        $script:popup.Rows[$key].Title.Add_Click({ Open-LaoSettings })
+        $script:popup.Rows[$key].Value.Add_Click({ Open-LaoSettings })
+    }
     $notify.Add_MouseClick({
         if ($_.Button -eq [Windows.Forms.MouseButtons]::Left) {
             Toggle-LaoPopup $script:popup
@@ -558,11 +681,11 @@ if ($script:popup) {
     })
     $script:popup.Actions.settings.Add_Click({
         $script:popup.Form.Hide()
-        Open-LaoDashboard '#configuracoes'
+        Open-LaoSettings
     })
     $script:popup.Settings.Add_Click({
         $script:popup.Form.Hide()
-        Open-LaoDashboard '#configuracoes'
+        Open-LaoSettings
     })
 }
 $copyItem.Add_Click({
@@ -594,6 +717,7 @@ try {
     $privateClient.CancelPendingRequests()
     $publicClient.Dispose()
     $privateClient.Dispose()
+    if ($script:modelSaveContent) { $script:modelSaveContent.Dispose() }
     $notify.Dispose()
     $menu.Dispose()
     $context.Dispose()

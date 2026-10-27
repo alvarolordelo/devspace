@@ -5,6 +5,7 @@ import type { McpRegistrationTarget } from "../mcp-modern-server.js";
 import type { WorkspaceRegistry } from "../workspaces.js";
 import type { LaoConfig } from "./config.js";
 import { LaoOllamaClient } from "./ollama-client.js";
+import { readLaoPreferredModel } from "./model-selection.js";
 import { measureLaoReadiness } from "./health.js";
 import { LaoTaskStore } from "./task-store.js";
 import { LaoReadOnlyRunner } from "./task-runner.js";
@@ -114,7 +115,7 @@ export function registerLaoMcpTools(
       return await withStore(context.stateDir, async (store) => {
         const runner = new LaoReadOnlyRunner(store, context.ollama ?? new LaoOllamaClient(config));
         const task = runner.createTask({
-          workspaceId: workspace_id, model: model ?? config.defaultModel, goal,
+          workspaceId: workspace_id, model: model ?? readLaoPreferredModel(config.defaultModel), goal,
           acceptanceCriteria: acceptance_criteria,
           permissions: { read: true, write: "none", shell: "none" },
           limits: { maxRevisions: 2, maxToolCalls: 1, maxWallSeconds: max_wall_seconds ?? 90 },
@@ -227,7 +228,7 @@ export function registerLaoMcpTools(
         const task = await withStore(context.stateDir, store =>
           new LaoIsolatedWriteRunner(store, context.ollama ?? new LaoOllamaClient(config),
             context.worktreeRoot!).createTask({
-            workspaceId: managed.id, model: model ?? config.defaultModel,
+            workspaceId: managed.id, model: model ?? readLaoPreferredModel(config.defaultModel),
             goal, acceptanceCriteria: acceptance_criteria,
             permissions: { read: true, write: "isolated_worktree",
               shell: "none", allowedWritePaths: normalized },

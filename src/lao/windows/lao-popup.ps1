@@ -153,6 +153,20 @@ function New-LaoPopup {
         $rows[$key]=@{Dot=$symbol;Value=$value;Title=$label}
         $y+=40
     }
+    # Normally hidden: selecting the approved model row opens a real WinForms
+    # dropdown. It never displays a hardcoded/example inventory.
+    $modelCombo=[Windows.Forms.ComboBox]::new()
+    $modelCombo.DropDownStyle=[Windows.Forms.ComboBoxStyle]::DropDownList
+    $modelCombo.Font=[Drawing.Font]::new('Segoe UI',11)
+    $modelCombo.Location=[Drawing.Point]::new(183,83)
+    $modelCombo.Size=[Drawing.Size]::new(211,32)
+    $modelCombo.Visible=$false
+    $modelCombo.IntegralHeight=$true
+    $scroll.Controls.Add($modelCombo)
+    $modelCombo.BringToFront()
+    $rows.model.Value.Cursor=[Windows.Forms.Cursors]::Hand
+    $rows.model.Title.Cursor=[Windows.Forms.Cursors]::Hand
+    $rows.model.Value.AccessibleDescription='Clique para escolher um modelo local do Ollama'
     $card=[Windows.Forms.Panel]::new()
     $card.Location=[Drawing.Point]::new(19,$y+11)
     $card.Size=[Drawing.Size]::new(382,153)
@@ -239,6 +253,7 @@ function New-LaoPopup {
       Rows=$rows;Colors=$colors;Card=$card;CardIcon=$cardIcon;
       CardCaption=$cardCaption;CardTitle=$cardTitle;CardDetails=$cardDetails;
       Actions=$actions;Settings=$settings;IconBox=$iconBox;Freshness=$freshness;
+      ModelCombo=$modelCombo;
       Assets=$assets}
 }
 
@@ -382,6 +397,8 @@ function Resize-LaoPopupContents($popup,[int]$width) {
         $row.Value.Width=[Math]::Max(103,$width-$row.Value.Left-22)
         $row.Title.Width=[Math]::Min(158,[Math]::Max(118,$row.Value.Left-$row.Title.Left-8))
     }
+    $popup.ModelCombo.Left=[Math]::Max(174,$width-238)
+    $popup.ModelCombo.Width=[Math]::Max(140,$width-$popup.ModelCombo.Left-23)
     $popup.Card.Width=$width-38
     $popup.CardCaption.Width=[Math]::Max(170,$popup.Card.Width-91)
     $popup.CardTitle.Width=[Math]::Max(170,$popup.Card.Width-91)

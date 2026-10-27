@@ -4,6 +4,7 @@ import { LaoTaskStore } from "./task-store.js";
 import type { LaoConfig } from "./config.js";
 import { startLaoHealthServer } from "./health-server.js";
 import { summarizeLaoTaskDetails, validateLaoDashboardToken } from "./dashboard.js";
+import { createLaoModelSelection } from "./model-selection.js";
 
 export interface LaoDaemonOptions {
   config: LaoConfig;
@@ -22,6 +23,9 @@ export async function startLaoDaemon(options: LaoDaemonOptions) {
   if (!options.config.enabled) throw new Error("LAO daemon is disabled");
   const token = validateLaoDashboardToken(options.dashboardToken);
   const ready = options.devspaceReady ?? (() => false);
+  const models = createLaoModelSelection(options.config, options.stateDir);
+  // The selected model belongs to the LAO state, not the pinned DevSpace config.
+  // The state directory is created by the task store below; restore afterwards.
   let store: LaoTaskStore;
   // Bind first: a second instance using the same port must not mutate tasks.
   const server = await startLaoHealthServer(options.config, {
@@ -30,6 +34,8 @@ export async function startLaoDaemon(options: LaoDaemonOptions) {
       token, devspaceReady: ready, listTasks: () => store?.list() ?? [],
       taskDetails: id => store ? summarizeLaoTaskDetails(store, id) : null,
       restartLao: options.restartLao,
+      listModels: models.listModels,
+      selectModel: models.selectModel,
     } : undefined,
   });
   let recovered: number;
@@ -38,6 +44,7 @@ export async function startLaoDaemon(options: LaoDaemonOptions) {
     store = new LaoTaskStore(options.stateDir);
     try {
       leaseToken = store.acquireDaemonLease();
+      await models.restore();
       recovered = store.recoverInterrupted();
     } catch (error) {
       if (leaseToken) store.releaseDaemonLease(leaseToken);

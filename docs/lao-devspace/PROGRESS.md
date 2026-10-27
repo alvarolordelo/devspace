@@ -4,6 +4,8 @@
 
 **Design:** popup da bandeja em seu estado de atenção **aprovado visualmente pelo usuário em 27/10**, a partir de captura real do Windows. Não alterar a interface sem novo pedido. Para lacunas operacionais e evidências atuais, consultar [STATUS_FUNCIONAL_20261027.md](STATUS_FUNCIONAL_20261027.md). O bloqueio P0 atual é a conexão MCP não verificada: `devspaceReady` da execução standalone não recebe um probe autenticado.
 
+**Controles solicitados em 27/10:** switch de inicialização automática por usuário, combo com modelos locais do Ollama e controles de reinício de dependências foram acrescentados mantendo a interface principal. Os dois comandos externos só podem ficar habilitados quando houver Windows Services gerenciados, atualmente ausentes nesta máquina. Ver [CONTROLES_INTERATIVOS_20261027.md](CONTROLES_INTERATIVOS_20261027.md).
+
 Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado parcialmente; **[ ]** pendente; **[!]** bloqueado. Nenhuma fase de produto é declarada concluída apenas por possuir arquivos ou testes unitários.
 
 ## Quadro de fases

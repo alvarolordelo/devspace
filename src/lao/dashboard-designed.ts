@@ -48,6 +48,10 @@ h2{font-size:18px;margin:0;letter-spacing:-.25px}.subtitle{font-size:13px;color:
 .tile-icon{width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;
 font-size:22px;color:var(--navy);margin-bottom:8px}
 .tile-icon img{width:24px;height:24px;object-fit:contain}
+.model-choice{cursor:pointer;border-bottom:1px dashed #a5b4c7;display:inline-block}
+.model-choice:focus-visible{outline:2px solid #145edc;border-radius:3px}
+.model-select{width:min(100%,260px);border:1px solid #b5c8e0;border-radius:8px;background:#fff;
+color:#101c31;padding:7px;margin-top:5px;font:inherit}
 .inline-icon{width:20px;height:20px;vertical-align:-4px;margin-right:7px;object-fit:contain}
 .action img{width:18px;height:18px;vertical-align:-4px;margin-right:7px;object-fit:contain}
 .tile-label{font-size:13px;font-weight:700;margin-bottom:9px}
@@ -131,7 +135,7 @@ max-height:430px;overflow:auto;background:#f4f7fb;padding:14px;border-radius:9px
     <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/status.png" alt="" aria-hidden="true"></div><div class="tile-label">LAO Service</div><div class="tile-value"><span id="lao-dot" class="dot"></span><span id="lao-service">Verificando...</span></div></div>
     <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/abrir-painel.png" alt="" aria-hidden="true"></div><div class="tile-label">DevSpace MCP</div><div class="tile-value"><span id="mcp-dot" class="dot"></span><span id="devspace-mcp">Não verificado</span></div></div>
     <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/ollama.png" alt="" aria-hidden="true"></div><div class="tile-label">Ollama</div><div class="tile-value"><span id="ollama-dot" class="dot"></span><span id="ollama-state">Não verificado</span></div></div>
-    <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"></div><div class="tile-label">Modelo padrão</div><div id="model-name" class="tile-value">—</div></div>
+    <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"></div><div class="tile-label">Modelo padrão</div><div id="model-name" class="tile-value model-choice" role="button" tabindex="0" title="Clique para escolher um modelo local" aria-label="Escolher modelo local do Ollama">—</div><select id="model-select" class="model-select hidden" aria-label="Modelos locais instalados"></select></div>
    </div></section>
    <section class="section panel">
     <div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/recursos.png" alt="" aria-hidden="true"> Recursos do sistema</h2><button data-section="configuracoes" class="link" type="button">Ver detalhes</button></div>
@@ -226,6 +230,54 @@ const taskIcon=t=>{
 };
 const percent=(value)=>Number.isFinite(value)?Math.min(100,Math.max(0,value)):null;
 const pctbar=(id,value)=>{$(id).style.width=value===null?"0%":String(value)+"%";};
+async function openModelCombo(){
+ const selector=$("model-select");
+ if(!token)return;
+ selector.classList.remove("hidden");
+ selector.disabled=true;
+ selector.replaceChildren(node("option","", "Consultando Ollama…"));
+ try{
+  const response=await get("/dashboard/api/models");
+  const names=Array.isArray(response.models)?response.models:[];
+  if(!names.length)throw Error("Nenhum modelo local instalado.");
+  selector.replaceChildren();
+  for(const name of names){
+   const option=node("option","",name);option.value=name;
+   selector.appendChild(option);
+  }
+  selector.value=response.selected;
+  selector.disabled=false;
+  selector.focus();
+ }catch(err){
+  selector.classList.add("hidden");
+  $("connection-text").textContent="Modelos: "+err.message;
+ }
+}
+$("model-name").addEventListener("click",openModelCombo);
+$("model-name").addEventListener("keydown",event=>{
+ if(event.key==="Enter"||event.key===" "){event.preventDefault();void openModelCombo();}
+});
+$("model-select").addEventListener("change",async event=>{
+ const model=event.target.value;
+ if(!model)return;
+ event.target.disabled=true;
+ try{
+  const response=await fetch("/dashboard/api/models/select",{
+   method:"POST",credentials:"omit",cache:"no-store",
+   headers:{Authorization:"Bearer "+token,"Content-Type":"application/json"},
+   body:JSON.stringify({model}),
+  });
+  if(!response.ok){
+   const error=(await response.json()).error;
+   throw Error(error==="active_tasks"?"Há tarefas em execução.":"Modelo indisponível ou não instalado.");
+  }
+  $("model-name").textContent=model;
+  $("model-detail").textContent=model;
+  event.target.classList.add("hidden");
+  await refresh();
+ }catch(err){$("connection-text").textContent=err.message;}
+ finally{event.target.disabled=false;}
+});
 function section(name){
  if(!sections.includes(name))return;
  activeSection=name;
