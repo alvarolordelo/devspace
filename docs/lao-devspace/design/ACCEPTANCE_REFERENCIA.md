@@ -50,3 +50,15 @@
 - Para testar o popup atualizado sem instalar serviços: encerrar apenas o monitor antigo pelo menu da bandeja e executar manualmente `scripts/launch-lao-monitor.cmd`. O lançador lê o token local, não o exibe e não altera a inicialização do Windows.
 - Chrome headless com DPR simulado não é validação física de escala do Windows. A verificação obrigatória em Windows 11 e múltiplos monitores permanece aberta.
 - O pipeline GitHub Actions do commit `379b8f6` consta como **success** (run `40554695186`); o commit anterior `c532a18` consta como **failure** (run `40543039502`). Após novo push, validar o pipeline desse novo SHA.
+
+## Sessão do Dashboard e acesso automático — 27/10/2026
+
+- [x] Login manual gera um ticket de sessão de curta duração (8 horas), mantendo somente esse ticket em `sessionStorage` da aba: **F5 não pede novamente o token principal**.
+- [x] Logout remove o ticket do navegador e o revoga no daemon. Sessões inválidas ou expiradas exigem nova autenticação.
+- [x] O token principal não é incluído em URLs, armazenamento do navegador, logs ou arquivos do projeto.
+- [x] Ao clicar em **Abrir painel** no Tray com o token local carregado, o monitor solicita ao daemon uma autorização de abertura com vida curta (15 segundos, uso único), antes de iniciar o navegador. O browser resgata o ticket no próprio host, sem segredos na URL.
+- [ ] Confirmação visual pelo usuário do monitor reiniciado e do acesso automático no seu navegador Windows real.
+
+**Testes executados:** 104 testes direcionados/gerais do LAO (103 aprovados, 1 ignorado por limitação do Windows, nenhum falhou); Chrome CDP autenticado em 100%, 125% e 150% com login inicial, F5 mantendo a sessão, logout limpando o ticket e abertura automática simulada a partir de uma autorização nativa (sem token na URL). Instância de teste na porta 7888, independente da porta 7877 já em uso. A aplicação que já estava executando em 7877 continua com o código carregado anteriormente; precisa de reinício controlado do **LAO**, sem tocar no DevSpace original, para carregar a alteração nesta porta.
+
+**Segurança:** a liberação automática da bandeja é temporária e destinada exclusivamente ao host loopback. Ações que escrevem arquivos ou gerenciam serviços continuam bloqueadas ou exigem aprovação independente. O ticket de sessão dá acesso **somente às mesmas APIs de leitura** do Dashboard. A extensão ainda pressupõe um Windows local confiável: um processo malicioso com acesso ao mesmo usuário precisa ser tratado no sistema operacional. Não se instala serviço, não se adiciona auto-start e não se modifica o DevSpace original.

@@ -219,6 +219,8 @@ $script:nextPollAt = [DateTime]::MinValue
 $script:pollSnapshot = $null
 $script:asyncResult = $null
 $script:uiHeartbeatTicks = 0
+$script:launchTask = $null
+$script:launchTarget = $null
 
 # A PowerShell Invoke-RestMethod call on a WinForms timer blocks all menu
 # clicks for the duration of its network timeout. HttpClient tasks complete
@@ -377,8 +379,39 @@ function Update-LaoTray($snapshot) {
         $script:previousTasksAuthenticated = $snapshot.tasksAuthenticated
 }
 
+function Open-LaoDashboard([string]$section = '') {
+    $destination = $script:baseUrl + '/dashboard' + $section
+    if (-not $script:dashboardToken) {
+        # The dashboard will offer normal manual login.
+        Start-Process $destination | Out-Null
+        return
+    }
+    if ($script:launchTask) { return }
+    $script:launchTarget = $destination
+    try {
+        # Non-blocking one-use session grant. Never place a credential in the URL.
+        $script:launchTask = $privateClient.PostAsync(
+            $script:baseUrl + '/dashboard/api/session/arm', [Net.Http.HttpContent]$null)
+    } catch {
+        $script:launchTask = $null
+        Start-Process $destination | Out-Null
+    }
+}
+
 $timer.Add_Tick({
     $script:uiHeartbeatTicks++
+    if ($script:launchTask -and $script:launchTask.IsCompleted) {
+        $launch = $script:launchTask
+        $script:launchTask = $null
+        try {
+            $reply = $launch.GetAwaiter().GetResult()
+            $reply.Dispose()
+        } catch { }
+        # Whether the grant succeeds or fails, open the dashboard; manual login
+        # remains available when the daemon is offline or running an older build.
+        try { Start-Process $script:launchTarget | Out-Null } catch { }
+        $script:launchTarget = $null
+    }
     try {
         if ($script:pollStage -ne 'none') {
             Advance-LaoAsyncPoll
@@ -399,7 +432,7 @@ $timer.Add_Tick({
     }
 })
 $openItem.Add_Click({
-    Start-Process ($script:baseUrl + '/dashboard') | Out-Null
+    Open-LaoDashboard
 })
 if ($script:popup) {
     $notify.Add_MouseClick({
@@ -409,23 +442,23 @@ if ($script:popup) {
     })
     $script:popup.Actions.dashboard.Add_Click({
         $script:popup.Form.Hide()
-        Start-Process ($script:baseUrl + '/dashboard') | Out-Null
+        Open-LaoDashboard
     })
     $script:popup.Actions.context.Add_Click({
         $script:popup.Form.Hide()
-        Start-Process ($script:baseUrl + '/dashboard#tarefas') | Out-Null
+        Open-LaoDashboard '#tarefas'
     })
     $script:popup.Actions.logs.Add_Click({
         $script:popup.Form.Hide()
-        Start-Process ($script:baseUrl + '/dashboard#logs') | Out-Null
+        Open-LaoDashboard '#logs'
     })
     $script:popup.Actions.settings.Add_Click({
         $script:popup.Form.Hide()
-        Start-Process ($script:baseUrl + '/dashboard#configuracoes') | Out-Null
+        Open-LaoDashboard '#configuracoes'
     })
     $script:popup.Settings.Add_Click({
         $script:popup.Form.Hide()
-        Start-Process ($script:baseUrl + '/dashboard#configuracoes') | Out-Null
+        Open-LaoDashboard '#configuracoes'
     })
 }
 $copyItem.Add_Click({

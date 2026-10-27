@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { LaoConfig } from "./config.js";
 import { measureLaoReadiness } from "./health.js";
-import { handleLaoDashboard, type LaoDashboardOptions } from "./dashboard.js";
+import { createLaoDashboardSessions, handleLaoDashboard, type LaoDashboardOptions } from "./dashboard.js";
 
 /** Explicitly started, loopback-only health listener. Not installed as a service. */
 export async function startLaoHealthServer(
@@ -13,9 +13,12 @@ export async function startLaoHealthServer(
   if (!Number.isSafeInteger(options.port) || options.port < 0 || options.port > 65535) {
     throw new RangeError("Invalid health port");
   }
+  const dashboard = options.dashboard ? {
+    ...options.dashboard, sessions: createLaoDashboardSessions(),
+  } : undefined;
   const server = createServer(async (req, res) => {
     try {
-      if (await handleLaoDashboard(req, res, config, options.dashboard)) return;
+      if (await handleLaoDashboard(req, res, config, dashboard)) return;
     } catch {
       res.writeHead(503, { "content-type": "application/json", "cache-control": "no-store" });
       res.end(JSON.stringify({ error: "dashboard_unavailable" }));

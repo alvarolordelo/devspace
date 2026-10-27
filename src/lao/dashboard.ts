@@ -16,6 +16,59 @@ export interface LaoDashboardOptions {
   listTasks: () => LaoTask[];
   taskDetails?: (id: string) => ReturnType<typeof summarizeLaoTaskDetails> | null;
   devspaceReady: () => boolean;
+  sessions?: LaoDashboardSessions;
+}
+
+/** Short-lived, read-only browser tickets. The long-lived operator token is never stored in web storage. */
+export interface LaoDashboardSessions {
+  issue: () => { sessionToken: string; expiresAt: string };
+  verify: (ticket: string) => boolean;
+  revoke: (ticket: string) => void;
+  armLocalLaunch: () => void;
+  claimLocalLaunch: () => { sessionToken: string; expiresAt: string } | null;
+}
+export function createLaoDashboardSessions(): LaoDashboardSessions {
+  const tickets = new Map<string, number>();
+  const ttl = 8 * 60 * 60 * 1000;
+  let launchGrantExpiresAt = 0;
+  const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+  const prune = () => {
+    const now = Date.now();
+    for (const [key, expires] of tickets) if (expires <= now) tickets.delete(key);
+  };
+  return {
+    issue() {
+      prune();
+      // A bounded table avoids memory exhaustion if the operator repeatedly signs in.
+      if (tickets.size >= 128) tickets.delete(tickets.keys().next().value!);
+      const sessionToken = randomBytes(32).toString("base64url");
+      const expires = Date.now() + ttl;
+      tickets.set(digest(sessionToken), expires);
+      return { sessionToken, expiresAt: new Date(expires).toISOString() };
+    },
+    verify(ticket) {
+      if (!/^[A-Za-z0-9_-]{43}$/.test(ticket)) return false;
+      const key = digest(ticket);
+      const expires = tickets.get(key);
+      if (!expires) return false;
+      if (expires <= Date.now()) { tickets.delete(key); return false; }
+      return true;
+    },
+    revoke(ticket) { tickets.delete(digest(ticket)); },
+    armLocalLaunch() {
+      // Only the native tray with the operator credential can create this grant.
+      // It is short-lived, single-use and never placed in a browser URL.
+      launchGrantExpiresAt = Date.now() + 15_000;
+    },
+    claimLocalLaunch() {
+      if (!launchGrantExpiresAt || Date.now() >= launchGrantExpiresAt) {
+        launchGrantExpiresAt = 0;
+        return null;
+      }
+      launchGrantExpiresAt = 0;
+      return this.issue();
+    },
+  };
 }
 
 /** Never return goals, prompts, patch bodies, test logs, review notes or secrets. */
@@ -59,13 +112,22 @@ export function validateLaoDashboardToken(token: string | undefined): string | u
   }
   return token;
 }
-function authorized(req: IncomingMessage, token: string): boolean {
+function bearerToken(req: IncomingMessage): string | null {
   const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) return false;
+  if (!header?.startsWith("Bearer ")) return null;
   const supplied = header.slice(7);
-  if (!supplied.length || supplied.length > 256) return false;
+  if (!supplied.length || supplied.length > 256) return null;
+  return supplied;
+}
+function operatorAuthorized(req: IncomingMessage, token: string): boolean {
+  const supplied = bearerToken(req);
+  if (!supplied) return false;
   const digest = (s: string) => createHash("sha256").update(s).digest();
   return timingSafeEqual(digest(supplied), digest(token));
+}
+function authorized(req: IncomingMessage, options: LaoDashboardOptions): boolean {
+  return operatorAuthorized(req, options.token) ||
+    (options.sessions?.verify(bearerToken(req) ?? "") ?? false);
 }
 function json(res: ServerResponse, status: number, data: object): void {
   res.writeHead(status, {
@@ -84,7 +146,48 @@ export async function handleLaoDashboard(
   if (!path?.startsWith("/dashboard")) return false;
   if (!options) { json(res, 404, { error: "not_found" }); return true; }
   if (!/^(127\.0\.0\.1|localhost):\d{1,5}$/.test(req.headers.host ?? "") ||
-      req.headers.origin || req.method !== "GET" || req.url !== path) {
+      req.url !== path) {
+    json(res, 403, { error: "forbidden" }); return true;
+  }
+  if (path === "/dashboard/api/session") {
+    // Only this authenticated same-origin POST can create a browser session.
+    // Avoid cookies and keep the operator secret out of browser storage.
+    if (req.method === "POST" &&
+        req.headers.origin === "http://" + req.headers.host &&
+        operatorAuthorized(req, options.token) && options.sessions) {
+      json(res, 200, options.sessions.issue());
+    } else if (req.method === "DELETE" &&
+        req.headers.origin === "http://" + req.headers.host &&
+        options.sessions?.verify(bearerToken(req) ?? "")) {
+      options.sessions.revoke(bearerToken(req)!);
+      json(res, 200, { revoked: true });
+    } else {
+      json(res, 403, { error: "forbidden" });
+    }
+    return true;
+  }
+  if (path === "/dashboard/api/session/arm") {
+    if (req.method === "POST" && !req.headers.origin &&
+        operatorAuthorized(req, options.token) && options.sessions) {
+      options.sessions.armLocalLaunch();
+      json(res, 200, { armed: true });
+    } else {
+      json(res, 403, { error: "forbidden" });
+    }
+    return true;
+  }
+  if (path === "/dashboard/api/session/claim") {
+    const sameOrigin = req.headers.origin === "http://" + req.headers.host &&
+      req.headers["sec-fetch-site"] === "same-origin";
+    if (req.method !== "POST" || !sameOrigin || !options.sessions) {
+      json(res, 403, { error: "forbidden" });
+    } else {
+      const session = options.sessions.claimLocalLaunch();
+      json(res, session ? 200 : 403, session ?? { error: "not_armed" });
+    }
+    return true;
+  }
+  if (req.method !== "GET" || req.headers.origin) {
     json(res, 403, { error: "forbidden" }); return true;
   }
   if (path === "/dashboard") {
@@ -120,7 +223,7 @@ export async function handleLaoDashboard(
       path !== "/dashboard/api/metrics" && !detailMatch) {
     json(res, 404, { error: "not_found" }); return true;
   }
-  if (!authorized(req, options.token)) {
+  if (!authorized(req, options)) {
     json(res, 401, { error: "unauthorized" }); return true;
   }
   if (path === "/dashboard/api/metrics") {

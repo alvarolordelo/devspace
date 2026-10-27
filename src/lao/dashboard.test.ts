@@ -159,6 +159,69 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
   } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
 });
 
+test("dashboard restores a browser session after F5, logs out and only allows native one-use launch grants", async () => {
+  const server = await startLaoHealthServer(cfg, {
+    port: 0, devspaceReady: () => false,
+    dashboard: { token, listTasks: () => [], devspaceReady: () => false },
+  });
+  try {
+    const url = "http://127.0.0.1:" + server.port;
+    const origin = { Origin: url };
+    const operator = { Authorization: "Bearer " + token };
+    const sessionUrl = url + "/dashboard/api/session";
+    assert.equal((await fetch(sessionUrl, { method: "POST", headers: operator })).status, 403,
+      "browser login must be same-origin");
+    assert.equal((await fetch(sessionUrl, { method: "POST", headers: {
+      ...origin, Authorization: "Bearer invalid",
+    } })).status, 403);
+    const loggedIn = await fetch(sessionUrl, { method: "POST", headers: { ...origin, ...operator } });
+    assert.equal(loggedIn.status, 200);
+    const session = await loggedIn.json() as { sessionToken: string; expiresAt: string };
+    assert.equal(session.sessionToken.length, 43);
+    assert.notEqual(session.sessionToken, token, "no operator credential in session storage");
+    assert.ok(Date.parse(session.expiresAt) > Date.now());
+    assert.equal((await fetch(url + "/dashboard/api/status", {
+      headers: { Authorization: "Bearer " + session.sessionToken },
+    })).status, 200, "session ticket survives HTML reloads");
+    assert.equal((await fetch(sessionUrl, { method: "DELETE", headers: {
+      ...origin, Authorization: "Bearer " + session.sessionToken,
+    } })).status, 200);
+    assert.equal((await fetch(url + "/dashboard/api/tasks", {
+      headers: { Authorization: "Bearer " + session.sessionToken },
+    })).status, 401, "logout invalidates server-side session");
+
+    const arm = url + "/dashboard/api/session/arm";
+    const claim = url + "/dashboard/api/session/claim";
+    assert.equal((await fetch(arm, { method: "POST", headers: origin })).status, 403);
+    assert.equal((await fetch(arm, { method: "POST", headers: { ...origin, ...operator } })).status, 403);
+    assert.equal((await fetch(claim, { method: "POST", headers: {
+      ...origin, "Sec-Fetch-Site": "same-origin",
+    } })).status, 403, "no automatic session without an explicit tray launch");
+    assert.equal((await fetch(arm, { method: "POST", headers: operator })).status, 200);
+    assert.equal((await fetch(claim, { method: "POST", headers: {
+      Origin: "http://untrusted.example", "Sec-Fetch-Site": "cross-site",
+    } })).status, 403, "other origins cannot consume a tray grant");
+    assert.equal((await fetch(claim, { method: "POST", headers: origin })).status, 403,
+      "missing browser fetch-metadata cannot consume a grant");
+    const launched = await fetch(claim, { method: "POST", headers: {
+      ...origin, "Sec-Fetch-Site": "same-origin",
+    } });
+    assert.equal(launched.status, 200);
+    const launchSession = await launched.json() as { sessionToken: string };
+    assert.notEqual(launchSession.sessionToken, token);
+    assert.equal((await fetch(claim, { method: "POST", headers: {
+      ...origin, "Sec-Fetch-Site": "same-origin",
+    } })).status, 403, "a launch grant must be single-use");
+    assert.equal((await fetch(url + "/dashboard/api/metrics", {
+      headers: { Authorization: "Bearer " + launchSession.sessionToken },
+    })).status, 200);
+    assert.equal((await fetch(arm, { method: "GET", headers: operator })).status, 403);
+    assert.equal((await fetch(sessionUrl + "?token=" + token, {
+      method: "POST", headers: { ...origin, ...operator },
+    })).status, 403, "no query-string credentials");
+  } finally { await server.close(); }
+});
+
 test("task detail redacts goals, review notes, raw patches and model output", async () => {
   const dir = mkdtempSync(join(tmpdir(), "lao-detail-"));
   const store = new LaoTaskStore(dir);

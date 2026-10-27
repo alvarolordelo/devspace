@@ -100,7 +100,7 @@ max-height:430px;overflow:auto;background:#f4f7fb;padding:14px;border-radius:9px
   <div class="brand-row"><img src="/dashboard/assets/logo.png" alt="Marca LAO DevSpace" width="54" height="54">
   <div><h1>LAO DevSpace</h1><span class="muted">Painel de status · acesso local</span></div></div>
   <h2>Autenticação</h2>
-  <p class="muted">Informe o token configurado no daemon. Ele permanece apenas nesta aba e não é enviado na URL.</p>
+  <p class="muted">Informe o token uma vez. A sessão desta aba permanece ativa ao atualizar com F5 (até 8 horas), sem salvar o token principal no navegador.</p>
   <form id="form"><input id="token" aria-label="Token local" type="password" autocomplete="off" required placeholder="Token local"><button type="submit">Entrar</button></form>
   <p id="message" class="error" role="alert"></p>
  </div>
@@ -184,6 +184,28 @@ max-height:430px;overflow:auto;background:#f4f7fb;padding:14px;border-radius:9px
 "use strict";
 const $=id=>document.getElementById(id);
 let token="",timer=null,loadedTasks=[],activeSection="status";
+const sessionKey="lao-dashboard-session-v1";
+function storeSession(ticket){
+ try{sessionStorage.setItem(sessionKey,JSON.stringify(ticket));}catch{}
+}
+function clearSession(){
+ try{sessionStorage.removeItem(sessionKey);}catch{}
+}
+function loginScreen(message=""){
+ clearInterval(timer);timer=null;token="";loadedTasks=[];
+ clearSession();
+ $("detail").textContent="";
+ $("detail-panel").classList.add("hidden");
+ $("login").classList.remove("hidden");$("content").classList.add("hidden");
+ $("connection-text").textContent="Acesso restrito";$("message").textContent=message;
+}
+function acceptSession(session){
+ if(!session || !/^[A-Za-z0-9_-]{43}$/.test(session.sessionToken) ||
+    Date.parse(session.expiresAt) <= Date.now())return false;
+ token=session.sessionToken;
+ storeSession({sessionToken:token,expiresAt:session.expiresAt});
+ return true;
+}
 const sections=["status","tarefas","modelos","logs","configuracoes"];
 const names={status:"Painel de status",tarefas:"Tarefas",modelos:"Modelos locais",logs:"Eventos e logs",configuracoes:"Configurações"};
 const date=s=>{const d=new Date(s);return Number.isNaN(d.getTime())?"—":d.toLocaleString("pt-BR");};
@@ -256,7 +278,7 @@ function renderEvents(){
 }
 async function get(path){
  const r=await fetch(path,{cache:"no-store",credentials:"omit",headers:{Authorization:"Bearer "+token}});
- if(!r.ok)throw Error(r.status===401?"Token inválido":"Consulta indisponível");
+ if(!r.ok)throw Error(r.status===401?"Sessão expirada ou inválida":"Consulta indisponível");
  return r.json();
 }
 async function showDetails(id){
@@ -315,6 +337,9 @@ async function refresh(){
    section(location.hash.slice(1));
   }
  }catch(err){
+  if(err.message==="Sessão expirada ou inválida"){
+   loginScreen("A sessão expirou. Entre novamente.");return;
+  }
   $("connection").className="pill bad";$("connection-text").textContent="Conexão indisponível";
   if(!$("login").classList.contains("hidden"))$("message").textContent=err.message;
   else{
@@ -335,18 +360,58 @@ async function refresh(){
  }
 }
 $("form").addEventListener("submit",async e=>{
- e.preventDefault();clearInterval(timer);token=$("token").value;$("token").value="";
- await refresh();
- if(!$("content").classList.contains("hidden"))timer=setInterval(refresh,10000);
+ e.preventDefault();
+ const operatorToken=$("token").value;
+ $("token").value="";
+ $("message").textContent="";
+ try{
+  const response=await fetch("/dashboard/api/session",{
+   method:"POST",cache:"no-store",credentials:"omit",
+   headers:{Authorization:"Bearer "+operatorToken},
+  });
+  if(!response.ok)throw Error(response.status===403?"Token inválido":"Autenticação indisponível");
+  if(!acceptSession(await response.json()))throw Error("Sessão inválida");
+  await refresh();
+  if(!$("content").classList.contains("hidden"))timer=setInterval(refresh,10000);
+ }catch(err){$("message").textContent=err.message;}
 });
 $("filter").addEventListener("change",renderTasks);
 window.addEventListener("hashchange",()=>{if(sections.includes(location.hash.slice(1)))section(location.hash.slice(1));});
 $("close-detail").addEventListener("click",()=>$("detail-panel").classList.add("hidden"));
 $("logout").addEventListener("click",()=>{
- clearInterval(timer);token="";loadedTasks=[];$("detail").textContent="";
- $("detail-panel").classList.add("hidden");$("login").classList.remove("hidden");$("content").classList.add("hidden");
- $("connection-text").textContent="Acesso restrito";$("message").textContent="";
+ const oldTicket=token;
+ loginScreen();
+ if(oldTicket)void fetch("/dashboard/api/session",{
+  method:"DELETE",cache:"no-store",credentials:"omit",
+  headers:{Authorization:"Bearer "+oldTicket},
+ }).catch(()=>{});
 });
+async function restore(){
+ try{
+  const saved=JSON.parse(sessionStorage.getItem(sessionKey)||"null");
+  if(saved && acceptSession(saved)){
+   await refresh();
+   // A temporary API outage must not destroy a still-valid browser session.
+   // A 401 clears token through loginScreen; other failures retain the ticket.
+   if(token){
+    timer=setInterval(refresh,10000);
+    return;
+   }
+  }
+ }catch{}
+ clearSession();
+ // A native LAO tray click can approve exactly one short-lived browser launch.
+ try{
+  const response=await fetch("/dashboard/api/session/claim",{
+   method:"POST",cache:"no-store",credentials:"omit",
+  });
+  if(response.ok && acceptSession(await response.json())){
+   await refresh();
+   if(!$("content").classList.contains("hidden"))timer=setInterval(refresh,10000);
+  }
+ }catch{}
+}
+void restore();
 })();
 </script></body></html>`.replaceAll("__NONCE__",nonce);
 }

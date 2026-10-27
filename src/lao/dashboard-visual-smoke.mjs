@@ -21,7 +21,7 @@ if (![1,1.25,1.5].includes(scale)) throw new Error("Unsupported QA DPI scale");
 const url = new URL(args[1]);
 if (url.protocol !== "http:" || !["localhost", "127.0.0.1"].includes(url.hostname) ||
     url.pathname !== "/dashboard" || url.search || url.hash ||
-    url.username || url.password || !["", "80", "7877", "7878"].includes(url.port)) {
+    url.username || url.password || !["", "80", "7877", "7878", "7888"].includes(url.port)) {
   throw new Error("Visual smoke accepts only the local LAO dashboard URL");
 }
 const [tokenFile, chrome, output] = [args[3], args[5], args[7]].map(path => resolve(path));
@@ -121,6 +121,22 @@ try {
       layout.logo !== true || layout.tokenDisplayed !== false) {
     throw new Error("Approved dashboard DOM/visual contract failed");
   }
+  const saved = JSON.parse(await evaluate("JSON.stringify((() => {" +
+    "const item=JSON.parse(sessionStorage.getItem('lao-dashboard-session-v1')||'null');" +
+    "return {ticketPresent:typeof item?.sessionToken==='string'&&item.sessionToken.length===43," +
+    "operatorTokenStored:item?.sessionToken===" + JSON.stringify(secret) + "," +
+    "loginHidden:document.getElementById('login').classList.contains('hidden')};" +
+    "})())"));
+  if (!saved.ticketPresent || saved.operatorTokenStored || !saved.loginHidden) {
+    throw new Error("Browser ticket not created or operator token improperly persisted");
+  }
+  // Actual CDP reload (equivalent to F5) must preserve the authenticated view.
+  await cmd("Page.reload", { ignoreCache: true });
+  await sleep(300);
+  await until(async () =>
+    await evaluate("Boolean(document.getElementById('content') && " +
+      "!document.getElementById('content').classList.contains('hidden') && " +
+      "document.getElementById('login').classList.contains('hidden'))"));
   const interactions = JSON.parse(await evaluate(`JSON.stringify((() => {
     const result = {};
     for (const name of ['status','tarefas','modelos','logs','configuracoes']) {
@@ -153,10 +169,41 @@ try {
   if (!mobile.navVisible || mobile.documentWidth > mobile.width + 1) {
     throw new Error("Approved dashboard overflows the 390px mobile viewport");
   }
+  const loggedOut = JSON.parse(await evaluate("JSON.stringify((() => {" +
+    "document.getElementById('logout').click();" +
+    "return {loginVisible:!document.getElementById('login').classList.contains('hidden')," +
+    "ticketRemoved:sessionStorage.getItem('lao-dashboard-session-v1')===null};" +
+    "})())"));
+  if (!loggedOut.loginVisible || !loggedOut.ticketRemoved) {
+    throw new Error("Dashboard logout did not clear the browser ticket");
+  }
+  // Simulate the tray's authenticated one-use local arm, without putting any
+  // secret in the URL or injecting the operator credential into the page.
+  const armed = await fetch(url.origin + "/dashboard/api/session/arm", {
+    method: "POST", headers: { Authorization: "Bearer " + secret },
+    cache: "no-store",
+  });
+  if (!armed.ok) throw new Error("Native automatic launch grant failed");
+  await cmd("Page.reload", { ignoreCache: true });
+  await sleep(300);
+  await until(async () =>
+    await evaluate("Boolean(document.getElementById('content') && " +
+      "!document.getElementById('content').classList.contains('hidden') && " +
+      "document.getElementById('login').classList.contains('hidden'))"));
+  const autoSession = JSON.parse(await evaluate("JSON.stringify((() => {" +
+    "const item=JSON.parse(sessionStorage.getItem('lao-dashboard-session-v1')||'null');" +
+    "return {ticketPresent:typeof item?.sessionToken==='string'&&item.sessionToken.length===43," +
+    "urlClean:!location.search&&!location.href.includes('token=')};" +
+    "})())"));
+  if (!autoSession.ticketPresent || !autoSession.urlClean) {
+    throw new Error("Automatic tray launch did not authenticate without a URL credential");
+  }
+  await evaluate("document.getElementById('logout').click()");
   console.log(JSON.stringify({
     visualSmoke: "passed", dashboardReady: true, nav: layout.nav,
     statusCards: layout.cards, scale, mobileWidth: mobile.width, screenshot: output,
-    navigationChecked: 5, disabledControlsChecked: true,
+    navigationChecked: 5, disabledControlsChecked: true, f5PreservesSession: true,
+    logoutClearsSession: true, operatorTokenNotStored: true, nativeLaunchAutoLogin: true,
     noTokenInOutput: true, noSoftwareInstalled: true,
   }));
 } finally {
