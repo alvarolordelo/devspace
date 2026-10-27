@@ -108,6 +108,10 @@ $xml = @"
   <arguments>&quot;$(Xml $launcher)&quot;</arguments>
   <workingdirectory>$(Xml $release)</workingdirectory>
   <startmode>Manual</startmode>
+  <serviceaccount>
+    <username>NT AUTHORITY\LocalService</username>
+  </serviceaccount>
+  <stoptimeout>30sec</stoptimeout>
   <env name="DEVSPACE_LAO_ENABLED" value="true"/>
   <env name="DEVSPACE_LAO_STATE_DIR" value="%ProgramData%\LAODevSpace\state"/>
   <env name="DEVSPACE_LAO_PORT" value="7877"/>
@@ -130,8 +134,10 @@ $receipt = [ordered]@{
   installed = $false
   serviceStarted = $false
   autostartEnabled = $false
+  serviceAccount = 'NT AUTHORITY\LocalService'
+  stopTimeout = '30sec'
   launcher = $launcher
-  instruction = 'Require separate operational authorization, approved service account and backup before installing.'
+  instruction = 'Requires separate authorization, explicit state-directory ACL for LocalService, verified wrapper version, backup and disposable Windows operational testing before installation.'
 }
 [IO.File]::WriteAllText((Join-Path $target 'SERVICE_PLAN.json'),
   ($receipt | ConvertTo-Json -Depth 4), [Text.UTF8Encoding]::new($false))

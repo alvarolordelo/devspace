@@ -137,9 +137,15 @@ test("offline portable daemon candidate has fixed native runtime and isolated SQ
       assert.equal(plan.installed, false);
       assert.equal(plan.serviceStarted, false);
       assert.equal(plan.autostartEnabled, false);
+      assert.equal(plan.serviceAccount, "NT AUTHORITY\\LocalService");
+      assert.equal(plan.stopTimeout, "30sec");
       const xml = readFileSync(join(serviceDir, "LAODevSpaceService.xml"), "utf8");
       assert.match(xml, /<startmode>Manual<\/startmode>/);
       assert.match(xml, /LAODevSpace/);
+      assert.match(xml, /<username>NT AUTHORITY\\LocalService<\/username>/);
+      assert.match(xml, /<stoptimeout>30sec<\/stoptimeout>/);
+      assert.doesNotMatch(xml, /<username>LocalSystem<\/username>/);
+      assert.doesNotMatch(xml, /<password>/);
       assert.doesNotMatch(xml, /LAO_WRITE_APPROVAL_ENABLED|LAO_WRITE_PROMOTION_ENABLED/);
       assert.ok(readFileSync(join(serviceDir, "LAODevSpaceService.exe")).equals(wrapperBytes));
       const rejectedParams = [...params];

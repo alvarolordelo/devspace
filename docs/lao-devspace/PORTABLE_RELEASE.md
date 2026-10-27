@@ -43,6 +43,13 @@ origem/licenca e fornecer SHA-256 exato. Exemplo de uso:
 
 Este comando SOMENTE gera pasta nova contendo LAODevSpaceService.exe,
 LAODevSpaceService.xml e SERVICE_PLAN.json, com startmode Manual.
+O XML fixa explicitamente `NT AUTHORITY\LocalService` (WinSW assume
+LocalSystem, privilegiado, quando nao configurado) e timeout de parada
+de 30 segundos para permitir o encerramento do daemon Node. O script
+**nao cria ACLs**: antes de qualquer instalacao futura, um operador
+devera provisionar `%ProgramData%\LAODevSpace\state` e conceder somente
+ao `LocalService` as permissoes minimas de leitura/escrita nesse estado,
+alem de validar acesso aos demais caminhos necessarios em VM descartavel.
 Valida manifest, SHA-256 do WinSW, Node ABI e SQLite nativo. Nunca
 chama sc.exe, WinSW install, Start-Service ou schtasks, nunca
 modifica boot, registro, credenciais ou servicos do Windows.
