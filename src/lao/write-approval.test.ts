@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -108,7 +108,11 @@ test("explicitly reviewed verified write is approved in SQLite, never promoted t
         if (id !== workspace.id) throw new Error("Unknown workspace");
         return workspace;
       },
-      openWorkspace: async () => { throw new Error("No new worktree expected"); },
+      openWorkspace: async (input: { path: string; mode: string }) => {
+        assert.equal(input.path, source);
+        assert.equal(input.mode, "checkout");
+        return { workspace: { id: "ws_source", root: source, mode: "checkout" } };
+      },
     };
     const registrations = new Map<string, (args: any) => Promise<any>>();
     const registerTool = (name: string, _config: unknown, callback: (args: any) => Promise<any>) => {
@@ -161,6 +165,51 @@ test("explicitly reviewed verified write is approved in SQLite, never promoted t
     assert.equal(git(source, "show", "HEAD:src/feature.ts"), "export const feature = false;");
     assert.equal(git(managed, "status", "--porcelain").includes("src/feature.ts"), true);
     assert.throws(() => store.approveVerifiedWrite(review, assessment, lease), /Invalid/);
+
+    const beforePromotionFlag = process.env.LAO_WRITE_PROMOTION_ENABLED;
+    try {
+      delete process.env.LAO_WRITE_PROMOTION_ENABLED;
+      registrations.clear();
+      registerLaoMcpTools({ registerTool } as unknown as Pick<McpRegistrationTarget, "registerTool">,
+        config, { stateDir, worktreeRoot: managedRoot, workspaces: registry as any });
+      assert.equal(registrations.has("lao_write_promote"), false);
+      process.env.LAO_WRITE_PROMOTION_ENABLED = "true";
+      registerLaoMcpTools({ registerTool } as unknown as Pick<McpRegistrationTarget, "registerTool">,
+        config, { stateDir, worktreeRoot: managedRoot, workspaces: registry as any });
+      const promote = registrations.get("lao_write_promote");
+      assert.ok(promote);
+      const args = {
+        workspace_id: workspace.id, task_id: created.id,
+        confirmation: "PROMOTE " + created.id + " " + changed.evidence.contentFingerprint,
+      };
+      assert.equal((await promote({ ...args, confirmation: "PROMOTE anything" })).isError, true);
+      assert.equal(git(source, "status", "--porcelain"), "");
+
+      writeFileSync(join(source, "src", "feature.ts"), "export const external = true;\n");
+      assert.equal((await promote(args)).isError, true,
+        "Dirty source checkout cannot receive a patch");
+      writeFileSync(join(source, "src", "feature.ts"), "export const feature = false;\n");
+      writeFileSync(join(managed, "src", "feature.ts"), "export const altered = true;\n");
+      assert.equal((await promote(args)).isError, true,
+        "Edited approved worktree cannot be promoted");
+      writeFileSync(join(managed, "src", "feature.ts"), "export const feature = true;\n");
+
+      const result = await promote(args);
+      assert.equal(result.isError, undefined);
+      assert.deepEqual(result.structuredContent, {
+        taskId: created.id, path: "src/feature.ts", action: "updated",
+        sourceModified: true, committed: false, merged: false, backupRetained: true,
+      });
+      assert.equal(readFileSync(join(source, "src", "feature.ts"), "utf8"),
+        "export const feature = true;\n");
+      assert.equal(git(source, "show", "HEAD:src/feature.ts"), "export const feature = false;");
+      assert.match(git(source, "status", "--porcelain"), /src\/feature\.ts/);
+      assert.equal(store.getWritePromotion(created.id)?.state, "applied");
+      assert.equal((await promote(args)).isError, true, "A promotion is one-shot");
+    } finally {
+      if (beforePromotionFlag === undefined) delete process.env.LAO_WRITE_PROMOTION_ENABLED;
+      else process.env.LAO_WRITE_PROMOTION_ENABLED = beforePromotionFlag;
+    }
   } finally {
     store.close();
     rmSync(base, { recursive: true, force: true });

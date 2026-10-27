@@ -12,6 +12,7 @@ import { LaoIsolatedWriteRunner } from "./write-task-runner.js";
 import { validateLaoStaticWrite } from "./write-validation.js";
 import { runLaoSandboxTests } from "./write-test-sandbox.js";
 import { assessLaoWriteAcceptance } from "./write-acceptance.js";
+import { promoteLaoApprovedSingleFile } from "./write-promotion.js";
 import { collectLaoReviewEvidence } from "./review-evidence.js";
 import { normalizeLaoPatchPath } from "./worktree-patch.js";
 import { loadLaoReadContext } from "./read-context.js";
@@ -498,6 +499,38 @@ export function registerLaoMcpTools(
         } catch (error) { return toolFailure(error); }
       });
     }
+    if (process.env.LAO_WRITE_PROMOTION_ENABLED === "true") {
+      server.registerTool("lao_write_promote", {
+        title: "Promote one explicitly approved file to clean feature checkout",
+        description: "DANGEROUS local write, opt-in only. Requires an approved task, unchanged worktree/HEAD, clean original feature checkout, and PROMOTE <task_id> <contentFingerprint> confirmation. Updates exactly one allowlisted file, leaves durable recovery backup, no commit/merge/push.",
+        inputSchema: {
+          workspace_id: z.string().min(1),
+          task_id: z.string().uuid(),
+          confirmation: z.string().min(1).max(256),
+        },
+        annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+      }, async ({ workspace_id, task_id, confirmation }) => {
+        try {
+          return await withStore(context.stateDir, async store => {
+            const workspace = await context.workspaces.getWorkspace(workspace_id);
+            const task = store.get(task_id);
+            if (!task || task.workspaceId !== workspace_id || !workspace.sourceRoot ||
+                task.status !== "approved" || task.permissions.write !== "isolated_worktree") {
+              throw new Error("No approved isolated write for promotion");
+            }
+            // Reuse DevSpace's allowed-root/canonical path authorization for
+            // the original checkout as well as for the managed worktree.
+            const source = (await openManaged({ path: workspace.sourceRoot, mode: "checkout" })).workspace;
+            if (source.mode !== "checkout") throw new Error("Authorized source checkout not available");
+            const result = await promoteLaoApprovedSingleFile({
+              task, workspace, worktreeRoot: context.worktreeRoot!,
+              sourceRoot: source.root, stateDir: context.stateDir, store, confirmation,
+            });
+            return asToolResult(result);
+          });
+        } catch (error) { return toolFailure(error); }
+      });
+    }
   }
 
   server.registerTool("lao_result", {
@@ -517,6 +550,7 @@ export function registerLaoMcpTools(
           events: store.events(task_id), review: store.getReview(task_id),
           write_evidence: store.getWriteEvidence(task_id),
           test_evidence: store.getTestEvidence(task_id),
+          promotion: store.getWritePromotion(task_id),
         });
       });
     } catch (error) { return toolFailure(error); }

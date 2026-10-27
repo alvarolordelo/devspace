@@ -95,6 +95,16 @@ export class LaoTaskStore {
         token text not null,
         expires_at_ms integer not null
       );
+      create table if not exists lao_write_promotions (
+        task_id text primary key references lao_tasks(id) on delete cascade,
+        source_root text not null,
+        fingerprint text not null,
+        backup_dir text not null,
+        token text not null,
+        state text not null check (state in ('pending', 'applied', 'rolled_back', 'needs_recovery')),
+        at text not null
+      );
+      create index if not exists lao_promotions_source_idx on lao_write_promotions(source_root, state);
     `);
   }
 
@@ -286,6 +296,58 @@ export class LaoTaskStore {
     const row = this.sqlite.prepare("select record_json from lao_reviews where task_id = ? order by id desc limit 1")
       .get(taskId) as { record_json: string } | undefined;
     return row ? laoReviewSchema.parse(JSON.parse(row.record_json)) : null;
+  }
+
+  /**
+   * Durable one-time operation ledger. 'pending' never expires or resumes
+   * automatically after a crash: inspect the backup and source manually.
+   * Serialize promotions per source checkout across MCP workers.
+   */
+  beginWritePromotion(taskId: string, sourceRoot: string, fingerprint: string, backupDir: string): string {
+    if (!sourceRoot || !backupDir || !/^[a-f0-9]{64}$/.test(fingerprint)) {
+      throw new Error("Invalid promotion receipt");
+    }
+    return this.sqlite.transaction(() => {
+      const task = this.requireTask(taskId);
+      const review = this.getReview(taskId);
+      const evidence = this.getWriteEvidence(taskId).at(-1);
+      if (task.status !== "approved" || task.permissions.write !== "isolated_worktree" ||
+          review?.decision !== "approved" || !review.criteriaVerified ||
+          evidence?.evidence.contentFingerprint !== fingerprint ||
+          !review.evidence.includes("sha256:" + fingerprint) ||
+          !review.evidence.includes("run:" + evidence.runId)) {
+        throw new Error("No verified approved write for promotion");
+      }
+      if (this.sqlite.prepare(
+        "select task_id from lao_write_promotions where task_id = ?"
+      ).get(taskId)) throw new Error("Write promotion already recorded for task");
+      if (this.sqlite.prepare(
+        "select task_id from lao_write_promotions where source_root = ? and state in ('pending','needs_recovery')"
+      ).get(sourceRoot)) throw new Error("Source has a promotion requiring recovery");
+      const token = randomUUID();
+      this.sqlite.prepare(
+        "insert into lao_write_promotions values (?,?,?,?,?,?,?)"
+      ).run(taskId, sourceRoot, fingerprint, backupDir, token, "pending", new Date().toISOString());
+      return token;
+    }).immediate();
+  }
+
+  finishWritePromotion(
+    taskId: string, token: string, state: "applied" | "rolled_back" | "needs_recovery",
+  ): boolean {
+    return this.sqlite.prepare(
+      "update lao_write_promotions set state = ?, at = ? where task_id = ? and token = ? and state = 'pending'"
+    ).run(state, new Date().toISOString(), taskId, token).changes === 1;
+  }
+
+  getWritePromotion(taskId: string): {
+    taskId: string; fingerprint: string; state: string; at: string;
+  } | null {
+    const row = this.sqlite.prepare(
+      "select task_id, fingerprint, state, at from lao_write_promotions where task_id = ?"
+    ).get(taskId) as { task_id: string; fingerprint: string; state: string; at: string } | undefined;
+    return row ? { taskId: row.task_id, fingerprint: row.fingerprint,
+      state: row.state, at: row.at } : null;
   }
 
   /** Records one run before model execution so crashes leave an audit record. */
