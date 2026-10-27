@@ -163,7 +163,7 @@ max-height:430px;overflow:auto;background:#f4f7fb;padding:14px;border-radius:9px
   </section>
   <section id="section-logs" class="section panel hidden"><h2>Eventos recentes</h2><p class="muted">Resumo sanitizado dos registros de tarefas. Sem logs brutos, prompts ou credenciais.</p><div id="events"></div></section>
   <section id="section-configuracoes" class="section panel hidden"><h2>Configurações e diagnósticos</h2>
-   <p class="muted">Painel somente-leitura. Controles que alteram serviços exigirão confirmação e uma integração Windows própria.</p>
+   <p class="muted">Painel de diagnóstico local. O reinício do daemon LAO exige confirmação; DevSpace MCP e Ollama não são reiniciados.</p>
    <div class="row"><div class="row-content"><strong>Estado da operação</strong><small id="dependencies">—</small></div></div>
    <div class="row"><div class="row-content"><strong>Consumo do processo</strong><small id="node-memory">—</small></div></div>
    <div class="row"><div class="row-content"><strong>Coleta mais recente</strong><small id="checked">—</small></div></div>
@@ -173,7 +173,7 @@ max-height:430px;overflow:auto;background:#f4f7fb;padding:14px;border-radius:9px
   <div class="actions">
     <button type="button" class="action primary" disabled title="Envio de tarefas requer integração autenticada e aprovação">＋ Nova tarefa</button>
     <button type="button" class="action" data-section="logs">▤ Ver eventos</button>
-    <button type="button" class="action" disabled title="Controle de serviços não habilitado">↻ Reiniciar serviço</button>
+    <button type="button" id="restart-lao" class="action" disabled title="Reinício disponível somente quando o daemon LAO confirmar suporte">↻ Reiniciar LAO</button>
     <button type="button" class="action" data-section="configuracoes">⚙ Configurações</button>
   </div>
   <div class="footer"><span>LAO DevSpace · Atualiza a cada 10 s · Sem autoaprovação</span><button id="logout" class="link" type="button">Sair</button></div>
@@ -293,6 +293,10 @@ async function refresh(){
   const ready=status.ready===true;
   $("connection").className="pill "+(ready?"good":"warn");
   $("connection-text").textContent=ready?"Ativo":"Atenção";
+  $("restart-lao").disabled=status.restartAvailable!==true;
+  $("restart-lao").title=status.restartAvailable===true
+    ?"Reiniciar somente o daemon local LAO, mediante confirmação"
+    :"Reinício indisponível nesta instância do LAO";
   $("lao-service").textContent=status.live===true?"Respondendo":"Sem resposta";
   dot("lao-dot",status.live===true?"good":"bad");
   const mcp=!reasons.includes("devspace_unverified");
@@ -337,6 +341,7 @@ async function refresh(){
    section(location.hash.slice(1));
   }
  }catch(err){
+  $("restart-lao").disabled=true;
   if(err.message==="Sessão expirada ou inválida"){
    loginScreen("A sessão expirou. Entre novamente.");return;
   }
@@ -378,6 +383,30 @@ $("form").addEventListener("submit",async e=>{
 $("filter").addEventListener("change",renderTasks);
 window.addEventListener("hashchange",()=>{if(sections.includes(location.hash.slice(1)))section(location.hash.slice(1));});
 $("close-detail").addEventListener("click",()=>$("detail-panel").classList.add("hidden"));
+$("restart-lao").addEventListener("click",async()=>{
+ if($("restart-lao").disabled)return;
+ if(!window.confirm("Reiniciar somente o LAO DevSpace local? O DevSpace MCP e o Ollama não serão interrompidos."))return;
+ $("restart-lao").disabled=true;
+ try{
+  const response=await fetch("/dashboard/api/restart",{
+   method:"POST",cache:"no-store",credentials:"omit",
+   headers:{Authorization:"Bearer "+token},
+  });
+  if(response.status!==202){
+   const code=(await response.json()).error;
+   throw Error(code==="active_tasks"?"Há tarefas em execução; reinício bloqueado.":"Reinício não autorizado ou indisponível.");
+  }
+  $("connection").className="pill warn";
+  $("connection-text").textContent="Reiniciando LAO…";
+  $("dependencies").textContent="Reinício solicitado. Aguardando daemon responder novamente.";
+  // The normal status refresh re-enables the button only when LAO is back.
+  setTimeout(refresh,2500);
+ }catch(err){
+  $("connection").className="pill bad";
+  $("connection-text").textContent=err.message;
+  setTimeout(refresh,2500);
+ }
+});
 $("logout").addEventListener("click",()=>{
  const oldTicket=token;
  loginScreen();

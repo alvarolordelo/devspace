@@ -11,6 +11,7 @@ export interface LaoDaemonOptions {
   port: number;
   devspaceReady?: () => boolean;
   dashboardToken?: string;
+  restartLao?: () => Promise<void>;
 }
 
 /**
@@ -28,6 +29,7 @@ export async function startLaoDaemon(options: LaoDaemonOptions) {
     dashboard: token ? {
       token, devspaceReady: ready, listTasks: () => store?.list() ?? [],
       taskDetails: id => store ? summarizeLaoTaskDetails(store, id) : null,
+      restartLao: options.restartLao,
     } : undefined,
   });
   let recovered: number;

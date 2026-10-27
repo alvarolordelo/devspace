@@ -17,6 +17,8 @@ export interface LaoDashboardOptions {
   taskDetails?: (id: string) => ReturnType<typeof summarizeLaoTaskDetails> | null;
   devspaceReady: () => boolean;
   sessions?: LaoDashboardSessions;
+  /** Optional foreground LAO-only restart. Never controls DevSpace, Ollama or Windows SCM. */
+  restartLao?: () => Promise<void>;
 }
 
 /** Short-lived, read-only browser tickets. The long-lived operator token is never stored in web storage. */
@@ -187,6 +189,23 @@ export async function handleLaoDashboard(
     }
     return true;
   }
+  if (path === "/dashboard/api/restart") {
+    const sameOrigin = req.headers.origin === "http://" + req.headers.host &&
+      req.headers["sec-fetch-site"] === "same-origin";
+    if (req.method !== "POST" || !sameOrigin || !authorized(req, options)) {
+      json(res, 403, { error: "forbidden" }); return true;
+    }
+    if (!options.restartLao) {
+      json(res, 409, { error: "restart_unavailable" }); return true;
+    }
+    if (options.listTasks().some(task =>
+      ["preparing", "running", "validating"].includes(task.status))) {
+      json(res, 409, { error: "active_tasks" }); return true;
+    }
+    json(res, 202, { restartScheduled: true });
+    setTimeout(() => { void options.restartLao?.().catch(() => undefined); }, 150).unref();
+    return true;
+  }
   if (req.method !== "GET" || req.headers.origin) {
     json(res, 403, { error: "forbidden" }); return true;
   }
@@ -247,6 +266,9 @@ export async function handleLaoDashboard(
   const status = await measureLaoReadiness(config, {
     devspaceReady: options.devspaceReady(),
   });
-  json(res, 200, { ...status, modelConfigured: config.defaultModel });
+  json(res, 200, {
+    ...status, modelConfigured: config.defaultModel,
+    restartAvailable: Boolean(options.restartLao),
+  });
   return true;
 }

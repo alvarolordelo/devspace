@@ -21,7 +21,7 @@ if (![1,1.25,1.5].includes(scale)) throw new Error("Unsupported QA DPI scale");
 const url = new URL(args[1]);
 if (url.protocol !== "http:" || !["localhost", "127.0.0.1"].includes(url.hostname) ||
     url.pathname !== "/dashboard" || url.search || url.hash ||
-    url.username || url.password || !["", "80", "7877", "7878", "7888"].includes(url.port)) {
+    url.username || url.password || !["", "80", "7877", "7878", "7888", "7890"].includes(url.port)) {
   throw new Error("Visual smoke accepts only the local LAO dashboard URL");
 }
 const [tokenFile, chrome, output] = [args[3], args[5], args[7]].map(path => resolve(path));
@@ -147,7 +147,10 @@ try {
         active?.dataset.section === name &&
         document.documentElement.scrollWidth <= innerWidth + 1;
     }
-    result.disabledControls = Array.from(document.querySelectorAll('button.action:disabled')).length === 2;
+    const newTask = Array.from(document.querySelectorAll('button.action'))
+      .find(button => button.textContent.includes('Nova tarefa'));
+    result.disabledControls = newTask?.disabled === true &&
+      document.getElementById('restart-lao') instanceof HTMLButtonElement;
     document.querySelector('.nav [data-section="status"]').click();
     return result;
   })())`));

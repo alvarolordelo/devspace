@@ -73,3 +73,16 @@
 - [x] Nenhum serviço Windows, autostart, agendamento ou DevSpace upstream alterado.
 
 **Comportamento intencional:** escolher **Sair do monitor** encerra o processo da bandeja. Para voltar a exibir o ícone próximo ao relógio, basta clicar duas vezes no novo atalho da Área de Trabalho ou pesquisar pelo nome no menu Iniciar. A fixação opcional na barra de tarefas é realizada manualmente pelo usuário.
+
+## Painel e reinício real — correção em 27/10/2026
+
+- [x] Corrigida a causa principal do token solicitado ao clicar em **Abrir painel**: a instância antiga de LAO na porta 7877 não tinha os endpoints de sessão nova. Identidade do processo antigo confirmada como LAO (não DevSpace), nenhuma tarefa ativa, instância anterior encerrada e substituída pelo build atualizado.
+- [x] Porta oficial `127.0.0.1:7877` responde HTTP 200; API autenticada confirma `restartAvailable=true`. Monitor de bandeja mantém o token exclusivamente no ambiente local, concede abertura de sessão em uso único e não o coloca na URL.
+- [x] Botão do Dashboard alterado de **Reiniciar serviço** (desabilitado, pois não existe SCM instalado) para **Reiniciar LAO**. Só habilita quando a instância sinaliza suporte real; exige confirmação explícita.
+- [x] Endpoint restrito `POST /dashboard/api/restart` exige Bearer + Origin e Fetch Metadata same-origin; rejeita solicitações sem autenticação, via GET, com tarefas ativas e vindas de outra origem.
+- [x] Reinicialização programada do processo LAO local: fecha servidor, libera lease SQLite e relança somente o executável LAO com o ambiente e diretório original. Nunca reinicia DevSpace upstream nem Ollama.
+- [x] Lançador manual `scripts/launch-lao-daemon.ps1` acrescentado: estado persistente em `%LOCALAPPDATA%\LAODevSpace\state`, token somente no ambiente do processo, sem exposição em argv e sem instalar serviço Windows.
+- [x] No Windows, o lançador supervisiona o LAO: o processo encerra graciosamente com um código exclusivo de reinício e o mesmo launcher o relança, mantendo porta e configuração. Incluído limite de reinícios para evitar loop.
+- [ ] Clique físico no botão **Reiniciar LAO** e novo clique na bandeja **Abrir painel** aguardam aceite visual do usuário.
+
+Os painéis anteriores de teste nas portas 7878/7888/7890 não são a porta oficial. O código recém-compilado está em execução na **7877**, em processo LAO exclusivo supervisionado. Após reiniciar o daemon, os tickets de sessão em memória expiram; reabrir pelo Monitor restaura a autenticação local sem digitar a chave.

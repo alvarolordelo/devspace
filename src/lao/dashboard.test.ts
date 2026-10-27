@@ -222,6 +222,44 @@ test("dashboard restores a browser session after F5, logs out and only allows na
   } finally { await server.close(); }
 });
 
+test("LAO restart requires authenticated same-origin confirmation, rejects active jobs and never controls other services", async () => {
+  let restartCalls = 0;
+  const jobs: Array<{ status: string }> = [];
+  const server = await startLaoHealthServer(cfg, {
+    port: 0, devspaceReady: () => false,
+    dashboard: {
+      token, listTasks: () => jobs as any, devspaceReady: () => false,
+      restartLao: async () => { restartCalls++; },
+    },
+  });
+  try {
+    const url = "http://127.0.0.1:" + server.port;
+    const path = url + "/dashboard/api/restart";
+    const headers = {
+      Authorization: "Bearer " + token, Origin: url,
+      "Sec-Fetch-Site": "same-origin",
+    };
+    const status = await fetch(url + "/dashboard/api/status", {
+      headers: { Authorization: "Bearer " + token },
+    });
+    assert.equal((await status.json()).restartAvailable, true);
+    assert.equal((await fetch(path, { method: "GET", headers })).status, 403);
+    assert.equal((await fetch(path, { method: "POST" })).status, 403);
+    assert.equal((await fetch(path, { method: "POST", headers: {
+      ...headers, "Sec-Fetch-Site": "cross-site",
+    } })).status, 403);
+    assert.equal((await fetch(path, { method: "POST", headers: {
+      ...headers, Origin: "http://evil.example",
+    } })).status, 403);
+    jobs.push({ status: "running" });
+    assert.equal((await fetch(path, { method: "POST", headers })).status, 409);
+    jobs.length = 0;
+    assert.equal((await fetch(path, { method: "POST", headers })).status, 202);
+    await new Promise(resolve => setTimeout(resolve, 250));
+    assert.equal(restartCalls, 1);
+  } finally { await server.close(); }
+});
+
 test("task detail redacts goals, review notes, raw patches and model output", async () => {
   const dir = mkdtempSync(join(tmpdir(), "lao-detail-"));
   const store = new LaoTaskStore(dir);
@@ -268,5 +306,5 @@ test("dashboard markup has a parseable offline script and does not expose tokens
     assert.match(html, new RegExp('id="section-' + tab + '"'));
   }
   assert.match(html, /Modelo configurado · carregamento não verificado/);
-  assert.match(html, /Controles que alteram serviços exigirão confirmação/);
+  assert.match(html, /O reinício do daemon LAO exige confirmação/);
 });
