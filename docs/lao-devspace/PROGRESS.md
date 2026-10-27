@@ -603,3 +603,34 @@ diagnostico do modelo, testes GUI e UX de longa duracao.
 `lao-verify-devspace-pin.mjs` e `git diff --check` aprovados.
 O teste real do monitor confirmou leituras de GPU NVIDIA e VRAM via
 NVML no Windows local; CI hospedada precisa ser confirmada apos push.
+
+## F5-06 - Monitor Windows: tarefas autenticadas e notificacoes (27/10/2026)
+
+**F5 permanece [~]**. O tray PowerShell/WinForms existente agora interpreta
+as consultas de /health/live, /health/ready e (somente quando houver
+LAO_DASHBOARD_TOKEN no ambiente) /dashboard/api/tasks. A API privada
+usa Bearer no loopback, impede seguir redirects e nao retorna tokens,
+prompts ou conteudo de tarefas ao monitor. A bandeja distingue
+operacional, degradado, indisponivel e aguardando revisao.
+
+O menu de leitura indica contagem de execucoes e revisoes. Sem
+autenticacao, exibe contagens desconhecidas, nao zeros falsos.
+A nova flag opt-in -EnableNotifications emite alertas locais apenas
+apos uma mudanca detectada (perda do daemon/aumento de revisoes).
+A flag -ProbeOnly permite aferir status sanitizado sem iniciar GUI.
+Nenhuma chamada de start/stop, SCM, boot ou configuracao global foi feita.
+
+Quatro testes Windows do tray passaram, incluindo status com Bearer
+verdadeiro/falso, falha de daemon, validacao de assets/STA e rejeicao
+de redirect que poderia vazar segredo. Regressao completa LOCAL
+com 245 testes: 237 aprovados, 8 ignorados, zero falhas;
+o total inclui um teste F8 ainda nao versionado na mesma worktree.
+Build, typecheck e pin fixo da versao 1.0.8 tambem passaram.
+**Teste GUI interativo, alerta
+visual, sonda assíncrona para nao bloquear WinForms, painel com controle
+de servico e autostart ainda pendentes.** Este modulo nao esta pronto
+para instalacao final.
+
+GitHub Actions da ultima entrega publicada, F6-03 commit f222657:
+run 40443284011 concluiu com success. Os resultados deste F5-06
+dependem da regressao e do CI apos o push correspondente.

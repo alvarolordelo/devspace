@@ -32,17 +32,41 @@ Nao e apropriado para sessao nao-interativa de servico.
 - A bandeja consulta a cada 15 segundos os endpoints locais
   \`/health/live\` e \`/health/ready\`.
 - Icone active quando pronta, idle se a dependencia nao esta pronta,
-  offline se o daemon nao responde. Sem falsos positivos de autenticacao.
+  offline se o daemon nao responde e review quando ha revisoes
+  autenticadas e o daemon esta pronto. Sem falsos positivos de autenticacao.
 - Clique duplo ou menu "Abrir painel LAO" abre o browser local.
 - "Copiar diagnostico" copia apenas hora, status e endpoint loopback.
 - "Sair do monitor" fecha somente o tray; o daemon nao e afetado.
 - Mutex por SID evita segundo monitor da mesma conta Windows.
 - Icones/timer/mutex sao liberados ao encerrar.
 
-**Limites:** nao controla o daemon/servico, nao possui notificacoes push,
-nao recupera tarefas, nao configura autostart, nao utiliza o icone
-"review" sem fonte autenticada dos eventos; usuario ainda precisa
-validar a usabilidade do tray e a compatibilidade em sessao grafica.
+**Limites:** nao controla o daemon/servico, nao recupera tarefas nem
+configura autostart. A sonda ocorre sincronicamente no timer WinForms.
+Notificacoes por polling nao garantem observar estados transitórios.
+Testes GUI de interacao e responsividade real ainda pendentes.
+
+## F5-06 - Status autenticado e notificacoes opcionais (27/10/2026)
+
+- O monitor continua consultando health/live e health/ready a cada
+  15 segundos em loopback, com timeout e sem seguir redirects.
+- Quando a variavel LAO_DASHBOARD_TOKEN esta no AMBIENTE DO PROCESSO
+  da bandeja e coincide com o daemon, tambem consulta
+  /dashboard/api/tasks com Authorization Bearer. Nunca passar o
+  segredo via parametro de linha de comando, URL, repositorio ou log.
+- O menu indica contagens de tarefas executando/validando e em revisao.
+  Se nao estiver autenticado, as contagens sao desconhecidas, nao zero.
+- O icone review somente aparece com API autenticada e LAO pronto.
+- A flag -EnableNotifications e opt-in e mostra avisos de perda de
+  conectividade e aumento do numero de revisoes, SEM detalhes privados.
+  A primeira consulta apenas estabelece um baseline, sem alertas.
+- A flag -ProbeOnly retorna JSON sanitizado sem abrir GUI, util para
+  testar o monitor e o endpoint. Exemplo em PowerShell:
+
+    powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "D:\desenvolvimento\lao-devspace\src\lao\windows\lao-tray.ps1" -ProbeOnly -Port 7877
+
+O tray nao extrai tokens do clipboard nem grava tokens em disco.
+O mecanismo de login e fornecimento de token de uma instalacao final
+continua pendente. Nao foi instalado um servico, agendador ou autostart.
 
 
 ### Evidencia atual
