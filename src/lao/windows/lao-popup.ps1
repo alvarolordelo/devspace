@@ -1,4 +1,4 @@
-﻿# LAO approved native tray popup (Segoe UI, 420 DIP, independent of service).
+# LAO approved native tray popup (Segoe UI, 420 DIP, independent of service).
 # All actions are read-only local navigation. Never install or restart a service.
 function Set-LaoRoundedControlRegion($control,[int]$radius) {
     $w=$control.ClientSize.Width; $h=$control.ClientSize.Height
@@ -254,7 +254,7 @@ function Update-LaoPopup($popup,$snapshot) {
         $popup.Card.BackColor=[Drawing.ColorTranslator]::FromHtml('#FFF8E7')
     }elseif($null -ne $snapshot.activeTasks -and $snapshot.activeTasks -gt 0){
         $popup.Actions.context.Enabled=$false
-        $popup.Actions.context.Text='↻  Reiniciar serviço (não instalado)'
+        $popup.Actions.context.Text='↻  Reiniciar LAO (tarefa ativa)'
         $popup.Rows.last.Title.Text='Última execução'
         Set-LaoPopupRow $popup last 'Execução em andamento' good
         $popup.CardIcon.ForeColor=$popup.Colors.green
@@ -264,8 +264,11 @@ function Update-LaoPopup($popup,$snapshot) {
         $popup.CardDetails.Text=$(if($snapshot.lastTaskModel){"Executor: $($snapshot.lastTaskModel)"}else{'Acompanhe os detalhes no painel.'})
         $popup.Card.BackColor=[Drawing.ColorTranslator]::FromHtml('#F3FAF5')
     }else{
-        $popup.Actions.context.Enabled=$false
-        $popup.Actions.context.Text=$(if($live){
+        $canRestart=$live -and $snapshot.statusAuthenticated -and ($snapshot.restartAvailable -eq $true)
+        $popup.Actions.context.Enabled=$canRestart
+        $popup.Actions.context.Text=$(if($canRestart){
+            '↻  Reiniciar LAO'
+        }elseif($live){
             '↻  Reiniciar serviço (não instalado)'
         }else{'▷  Iniciar serviço (não instalado)'})
         $popup.Rows.last.Title.Text='Última execução'

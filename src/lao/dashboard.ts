@@ -192,7 +192,11 @@ export async function handleLaoDashboard(
   if (path === "/dashboard/api/restart") {
     const sameOrigin = req.headers.origin === "http://" + req.headers.host &&
       req.headers["sec-fetch-site"] === "same-origin";
-    if (req.method !== "POST" || !sameOrigin || !authorized(req, options)) {
+    // Native Windows tray is a local, nonbrowser client with the full operator
+    // credential. Browser callers need a same-origin session and fetch metadata.
+    const nativeOperator = !req.headers.origin && !req.headers["sec-fetch-site"] &&
+      operatorAuthorized(req, options.token);
+    if (req.method !== "POST" || !((sameOrigin && authorized(req, options)) || nativeOperator)) {
       json(res, 403, { error: "forbidden" }); return true;
     }
     if (!options.restartLao) {

@@ -257,6 +257,11 @@ test("LAO restart requires authenticated same-origin confirmation, rejects activ
     assert.equal((await fetch(path, { method: "POST", headers })).status, 202);
     await new Promise(resolve => setTimeout(resolve, 250));
     assert.equal(restartCalls, 1);
+    assert.equal((await fetch(path, {
+      method: "POST", headers: { Authorization: "Bearer " + token },
+    })).status, 202, "the authenticated local Windows tray can request LAO-only restart");
+    await new Promise(resolve => setTimeout(resolve, 250));
+    assert.equal(restartCalls, 2);
   } finally { await server.close(); }
 });
 

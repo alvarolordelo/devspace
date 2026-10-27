@@ -1,4 +1,4 @@
-﻿# LAO DevSpace tray - Windows, foreground and entirely opt-in.
+# LAO DevSpace tray - Windows, foreground and entirely opt-in.
 # Launch manually with: powershell.exe -NoProfile -STA -File <this script>
 # Exit closes ONLY the tray monitor, not the LAO daemon, DevSpace or Ollama.
 [CmdletBinding()]
@@ -137,6 +137,16 @@ if ($UiCheckOnly) {
                 throw 'Uninstalled service control must remain disabled'
             }
         }
+        $restartSnapshot=[pscustomobject]@{
+            status='active';statusAuthenticated=$true;restartAvailable=$true
+            reasons=@();modelConfigured='teste';activeTasks=0;pendingReviews=0
+            tasksAuthenticated=$true
+        }
+        Update-LaoPopup $ui $restartSnapshot
+        if (-not $ui.Actions.context.Enabled -or
+            $ui.Actions.context.Text -notmatch 'Reiniciar LAO') {
+            throw 'Available LAO-only restart must be enabled on native monitor'
+        }
         $ui.Form.ClientSize=[Drawing.Size]::new(340,580)
         Resize-LaoPopupContents $ui 340
         foreach ($row in $ui.Rows.Values) {
@@ -221,6 +231,7 @@ $script:asyncResult = $null
 $script:uiHeartbeatTicks = 0
 $script:launchTask = $null
 $script:launchTarget = $null
+$script:restartTask = $null
 
 # A PowerShell Invoke-RestMethod call on a WinForms timer blocks all menu
 # clicks for the duration of its network timeout. HttpClient tasks complete
@@ -255,6 +266,7 @@ function Start-LaoAsyncPoll {
         vramUsedMiB = $null
         vramTotalMiB = $null
         lastTaskModel = $null
+        restartAvailable = $false
         checkedAt = $null
     }
     $script:pollStage = 'live'
@@ -306,6 +318,7 @@ function Advance-LaoAsyncPoll {
                 $script:pollSnapshot.statusAuthenticated = $true
                 $script:pollSnapshot.reasons = @($payload.blockingReasons)
                 $script:pollSnapshot.modelConfigured = $payload.modelConfigured
+                $script:pollSnapshot.restartAvailable = ($payload.restartAvailable -eq $true)
             }
             $script:pollStage = 'metrics'
             $script:pollTask = $privateClient.GetStringAsync($script:baseUrl + '/dashboard/api/metrics')
@@ -400,6 +413,25 @@ function Open-LaoDashboard([string]$section = '') {
 
 $timer.Add_Tick({
     $script:uiHeartbeatTicks++
+    if ($script:restartTask -and $script:restartTask.IsCompleted) {
+        $task=$script:restartTask
+        $script:restartTask=$null
+        try {
+            $response=$task.GetAwaiter().GetResult()
+            $ok=([int]$response.StatusCode -eq 202)
+            $response.Dispose()
+            if ($script:popup) {
+                $script:popup.CardDetails.Text=$(if($ok){
+                    'Reinício do LAO solicitado. Aguardando reconexão.'
+                }else{'Reinício recusado pelo LAO; confira o Dashboard.'})
+            }
+            if ($ok) { $script:nextPollAt=[DateTime]::MinValue }
+        } catch {
+            if ($script:popup) {
+                $script:popup.CardDetails.Text='Falha ao solicitar reinício. Confira o Dashboard.'
+            }
+        }
+    }
     if ($script:launchTask -and $script:launchTask.IsCompleted) {
         $launch = $script:launchTask
         $script:launchTask = $null
@@ -445,8 +477,29 @@ if ($script:popup) {
         Open-LaoDashboard
     })
     $script:popup.Actions.context.Add_Click({
+        if ($script:popup.Actions.context.Text -match 'Reiniciar LAO') {
+            if (-not $script:popup.Actions.context.Enabled -or
+                -not $script:dashboardToken -or $script:restartTask) { return }
+            $choice=[Windows.Forms.MessageBox]::Show(
+                'Reiniciar somente o LAO DevSpace? DevSpace MCP e Ollama continuarão funcionando.',
+                'Confirmar reinício LAO',
+                [Windows.Forms.MessageBoxButtons]::YesNo,
+                [Windows.Forms.MessageBoxIcon]::Question)
+            if ($choice -ne [Windows.Forms.DialogResult]::Yes) { return }
+            $script:popup.Actions.context.Enabled=$false
+            $script:popup.Actions.context.Text='↻  Reiniciando LAO…'
+            try {
+                $script:restartTask=$privateClient.PostAsync(
+                    $script:baseUrl + '/dashboard/api/restart', [Net.Http.HttpContent]$null)
+            } catch {
+                $script:popup.CardDetails.Text='Falha ao solicitar reinício do LAO.'
+            }
+            return
+        }
         $script:popup.Form.Hide()
-        Open-LaoDashboard '#tarefas'
+        if ($script:popup.Actions.context.Text -match 'Ver revisão') {
+            Open-LaoDashboard '#tarefas'
+        }
     })
     $script:popup.Actions.logs.Add_Click({
         $script:popup.Form.Hide()
