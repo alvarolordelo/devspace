@@ -513,3 +513,23 @@ A confirmacao do host nao substitui autenticacao humana independente;
 o operador continua responsavel por revisar cada diff.
 O registro de aprovacao **nao promove o patch** nem altera a origem.
 O gate de promocao segura continua pendente.
+
+### F4-12 - Promocao controlada inicial
+
+Novo opt-in LAO_WRITE_PROMOTION_ENABLED=true expoe lao_write_promote.
+Promocao so apos aprovacao; requer frase PROMOTE <taskId> <SHA256>, origem
+feature/* limpa, mesma revisao HEAD e worktree gerenciado imutavel.
+Primeiro escopo: uma alteracao textual por tarefa (adicionar/modificar/
+excluir), com backups auditaveis e ledger SQLite, nunca commit ou merge.
+Crash deixa pendencia para recuperacao manual; jamais reexecutar sozinho.
+Gates finais F4: promocao atomica de multiplos arquivos, recuperacao
+segura de interrupcoes e prova live completa incluindo promocao.
+
+### F7-04 / F5-03 - Runtime portavel e plano Windows sem instalar
+
+O gerador offline release-portable.mjs inclui quatro pacotes runtime
+fixados, hashes de todos os arquivos, Node ABI e plataforma. Smoke
+executou SQLite nativo no diretorio portavel, sem fonte original.
+O planejador lao-service-plan.ps1 confere pacote, ABI, integridade
+de um WinSW informado com SHA-256 e produz XML com startmode Manual.
+Nenhuma instalacao/SCM/boot foi modificada. F5 e F7 seguem parciais.

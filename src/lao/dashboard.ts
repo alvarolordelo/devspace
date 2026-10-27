@@ -43,6 +43,7 @@ export function summarizeLaoTaskDetails(store: LaoTaskStore, id: string) {
     })),
     review: review ? { decision: review.decision,
       criteriaVerified: review.criteriaVerified, decidedAt: review.decidedAt } : null,
+    promotion: store.getWritePromotion(id),
   };
 }
 

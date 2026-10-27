@@ -95,3 +95,21 @@ explicito de revisao. O modelo local nao recebe ferramentas MCP.
 Aprovacao so muda o estado SQLite da tarefa. O patch **nao e aplicado
 ao checkout original**, nao e promovido nem recebe commit/push/merge.
 Nenhuma autorizacao de instalacao ou alteracao de servico e implicada.
+
+## Promocao opcional para checkout feature (F4-12)
+
+Uma tarefa de escrita JA aprovada pode ser promovida apenas com
+LAO_WRITE_PROMOTION_ENABLED=true (separado dos flags de habilitacao
+e aprovacao). A ferramenta lao_write_promote exige workspace_id,
+task_id e confirmation exatamente PROMOTE <task_id> <sha256>.
+O SHA-256 e o fingerprint do resultado lao_write_assess, nao o hash
+do arquivo isolado. Verifique antecipadamente o diff e o checkout destino.
+
+Na versao atual o limite e um unico arquivo por tarefa, branch feature/*
+limpa e HEAD identico ao do patch isolado. A operacao torna o checkout
+feature sujo intencionalmente; nao faz commit, push nem merge.
+Backups e receipts ficam no stateDir/lao/promotion-backups e o ledger
+da tarefa pode ser consultado com lao_result. Em queda de energia, nao
+repetir a operacao: inspecionar arquivos de backup e o Git manualmente.
+O fluxo nao altera o DevSpace main e nao esta pronto para uso em
+repositorios de producao sem testes adicionais de recovery/concorrencia.

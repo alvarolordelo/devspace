@@ -108,6 +108,7 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
       assert.equal(detailPayload.task.traceId, undefined);
       assert.equal(detailPayload.task.permissions, undefined);
       assert.equal(detailPayload.review, null);
+      assert.equal(detailPayload.promotion, null);
       assert.equal((await fetch(api + "/00000000-0000-4000-8000-000000000001", {
         headers: { Authorization: "Bearer " + token },
       })).status, 404);

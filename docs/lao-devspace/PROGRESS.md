@@ -450,3 +450,54 @@ automatico. Revalidacao na promocao ainda e obrigatoria e pendente.
 **Regressao apos F4-11:** pnpm test: **234 testes, 226 aprovados,
 8 ignorados, zero falhas**. Typecheck e verificador da versao fixa
 1.0.8 aprovados. Build de producao executado na mesma rodada.
+
+## F4-12 - Promocao supervisonada de um arquivo (26/10/2026)
+
+**F4 permanece [~]**: disponibilizada ferramenta MCP lao_write_promote
+somente com opt-in adicional LAO_WRITE_PROMOTION_ENABLED=true. Exige tarefa
+ja aprovada, worktree gerenciado e intacto, revisao vinculada ao run
+e fingerprint SHA-256, origem em branch feature/* com HEAD identico ao
+worktree, checkout original limpo e confirmacao exata PROMOTE <task> <sha>.
+Somente **um arquivo autorizado por tarefa** pode ser aplicado ao checkout
+feature: suporta adicao, modificacao e exclusao. Nao atua em main.
+
+Antes de alterar, a rotina grava backup de conteudo original, copia do
+conteudo aprovado e recibo no stateDir/lao/promotion-backups. Ledger
+SQLite marca operacao pending antes da escrita e applied apos checagem.
+Uma tentativa perdida por crash nao e repetida automaticamente: requer
+inspecao humana e recuperacao usando o backup. Nao executa commit,
+push nem merge. A API lao_result expoe status do recibo, sem caminho
+privado de backup.
+
+Testes com Git/SQLite reais provaram update, add e delete, recusa por
+confirmacao errada, origem suja e adulteracao do worktree, nao alteracao
+do HEAD/commit da origem e bloqueio de repeticao. Avaliacao de testes
+Docker neste teste e uma evidencia simulada persistida; integracao real
+OAuth+Granite+Docker existe em F4-10 mas ainda nao foi combinada com
+promocao no mesmo E2E. Promocao multiplos arquivos, recuperacao
+assistida e controle de edicoes externas concorrentes ainda pendentes.
+
+## F7-04 / F5-03 - Runtime offline e plano de servico (26/10/2026)
+
+**F7 permanece [~]:** o gerador release-portable.mjs empacota
+bibliotecas fixadas (better-sqlite3, bindings, file-uri-to-path, zod),
+todos os SHA-256 e dados de ABI/plataforma. Sem npm/pnpm install nem rede.
+Teste carregou SQLite nativo na pasta publicada, sem node_modules fonte.
+Manifesto continua sem assinatura independente e nao inclui Node.
+
+**F5 permanece [~]:** o script lao-service-plan.ps1 prepara um XML
+WinSW somente com wrapper informado e validado por SHA-256 exato.
+Testa pacote, arquitetura, ABI e SQLite antes de criar pasta nova.
+O XML e manual; nada foi instalado, iniciado, registrado ou adicionado
+ao boot. O teste Windows usou um binario FAKE so para verificar
+geracao de plano e rejeicao de SHA incorreto, nao um WinSW genuino.
+
+**Restam:** VM limpa, conta Windows nao privilegiada, wrapper real,
+testes SCM, Node runtime empacotado, instalador, autenticidade
+criptografica externa, desinstalacao e rollback. Ver PORTABLE_RELEASE.md.
+
+**Verificacao desta retomada:** regressao completa executou 236 testes,
+228 aprovados, 8 ignorados, zero falhas; pnpm build, pnpm typecheck e
+verificador da versao fixa DevSpace 1.0.8 passaram. A checagem adicional
+de sintaxe PowerShell do plano de servico tambem passou em teste isolado.
+Nao foi feita instalacao de servico, boot nem promocao em projetos reais.
