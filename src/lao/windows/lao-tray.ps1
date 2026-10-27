@@ -6,6 +6,7 @@ param(
     [ValidateRange(1024,65535)][int]$Port = 7877,
     [switch]$CheckOnly,
     [switch]$ProbeOnly,
+    [switch]$AsyncProbeOnly,
     [switch]$EnableNotifications
 )
 
@@ -16,9 +17,9 @@ if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne [Threading.Apartme
 }
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Net.Http
 
 $script:trayStatus = 'offline'
-$script:checking = $false
 $script:lastCheck = $null
 $script:baseUrl = "http://127.0.0.1:$Port"
 # Never accept a token on the command line (process arguments are inspectable).
@@ -103,21 +104,24 @@ if ($ProbeOnly) {
     $snapshot | ConvertTo-Json -Compress
     return
 }
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-$createdNew = $false
-$mutexName = "Local\LAO-DevSpace-Tray-" + $identity
-$mutex = [Threading.Mutex]::new($true, $mutexName, [ref]$createdNew)
-if (-not $createdNew) {
-    $mutex.Dispose()
-    foreach ($icon in $icons.Values) { $icon.Dispose() }
-    Write-Output 'LAO tray is already running for this user.'
-    return
+$mutex = $null
+if (-not $AsyncProbeOnly) {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $createdNew = $false
+    $mutexName = "Local\LAO-DevSpace-Tray-" + $identity
+    $mutex = [Threading.Mutex]::new($true, $mutexName, [ref]$createdNew)
+    if (-not $createdNew) {
+        $mutex.Dispose()
+        foreach ($icon in $icons.Values) { $icon.Dispose() }
+        Write-Output 'LAO tray is already running for this user.'
+        return
+    }
 }
 
 $notify = [Windows.Forms.NotifyIcon]::new()
 $notify.Icon = $icons['offline']
 $notify.Text = 'LAO DevSpace - offline'
-$notify.Visible = $true
+$notify.Visible = (-not $AsyncProbeOnly)
 $menu = [Windows.Forms.ContextMenuStrip]::new()
 $openItem = $menu.Items.Add('Abrir painel LAO')
 $stateItem = $menu.Items.Add('Status: offline')
@@ -129,17 +133,114 @@ $quitItem = $menu.Items.Add('Sair do monitor')
 $notify.ContextMenuStrip = $menu
 $context = [Windows.Forms.ApplicationContext]::new()
 $timer = [Windows.Forms.Timer]::new()
-$timer.Interval = 15000
+$timer.Interval = 200
 $script:initialized = $false
 $script:previousStatus = 'offline'
 $script:previousReviews = 0
 $script:previousTasksAuthenticated = $false
+$script:pollStage = 'none'
+$script:pollTask = $null
+$script:nextPollAt = [DateTime]::MinValue
+$script:pollSnapshot = $null
+$script:asyncResult = $null
+$script:uiHeartbeatTicks = 0
 
-function Update-LaoTray {
-    if ($script:checking) { return }
-    $script:checking = $true
+# A PowerShell Invoke-RestMethod call on a WinForms timer blocks all menu
+# clicks for the duration of its network timeout. HttpClient tasks complete
+# on a .NET worker thread; all JSON parsing and UI mutation happen in the
+# STA timer only AFTER task completion.
+$publicHandler = [Net.Http.HttpClientHandler]::new()
+$publicHandler.AllowAutoRedirect = $false
+$publicClient = [Net.Http.HttpClient]::new($publicHandler)
+$publicClient.Timeout = [TimeSpan]::FromSeconds(3)
+$publicClient.MaxResponseContentBufferSize = 32768
+$privateHandler = [Net.Http.HttpClientHandler]::new()
+$privateHandler.AllowAutoRedirect = $false
+$privateClient = [Net.Http.HttpClient]::new($privateHandler)
+$privateClient.Timeout = [TimeSpan]::FromSeconds(3)
+$privateClient.MaxResponseContentBufferSize = 262144
+if ($script:dashboardToken) {
+    $privateClient.DefaultRequestHeaders.Authorization =
+        [Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $script:dashboardToken)
+}
+
+function Start-LaoAsyncPoll {
+    $script:pollSnapshot = [pscustomobject]@{
+        status = 'offline'
+        label = 'LAO indisponivel'
+        activeTasks = $null
+        pendingReviews = $null
+        tasksAuthenticated = $false
+        checkedAt = $null
+    }
+    $script:pollStage = 'live'
+    $script:pollTask = $publicClient.GetStringAsync($script:baseUrl + '/health/live')
+}
+
+function Finish-LaoAsyncPoll {
+    $script:pollSnapshot.checkedAt = (Get-Date).ToUniversalTime().ToString('o')
+    $script:asyncResult = $script:pollSnapshot
+    $script:pollTask = $null
+    $script:pollStage = 'none'
+    $script:nextPollAt = [DateTime]::UtcNow.AddSeconds(15)
+    Update-LaoTray $script:asyncResult
+    if ($AsyncProbeOnly) { $context.ExitThread() }
+}
+
+function Advance-LaoAsyncPoll {
+    if ($script:pollStage -eq 'none' -or !$script:pollTask.IsCompleted) { return }
+    $payload = $null
     try {
-        $snapshot = Get-LaoTraySnapshot
+        # IsCompleted is mandatory; never synchronously wait for I/O in STA.
+        $payload = $script:pollTask.GetAwaiter().GetResult() | ConvertFrom-Json -ErrorAction Stop
+    } catch { }
+    switch ($script:pollStage) {
+        'live' {
+            if ($null -eq $payload -or $payload.live -ne $true) {
+                Finish-LaoAsyncPoll
+                return
+            }
+            $script:pollSnapshot.status = 'idle'
+            $script:pollSnapshot.label = 'Dependencias indisponiveis'
+            $script:pollStage = 'ready'
+            $script:pollTask = $publicClient.GetStringAsync($script:baseUrl + '/health/ready')
+        }
+        'ready' {
+            if ($null -ne $payload -and $payload.ready -eq $true) {
+                $script:pollSnapshot.status = 'active'
+                $script:pollSnapshot.label = 'Operacional'
+            }
+            if (-not $script:dashboardToken) {
+                Finish-LaoAsyncPoll
+                return
+            }
+            $script:pollStage = 'tasks'
+            $script:pollTask = $privateClient.GetStringAsync($script:baseUrl + '/dashboard/api/tasks')
+        }
+        'tasks' {
+            if ($null -ne $payload -and $null -ne $payload.tasks -and $payload.tasks -is [array]) {
+                $active = @($payload.tasks | Where-Object {
+                    $_.status -in @('preparing','running','validating')
+                }).Count
+                $reviews = @($payload.tasks | Where-Object {
+                    $_.status -eq 'awaiting_review'
+                }).Count
+                $script:pollSnapshot.activeTasks = $active
+                $script:pollSnapshot.pendingReviews = $reviews
+                $script:pollSnapshot.tasksAuthenticated = $true
+                if ($script:pollSnapshot.status -eq 'active' -and $reviews -gt 0) {
+                    $script:pollSnapshot.status = 'review'
+                    $script:pollSnapshot.label = 'Aguardando revisao'
+                } elseif ($script:pollSnapshot.status -eq 'active' -and $active -gt 0) {
+                    $script:pollSnapshot.label = 'Executando tarefas'
+                }
+            }
+            Finish-LaoAsyncPoll
+        }
+    }
+}
+
+function Update-LaoTray($snapshot) {
         $script:trayStatus = $snapshot.status
         $script:lastCheck = Get-Date
         $notify.Icon = $icons[$snapshot.status]
@@ -148,9 +249,9 @@ function Update-LaoTray {
         if ($snapshot.tasksAuthenticated) {
             $tasksItem.Text = "Tarefas: $($snapshot.activeTasks) executando; $($snapshot.pendingReviews) em revisao"
         } else {
-            $tasksItem.Text = 'Tarefas: autenticacao nao configurada'
+            $tasksItem.Text = 'Tarefas: consulta nao autenticada'
         }
-        if ($EnableNotifications -and $script:initialized) {
+        if ($EnableNotifications -and -not $AsyncProbeOnly -and $script:initialized) {
             $newReviews = if ($null -eq $snapshot.pendingReviews) { 0 } else { [int]$snapshot.pendingReviews }
             if ($script:previousStatus -ne 'offline' -and $snapshot.status -eq 'offline') {
                 $notify.BalloonTipTitle = 'LAO DevSpace indisponivel'
@@ -167,10 +268,29 @@ function Update-LaoTray {
         $script:previousStatus = $snapshot.status
         $script:previousReviews = if ($null -eq $snapshot.pendingReviews) { 0 } else { [int]$snapshot.pendingReviews }
         $script:previousTasksAuthenticated = $snapshot.tasksAuthenticated
-    } finally { $script:checking = $false }
 }
 
-$timer.Add_Tick({ Update-LaoTray })
+$timer.Add_Tick({
+    $script:uiHeartbeatTicks++
+    try {
+        if ($script:pollStage -ne 'none') {
+            Advance-LaoAsyncPoll
+        } elseif ([DateTime]::UtcNow -ge $script:nextPollAt) {
+            Start-LaoAsyncPoll
+        }
+    } catch {
+        # A telemetry exception must never close the GUI or report green.
+        $script:pollStage = 'none'
+        $script:pollTask = $null
+        $script:nextPollAt = [DateTime]::UtcNow.AddSeconds(15)
+        Update-LaoTray ([pscustomobject]@{
+            status = 'offline'; label = 'Falha na monitorizacao'
+            activeTasks = $null; pendingReviews = $null
+            tasksAuthenticated = $false; checkedAt = [DateTime]::UtcNow.ToString('o')
+        })
+        if ($AsyncProbeOnly) { $context.ExitThread() }
+    }
+})
 $openItem.Add_Click({
     Start-Process ($script:baseUrl + '/dashboard') | Out-Null
 })
@@ -190,17 +310,26 @@ $copyItem.Add_Click({
 })
 $quitItem.Add_Click({ $context.ExitThread() })
 try {
-    Update-LaoTray
     $timer.Start()
     [Windows.Forms.Application]::Run($context)
 } finally {
     $timer.Stop()
     $notify.Visible = $false
     $timer.Dispose()
+    $publicClient.CancelPendingRequests()
+    $privateClient.CancelPendingRequests()
+    $publicClient.Dispose()
+    $privateClient.Dispose()
     $notify.Dispose()
     $menu.Dispose()
     $context.Dispose()
     foreach ($icon in $icons.Values) { $icon.Dispose() }
-    try { $mutex.ReleaseMutex() } catch { }
-    $mutex.Dispose()
+    if ($mutex) {
+        try { $mutex.ReleaseMutex() } catch { }
+        $mutex.Dispose()
+    }
+}
+if ($AsyncProbeOnly) {
+    $script:asyncResult | Add-Member -NotePropertyName uiHeartbeatTicks -NotePropertyValue $script:uiHeartbeatTicks
+    $script:asyncResult | ConvertTo-Json -Compress
 }

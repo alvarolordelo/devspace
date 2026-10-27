@@ -68,6 +68,34 @@ O tray nao extrai tokens do clipboard nem grava tokens em disco.
 O mecanismo de login e fornecimento de token de uma instalacao final
 continua pendente. Nao foi instalado um servico, agendador ou autostart.
 
+## F5-07 - Sondagem assincrona sem congelar o menu (27/10/2026)
+
+Na interface WinForms, a sonda agora utiliza tarefas .NET HttpClient,
+com respostas processadas exclusivamente no thread STA depois do fim de
+cada etapa. O timer de 200 ms mantem a interface responsiva durante
+falhas lentas de daemon, Ollama ou API. A janela entre sondagens
+completas continua de 15 segundos, com timeout de 3 segundos por
+endpoint; consultas concorrentes sao impedidas pela maquina de estados
+`live -> ready -> tasks -> done`.
+
+Tokens so sao adicionados ao cliente HTTP privado para
+`/dashboard/api/tasks`; o cliente usado pelos dois healthchecks
+nao tem token. Os dois clientes proíbem redirecionamento automatico.
+No encerramento, requisicoes pendentes sao canceladas e os objetos
+HTTP descartados.
+
+A flag de diagnostico `-AsyncProbeOnly` executa uma sondagem com
+**message pump WinForms ativo, mas sem mostrar icone**. Retorna o
+mesmo JSON sanitizado com `uiHeartbeatTicks`, sem mutex de usuario,
+para validacao automatizada. No Windows local, o teste de servidor
+que atrasa `/health/live` por 1250 ms confirmou que o timer executa
+ao menos seis ticks durante a espera; o teste de redirecionamento
+com token confirmou que nenhuma chamada segue para o destino.
+
+Nao confundir a prova headless do timer com validacao visual completa
+do icone, do clique duplo e dos avisos na sessao grafica do usuario.
+O monitor segue manual, sem servico instalado e sem autostart.
+
 
 ### Evidencia atual
 

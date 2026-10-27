@@ -133,3 +133,78 @@ test("LAO Windows tray never follows a dashboard redirect with its secret",
       await new Promise<void>(resolve => receiver.close(() => resolve()));
     }
   });
+
+test("LAO Windows tray keeps pumping UI events while a slow health request is pending",
+  { skip: process.platform !== "win32" }, async () => {
+    const server = createServer((req, res) => {
+      res.setHeader("content-type", "application/json");
+      if (req.url === "/health/live") {
+        setTimeout(() => res.end(JSON.stringify({ live: true })), 1250);
+      } else if (req.url === "/health/ready") {
+        res.end(JSON.stringify({ ready: true }));
+      } else if (req.url === "/dashboard/api/tasks") {
+        if (req.headers.authorization !== "Bearer " + token) {
+          res.writeHead(401); res.end("{}"); return;
+        }
+        res.end(JSON.stringify({ tasks: [
+          { status: "running" }, { status: "awaiting_review" },
+        ] }));
+      } else { res.writeHead(404); res.end("{}"); }
+    });
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const { stdout } = await run("powershell.exe", [
+        "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File",
+        tray, "-AsyncProbeOnly", "-Port", String((server.address() as AddressInfo).port),
+      ], { env: { ...process.env, LAO_DASHBOARD_TOKEN: token },
+        timeout: 15000, windowsHide: true });
+      const result = JSON.parse(stdout) as {
+        status: string; activeTasks: number; pendingReviews: number;
+        tasksAuthenticated: boolean; uiHeartbeatTicks: number;
+      };
+      assert.equal(result.status, "review");
+      assert.equal(result.activeTasks, 1);
+      assert.equal(result.pendingReviews, 1);
+      assert.equal(result.tasksAuthenticated, true);
+      assert.ok(result.uiHeartbeatTicks >= 6,
+        "the WinForms timer must continue ticking during the delayed HTTP response");
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
+test("LAO asynchronous tray never sends a Bearer token to a redirect destination",
+  { skip: process.platform !== "win32" }, async () => {
+    let redirected = false;
+    const receiver = createServer((_req, res) => {
+      redirected = true; res.end("{}");
+    });
+    await new Promise<void>(resolve => receiver.listen(0, "127.0.0.1", resolve));
+    const receiverPort = (receiver.address() as AddressInfo).port;
+    const server = createServer((req, res) => {
+      res.setHeader("content-type", "application/json");
+      if (req.url === "/health/live") res.end(JSON.stringify({ live: true }));
+      else if (req.url === "/health/ready") res.end(JSON.stringify({ ready: true }));
+      else {
+        res.writeHead(302, { location: "http://127.0.0.1:" + receiverPort + "/capture" });
+        res.end();
+      }
+    });
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const { stdout } = await run("powershell.exe", [
+        "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File",
+        tray, "-AsyncProbeOnly", "-Port", String((server.address() as AddressInfo).port),
+      ], { env: { ...process.env, LAO_DASHBOARD_TOKEN: token },
+        timeout: 15000, windowsHide: true });
+      const result = JSON.parse(stdout) as {
+        status: string; tasksAuthenticated: boolean;
+      };
+      assert.equal(result.status, "active");
+      assert.equal(result.tasksAuthenticated, false);
+      assert.equal(redirected, false);
+    } finally {
+      await new Promise<void>(resolve => server.close(() => resolve()));
+      await new Promise<void>(resolve => receiver.close(() => resolve()));
+    }
+  });
