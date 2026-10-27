@@ -52,7 +52,17 @@ if ($wrapperInfo.Extension -ine '.exe' -or $wrapperInfo.Length -lt 1 -or
     $wrapperInfo.Length -gt 20971520) {
   throw 'Invalid WinSW executable'
 }
-if ((Get-FileHash -LiteralPath $wrapper -Algorithm SHA256).Hash -ine $WinSWSha256) {
+# Hash with the .NET runtime directly. Some locked-down Windows runners do
+# not expose the Get-FileHash cmdlet even though .NET SHA-256 is available.
+$sha256 = [Security.Cryptography.SHA256]::Create()
+$stream = [IO.File]::OpenRead($wrapper)
+try {
+  $wrapperHash = [BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '')
+} finally {
+  $stream.Dispose()
+  $sha256.Dispose()
+}
+if ($wrapperHash -ine $WinSWSha256) {
   throw 'WinSW SHA-256 mismatch'
 }
 $manifestPath = Join-Path $release 'RELEASE_MANIFEST.json'

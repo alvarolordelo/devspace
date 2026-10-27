@@ -501,3 +501,20 @@ criptografica externa, desinstalacao e rollback. Ver PORTABLE_RELEASE.md.
 verificador da versao fixa DevSpace 1.0.8 passaram. A checagem adicional
 de sintaxe PowerShell do plano de servico tambem passou em teste isolado.
 Nao foi feita instalacao de servico, boot nem promocao em projetos reais.
+
+## F5-04 / F7-05 - CI Windows do plano de servico (26/10/2026)
+
+**F5 e F7 permanecem [~].** A consulta ao GitHub Actions confirmou que a
+execucao `40438264282` no commit `cf0a856` **falhou**, apesar da regressao
+local verde: o teste do pacote portavel nao encontrou o cmdlet `Get-FileHash`
+na sessao PowerShell do Windows runner. Typecheck, build, pin DevSpace e
+instalacao de dependencias congeladas no CI passaram antes da falha.
+
+O plano de servico offline passou a calcular SHA-256 do wrapper WinSW
+diretamente pela API criptografica .NET, sem depender do cmdlet opcional.
+Continua exigindo hash exato e recusando wrapper adulterado, e permanece
+um **gerador de plano**, sem instalacao SCM, boot, registro ou credenciais.
+O teste especifico de pacote portavel e geracao de plano passou localmente
+(4/4), assim como o gate DevSpace 1.0.8, typecheck, build e a regressao
+completa (`pnpm test`: **237 casos, 229 aprovados, 8 ignorados, 0 falhas**). A correcao so
+sera considerada validada no runner hospedado apos novo workflow verde.
