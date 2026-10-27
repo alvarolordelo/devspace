@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { execFile } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
 import { createServer } from "node:http";
+import { dirname, join } from "node:path";
 import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -10,6 +12,20 @@ import test from "node:test";
 const run = promisify(execFile);
 const tray = fileURLToPath(new URL("./windows/lao-tray.ps1", import.meta.url));
 const token = "lao-test-local-monitor-access-token-12345";
+
+test("Windows PowerShell 5.1 entrypoints keep the UTF-8 BOM when non-ASCII labels are present", () => {
+  const dirs = [dirname(tray), fileURLToPath(new URL("../../scripts/", import.meta.url))];
+  for (const directory of dirs) {
+    for (const name of readdirSync(directory).filter(name => name.endsWith(".ps1"))) {
+      const bytes = readFileSync(join(directory, name));
+      const bom = bytes.subarray(0, 3).equals(Buffer.from([0xef, 0xbb, 0xbf]));
+      // Legacy powershell.exe reads UTF-8 sans BOM as the ANSI code page.
+      if (bytes.some(byte => byte > 0x7f)) {
+        assert.ok(bom, `${name}: PowerShell 5.1 requires UTF-8 BOM for accents/symbols`);
+      }
+    }
+  }
+});
 
 test("LAO Windows tray uses approved icons and parses without opening a GUI",
   { skip: process.platform !== "win32" }, () => {
@@ -28,6 +44,7 @@ test("native LAO popup matches the approved 420 DIP structure without opening a 
     const layout = JSON.parse(stdout) as {
       validated: boolean; widthDip: number; healthRows: number;
       actions: number; keyboardEscape: boolean; fontFamily: string;
+      uiTextBase64: string;
     };
     assert.equal(layout.validated, true);
     assert.equal(layout.widthDip, 420);
@@ -35,6 +52,14 @@ test("native LAO popup matches the approved 420 DIP structure without opening a 
     assert.equal(layout.actions, 4);
     assert.equal(layout.keyboardEscape, true);
     assert.equal(layout.fontFamily, "Segoe UI");
+    const labels = JSON.parse(Buffer.from(layout.uiTextBase64, "base64").toString("utf8"));
+    assert.equal(labels.settings, "Configurações");
+    assert.equal(labels.model, "Modelo padrão");
+    assert.equal(labels.last, "Última execução");
+    assert.equal(labels.statusDot, "●");
+    assert.equal(labels.dashboardAction, "↗  Abrir painel");
+    assert.equal(labels.restartAction, "↻  Reiniciar LAO");
+    assert.equal(labels.idleHeading, "Atenção · parcialmente disponível");
   });
 
 test("LAO Windows tray polls loopback status and reads task counts only with a Bearer token",

@@ -1,4 +1,4 @@
-# LAO DevSpace tray - Windows, foreground and entirely opt-in.
+﻿# LAO DevSpace tray - Windows, foreground and entirely opt-in.
 # Launch manually with: powershell.exe -NoProfile -STA -File <this script>
 # Exit closes ONLY the tray monitor, not the LAO daemon, DevSpace or Ollama.
 [CmdletBinding()]
@@ -162,6 +162,26 @@ if ($UiCheckOnly) {
         if ($ui.Freshness.Bottom -gt $ui.Form.ClientSize.Height-84-6) {
             throw 'Native popup footer is clipped at reference height'
         }
+        $uiSamples=[ordered]@{
+            settings=$ui.Settings.AccessibleName
+            model=$ui.Rows.model.Title.Text
+            last=$ui.Rows.last.Title.Text
+            statusDot=$ui.HeaderDot.Text
+            dashboardAction=$ui.Actions.dashboard.Text
+            restartAction=$ui.Actions.context.Text
+        }
+        $idleSnapshot=[pscustomobject]@{
+            status='idle';statusAuthenticated=$true;restartAvailable=$false
+            reasons=@('devspace_unverified')
+            modelConfigured='teste';activeTasks=0;pendingReviews=0
+            tasksAuthenticated=$true
+        }
+        Update-LaoPopup $ui $idleSnapshot
+        $uiSamples.idleHeading=$ui.HeaderText.Text
+        # Base64 UTF-8 avoids the Windows PowerShell 5.1 OEM console encoding
+        # masking or introducing mojibake in the test runner's stdout.
+        $uiTextJson=ConvertTo-Json -InputObject $uiSamples -Compress
+        $uiTextBase64=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($uiTextJson))
         [pscustomobject]@{
             validated=$true
             widthDip=$ui.Form.ClientSize.Width
@@ -170,6 +190,7 @@ if ($UiCheckOnly) {
             keyboardEscape=$ui.Form.KeyPreview
             lastHeader=$ui.HeaderText.Text
             fontFamily=$ui.HeaderText.Font.FontFamily.Name
+            uiTextBase64=$uiTextBase64
         } | ConvertTo-Json -Compress
     } finally {
         $ui.Logo.Image.Dispose()

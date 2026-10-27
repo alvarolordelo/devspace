@@ -1,5 +1,5 @@
-# LAO approved native tray popup (Segoe UI, 420 DIP, independent of service).
-# All actions are read-only local navigation. Never install or restart a service.
+﻿# LAO approved native tray popup (Segoe UI, 420 DIP, independent of service).
+# Local navigation plus confirmed LAO-only restart. Never install a Windows service.
 function Set-LaoRoundedControlRegion($control,[int]$radius) {
     $w=$control.ClientSize.Width; $h=$control.ClientSize.Height
     if($w -lt $radius -or $h -lt $radius){return}

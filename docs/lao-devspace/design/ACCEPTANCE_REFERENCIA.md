@@ -88,3 +88,13 @@
 - [ ] Clique físico no botão **Reiniciar LAO** e novo clique na bandeja **Abrir painel** aguardam aceite visual do usuário.
 
 Os painéis anteriores de teste nas portas 7878/7888/7890 não são a porta oficial. O código recém-compilado está em execução na **7877**, em processo LAO exclusivo supervisionado. Após reiniciar o daemon, os tickets de sessão em memória expiram; reabrir pelo Monitor restaura a autenticação local sem digitar a chave.
+
+## Correção de acentos e ícones do Monitor Windows — 27/10/2026
+
+- [x] Causa confirmada com teste reproduzível: `powershell.exe` 5.1 decodifica um `.ps1` UTF-8 **sem BOM** pela página de código ANSI; os textos ficam `ConfiguraÃ§Ãµes` e os símbolos viram caracteres ilegíveis.
+- [x] `src/lao/windows/lao-tray.ps1` e `src/lao/windows/lao-popup.ps1` passam a ser versionados em **UTF-8 com BOM**, mantendo as legendas, os acentos e os símbolos Unicode da referência visual aprovada.
+- [x] Teste automático falha quando um `.ps1` Windows com caracteres não ASCII perde o BOM, evitando regressões por editores ou ferramentas de patch.
+- [x] Teste WinForms executa o PowerShell real e recupera em base64 UTF-8 as legendas renderizadas: `Configurações`, `Modelo padrão`, `Última execução`, `Atenção · parcialmente disponível`, `↗ Abrir painel`, `↻ Reiniciar LAO` e o ponto `●`.
+- [ ] Captura física pelo usuário do popup reiniciado após carregar o script atualizado.
+
+**Operação:** apenas o Monitor da bandeja precisa ser fechado e aberto pelo atalho **LAO DevSpace Monitor**, pois o WinForms antigo conserva o texto já carregado em memória. O daemon na porta 7877, DevSpace MCP e Ollama não precisam ser reiniciados para corrigir este problema visual.
