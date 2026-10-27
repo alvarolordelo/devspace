@@ -13,27 +13,50 @@ if (!(await lstat(base)).isDirectory()) throw new Error("Release directory must 
 const raw = await readFile(join(base, "RELEASE_MANIFEST.json"));
 if (raw.length > 300_000) throw new Error("Manifest exceeds verification budget");
 const manifest = JSON.parse(raw.toString("utf8"));
-if (manifest.schemaVersion !== 1 || manifest.kind !== "lao-devspace-release-candidate" ||
+const portable = manifest.kind === "lao-devspace-portable-candidate";
+if (manifest.schemaVersion !== 1 ||
+    !["lao-devspace-release-candidate", "lao-devspace-portable-candidate"].includes(manifest.kind) ||
     manifest.stableDevspaceVersion !== "1.0.8" ||
     manifest.installed !== false || manifest.serviceInstalled !== false ||
-    manifest.autostartEnabled !== false || manifest.nodeModulesIncluded !== false ||
-    manifest.requiresOfflineFrozenDependencies !== true ||
+    manifest.autostartEnabled !== false || manifest.nodeModulesIncluded !== portable ||
+    manifest.requiresOfflineFrozenDependencies !== !portable ||
     !Array.isArray(manifest.files) || manifest.files.length < 10 || manifest.files.length > 2500) {
   throw new Error("Unrecognized or unsafe release manifest");
+}
+const allowedRuntimePackages = new Map([
+  ["zod", "4.4.3"],
+  ["better-sqlite3", "12.10.0"],
+  ["bindings", "1.5.0"],
+  ["file-uri-to-path", "1.0.0"],
+]);
+if (portable && (!manifest.runtime ||
+    !["win32", "linux", "darwin"].includes(manifest.runtime.platform) ||
+    !["x64", "arm64"].includes(manifest.runtime.arch) ||
+    !/^\d{2,3}$/.test(manifest.runtime.nodeAbi) ||
+    !Array.isArray(manifest.runtime.packages) ||
+    manifest.runtime.packages.length !== allowedRuntimePackages.size ||
+    new Set(manifest.runtime.packages.map(item => item.name)).size !== allowedRuntimePackages.size ||
+    manifest.runtime.packages.some(({ name, version }) =>
+      allowedRuntimePackages.get(name) !== version))) {
+  throw new Error("Portable candidate runtime metadata invalid");
 }
 const validName = name => typeof name === "string" &&
   name.length > 0 && name.length <= 260 &&
   !name.includes("\\") && !name.includes(":") && !name.startsWith("/") &&
   !win32.isAbsolute(name) && !name.split("/").some(part =>
-    part === "" || part === "." || part === ".." || part === ".git" ||
-    part.toLowerCase() === "node_modules");
+    part === "" || part === "." || part === ".." || part === ".git") &&
+  (portable
+    ? (!name.includes("/node_modules/") &&
+      (!name.startsWith("node_modules/") ||
+        allowedRuntimePackages.has(name.split("/")[1]) && name.split("/").length > 2))
+    : !name.split("/").includes("node_modules"));
 const manifestPaths = new Set();
 let budget = 0;
 for (const item of manifest.files) {
   if (!item || !validName(item.path) || !Number.isSafeInteger(item.bytes) ||
       item.bytes < 0 || item.bytes > 120 * 1024 * 1024 ||
       typeof item.sha256 !== "string" || !/^[0-9a-f]{64}$/.test(item.sha256)) {
-    throw new Error("Invalid release manifest entry");
+    throw new Error("Invalid release manifest entry: " + String(item?.path).slice(0, 160));
   }
   const key = item.path.toLowerCase();
   if (manifestPaths.has(key)) throw new Error("Duplicate release path");
@@ -76,4 +99,5 @@ for (const item of manifest.files) {
 console.log(JSON.stringify({
   verified: true, kind: manifest.kind, stableDevspaceVersion: "1.0.8",
   files: seen.size, bytes: verifiedBytes, installed: false,
+  ...(portable ? { runtime: manifest.runtime } : {}),
 }));
