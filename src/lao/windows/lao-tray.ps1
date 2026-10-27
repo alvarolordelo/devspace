@@ -137,6 +137,21 @@ if ($UiCheckOnly) {
                 throw 'Uninstalled service control must remain disabled'
             }
         }
+        $ui.Form.ClientSize=[Drawing.Size]::new(340,580)
+        Resize-LaoPopupContents $ui 340
+        foreach ($row in $ui.Rows.Values) {
+            if ($row.Title.Right + 6 -gt $row.Value.Left -or $row.Value.Right -gt 340) {
+                throw 'Narrow popup width overlaps health row labels'
+            }
+        }
+        if ($ui.HeaderText.Right -ge $ui.Settings.Left) {
+            throw 'Narrow popup header overlaps settings'
+        }
+        $ui.Form.ClientSize=[Drawing.Size]::new(420,790)
+        Resize-LaoPopupContents $ui 420
+        if ($ui.Freshness.Bottom -gt $ui.Form.ClientSize.Height-84-6) {
+            throw 'Native popup footer is clipped at reference height'
+        }
         [pscustomobject]@{
             validated=$true
             widthDip=$ui.Form.ClientSize.Width

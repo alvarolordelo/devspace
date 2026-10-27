@@ -21,7 +21,7 @@ if (![1,1.25,1.5].includes(scale)) throw new Error("Unsupported QA DPI scale");
 const url = new URL(args[1]);
 if (url.protocol !== "http:" || !["localhost", "127.0.0.1"].includes(url.hostname) ||
     url.pathname !== "/dashboard" || url.search || url.hash ||
-    url.username || url.password || !["", "80", "7877"].includes(url.port)) {
+    url.username || url.password || !["", "80", "7877", "7878"].includes(url.port)) {
   throw new Error("Visual smoke accepts only the local LAO dashboard URL");
 }
 const [tokenFile, chrome, output] = [args[3], args[5], args[7]].map(path => resolve(path));
@@ -66,7 +66,7 @@ try {
       signal: AbortSignal.timeout(1200),
     });
     return (await response.json()).find(p => p.type === "page" &&
-      p.url.startsWith("http://127.0.0.1:7877/dashboard"));
+      p.url === url.href);
   });
   ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((done, reject) => {
@@ -121,6 +121,23 @@ try {
       layout.logo !== true || layout.tokenDisplayed !== false) {
     throw new Error("Approved dashboard DOM/visual contract failed");
   }
+  const interactions = JSON.parse(await evaluate(`JSON.stringify((() => {
+    const result = {};
+    for (const name of ['status','tarefas','modelos','logs','configuracoes']) {
+      document.querySelector('.nav [data-section="' + name + '"]').click();
+      const section = document.getElementById('section-' + name);
+      const active = document.querySelector('.nav [aria-current="page"]');
+      result[name] = !section.classList.contains('hidden') &&
+        active?.dataset.section === name &&
+        document.documentElement.scrollWidth <= innerWidth + 1;
+    }
+    result.disabledControls = Array.from(document.querySelectorAll('button.action:disabled')).length === 2;
+    document.querySelector('.nav [data-section="status"]').click();
+    return result;
+  })())`));
+  if (Object.values(interactions).some(value => value !== true)) {
+    throw new Error("Dashboard navigation, disabled controls or layout interaction failed");
+  }
   const capture = await cmd("Page.captureScreenshot", {
     format: "png", fromSurface: true, captureBeyondViewport: true,
   });
@@ -139,6 +156,7 @@ try {
   console.log(JSON.stringify({
     visualSmoke: "passed", dashboardReady: true, nav: layout.nav,
     statusCards: layout.cards, scale, mobileWidth: mobile.width, screenshot: output,
+    navigationChecked: 5, disabledControlsChecked: true,
     noTokenInOutput: true, noSoftwareInstalled: true,
   }));
 } finally {

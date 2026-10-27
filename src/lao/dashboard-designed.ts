@@ -13,6 +13,7 @@ body{margin:0;background:linear-gradient(128deg,#f0f6ff,#fafcff);color:var(--tex
 button,input,select{font:inherit}
 button{cursor:pointer}
 button:disabled{cursor:not-allowed;opacity:.65}
+.action.primary:disabled{background:#e7eef7;border-color:#d8e1ec;color:#667085;opacity:1}
 :focus-visible{outline:3px solid #6bb4ff;outline-offset:3px}
 .hidden{display:none!important}
 .shell{min-height:100vh;max-width:1540px;margin:auto;display:grid;grid-template-columns:212px minmax(0,1fr);background:#fff;
@@ -310,11 +311,27 @@ async function refresh(){
   loadedTasks=Array.isArray(data.tasks)?data.tasks:[];
   renderTasks();renderEvents();
   $("content").classList.remove("hidden");$("login").classList.add("hidden");$("message").textContent="";
-  if(sections.includes(location.hash.slice(1)))section(location.hash.slice(1));
+  if(sections.includes(location.hash.slice(1)) && location.hash.slice(1)!==activeSection){
+   section(location.hash.slice(1));
+  }
  }catch(err){
   $("connection").className="pill bad";$("connection-text").textContent="Conexão indisponível";
   if(!$("login").classList.contains("hidden"))$("message").textContent=err.message;
-  else $("dependencies").textContent=err.message;
+  else{
+   $("dependencies").textContent="Coleta indisponível: "+err.message;
+   for(const [label,indicator] of [["lao-service","lao-dot"],["devspace-mcp","mcp-dot"],["ollama-state","ollama-dot"]]){
+    $(label).textContent="Não verificado";dot(indicator,"neutral");
+   }
+   for(const id of ["gpu","vram","cpu","ram","node-memory"]){$(id).textContent="—";}
+   for(const id of ["gpu-bar","vram-bar","cpu-bar","ram-bar"]){pctbar(id,null);}
+   $("cores").textContent="Coleta indisponível";
+   $("resource-alerts").textContent="Medições temporariamente indisponíveis.";
+   $("checked").textContent="—";
+   $("model-capability").textContent="Não verificado";
+   $("model-capability").className="row-status";
+   const modelIndicator=document.querySelector("#model-summary .dot");
+   if(modelIndicator)modelIndicator.className="dot neutral";
+  }
  }
 }
 $("form").addEventListener("submit",async e=>{
