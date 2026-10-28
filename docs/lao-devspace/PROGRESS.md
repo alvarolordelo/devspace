@@ -16,7 +16,7 @@ Validação adicional do provisionamento: **6 testes direcionados aprovados**, i
 
 **Verificação final desta rodada:** 23 testes direcionados passaram, inclusive recuperação simulada no SCM; o teste adicional de descoberta da credencial passou (5 testes do probe ao todo). `pnpm typecheck`, `pnpm build`, `git diff --check` e verificador da base DevSpace `1.0.8` passaram.
 
-**Regressao consolidada apos os controles de 27/10:** `pnpm test` executou **269 testes, 261 aprovados, 8 ignorados e 0 falhas**. `pnpm typecheck`, `pnpm build`, `git diff --check` e `node scripts/lao-verify-devspace-pin.mjs` tambem passaram. O daemon ativo respondeu `ready=true` sem bloqueios, o Ollama respondeu localmente e o MCP permaneceu protegido por OAuth.
+**Regressao consolidada apos os controles de 27/10:** `pnpm test` executou inicialmente 269 testes (261 aprovados, 8 ignorados) e, apos lifecycle do servico + historico/notificacoes, **271 testes, 263 aprovados, 8 ignorados e 0 falhas**. `pnpm typecheck`, `pnpm build`, `git diff --check` e `node scripts/lao-verify-devspace-pin.mjs` tambem passaram. O daemon ativo respondeu `ready=true` sem bloqueios, o Ollama respondeu localmente e o MCP permaneceu protegido por OAuth.
 
 **Recuperação gerenciada:** o Monitor agora reconsulta `/dashboard/api/status` autenticado após a confirmação, usa a contagem de todas as tarefas ativas (sem limite da página de 200), verifica as transições `Stopped` e `Running` no SCM, aguarda a dependência responder e persiste resultado sanitizado em `%LOCALAPPDATA%\LAODevSpace\recovery-history.jsonl`. O teste funcional usa serviços SCM simulados e não toca nos processos atuais. Sem serviço Windows explicitamente vinculado, os controles permanecem indisponíveis. A instalação de um gerenciador de ciclo de vida para Ollama/DevSpace ainda requer decisão operacional do usuário; não foi feita.
 
@@ -36,10 +36,10 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F1 Núcleo LAO | [x] | Schemas, estados, SQLite, tarefas/runs/eventos, health e MCP opt-in; LAO OFF manteve tool surface e regressao DevSpace sem falhas |
 | F2 Ollama | [x] | Granite real executou leitura pelo MCP HTTP OAuth de teste (2026-07-28), tarefa persistida e aguardando revisao; configuracao padrao preservada |
 | F3 Escrita isolada | [x] | Granite real escreveu patch em worktree destacado via MCP HTTP OAuth de teste; integridade/sintaxe conferidas, checkout original intacto e aprovacao negada |
-| F4 Avaliacao/revisao | [~] | Integracao OAuth MCP/Granite/Docker validada; aprovacao de patch isolado disponivel somente mediante segundo opt-in, confirmacao do supervisor e evidencia de testes. Promocao segura continua pendente |
-| F5 Serviço e tray | [~] | Daemon opt-in, tray WinForms aprovado, sondagem assincrona, notificacoes opt-in e autostart da conta implementados; instalacao SCM/boot e teste operacional em Windows limpo continuam pendentes |
-| F6 Painel | [~] | Dashboard claro aprovado, OAuth MCP real, modelos locais, metricas CPU/RAM/GPU/VRAM, alertas e historico sanitizado; falta fechar QA interativo final e historico persistente dos alertas de recurso |
-| F7 Release | [~] | CI Windows anterior validado; adicionado gate de versao fixa ANTES de instalar dependencias e `pnpm install --frozen-lockfile`; CI Windows run `40260097979` aprovada com gate da base antes do install; instalador e rollback pendentes |
+| F4 Avaliacao/revisao | [~] | OAuth MCP, Granite, Docker, aprovacao deterministica e promocao supervisionada de arquivo foram validados no mesmo E2E; resta apenas fechar a prova real de duas correcoes sucessivas do modelo |
+| F5 Serviço e tray | [~] | Daemon, tray, autostart da conta e lifecycle WinSW explicito implementados; instalacao SCM/boot real e teste operacional em Windows limpo continuam pendentes |
+| F6 Painel | [x] | Dashboard claro aprovado, OAuth MCP real, modelos locais, metricas CPU/RAM/GPU/VRAM, historico persistente sanitizado e smoke real 100/125/150% com F5/logout/mobile |
+| F7 Release | [~] | Candidato standalone, integridade/assinatura externa e lifecycle reversivel preparados; falta executar WinSW autentico, instalacao/rollback e boot em Windows limpo antes do release final |
 | F8 Multimodelo | [~] | Benchmark Ollama real 5x Granite vs Spark concluido; teste simples 2+2, simulacao de agente e failover pendentes |
 
 ## Requisitos funcionais (RF)
@@ -50,24 +50,24 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-02 Provedor/modelo | [x] | `/api/tags` e `/api/show` verificados no Ollama local; Granite executou inferência real por `/api/chat`, com resposta e modelo registrados |
 | RF-03 Criar tarefa | [x] | `contracts.ts`, `task-store.ts`, `lao_delegate`; objetivo, workspace, critérios, permissões, orçamento, ID e persistência testados em read-only |
 | RF-04 Escrita isolada | [x] | Worktree gerenciado e destacado, escrita bounded com allowlist 1-5 paths. Patch Granite real via OAuth MCP preservou checkout fonte |
-| RF-05 Política de ferramentas | [~] | Modelo não recebe ferramentas; broker valida 1–5 caminhos explícitos, até 5 ações/32 KB, bloqueia symlinks e diff pré-existente fora da allowlist; shell e comandos do modelo negados, execução de testes autorizados pendente |
+| RF-05 Política de ferramentas | [x] | Modelo não recebe ferramentas; broker valida 1–5 caminhos explícitos, até 5 ações/32 KB, bloqueia symlinks/diff fora da allowlist e shell; testes autorizados executam somente no sandbox Docker fixado |
 | RF-06 Executar agente | [x] | Granite real executou leitura e escrita supervisionadas via MCP autenticado em HTTP local, persistiu run e aguardou review; sem ferramentas no modelo |
-| RF-07 Avaliar com provas | [~] | lao_write_assess mapeia criterios declarativos a fingerprint/sintaxe e suite Docker real no mesmo run; linguagem natural nao aprovada; gate de promocao pendente |
+| RF-07 Avaliar com provas | [x] | lao_write_assess vincula criterios declarativos a fingerprint/sintaxe e suite Docker real; promocao exige a mesma evidencia aprovada e revalidacao imediatamente antes da escrita |
 | RF-08 Correcoes limitadas | [~] | lao_retry read-only e lao_write_retry para escrita, ambos com feedback explicito e maximo de 2 revisoes; teste Granite de duas correcoes pendente |
-| RF-09 Aprovacao explicita | [~] | lao_review segue negando escrita; lao_write_approve separado registra aprovacao por run/fingerprint apos confirmacao e aceite Docker verificado, sem promover ou alterar origem |
+| RF-09 Aprovacao explicita | [x] | lao_review segue negando escrita; lao_write_approve separado exige confirmacao por task/run/fingerprint e evidencia Docker; promocao continua uma segunda acao explicita e auditada |
 | RF-10 Persistência/reconsulta | [x] | `lao_result` lê SQLite com runs, eventos, revisões e artefatos persistidos; reabertura e recuperação de execuções interrompidas foram testadas sem retomada automática insegura |
 | RF-11 Boot | [ ] | Não instalado |
 | RF-12 Saúde | [~] | Health local, Ollama e probe MCP OAuth autenticado reais aprovados; falta somente o ciclo de vida do daemon como serviço Windows para fechar o requisito operacional |
-| RF-13 Painel | [~] | Dashboard real no design aprovado, sessao autenticada, F5, dados reais e renderizacao em 100/125/150% testados; falta QA interativo final no uso normal |
+| RF-13 Painel | [x] | Dashboard real no design aprovado, sessao autenticada, F5/logout, dados reais, mobile 390 px e renderizacao Chrome em 100/125/150% validados |
 | RF-14 Recuperacao | [~] | SQLite lease impede dois daemons no mesmo stateDir, heartbeat/TTL/reclamacao apos crash testados; SCM e reinicio operacional pendentes |
-| RF-15 Tray | [~] | Monitor Windows manual em PowerShell/WinForms, usa icones aprovados, mutex e health local; teste GUI interativo ainda pendente |
-| RF-16 Autostart configurável | [~] | Switch por usuario cria/remove somente os atalhos LAO na pasta Inicializar; boot antes do login depende do futuro servico SCM |
-| RF-17 Notificações | [~] | Tray possui notificacoes opt-in para mudancas de disponibilidade/revisao; notificacoes de pressao de recursos e preferencias finas permanecem pendentes |
-| RF-18 Dashboard/histórico | [~] | Painel consulta SQLite, filtros, runs, eventos, testes/diffs, revisao e metricas reais; falta persistencia historica especifica dos alertas de recurso e QA final |
+| RF-15 Tray | [x] | Monitor Windows WinForms com icones/layout aprovados, mutex, polling assincrono, popup real e acoes seguras; linhas de dependencia nao abrem configuracoes e controles so habilitam quando seguros |
+| RF-16 Autostart configurável | [x] | Switch por usuario habilita/desabilita somente os atalhos LAO na pasta Inicializar, reversivel e sem residuos; boot antes do login pertence separadamente ao RF-11/servico SCM |
+| RF-17 Notificações | [x] | Tray opt-in notifica indisponibilidade, nova revisao, tarefa concluida/falha e pressao sustentada CPU/RAM/VRAM, usando apenas mensagens estaticas sanitizadas |
+| RF-18 Dashboard/histórico | [x] | Painel consulta SQLite, filtros, runs, eventos, testes/diffs, revisao e metricas; alertas de recursos possuem JSONL persistente sanitizado e aparecem na secao Eventos |
 | RF-19 Multimodelo | [~] | Benchmark sequencial 5x real com modelos locais, acertos e latencias documentados em BENCHMARK_20261026.md; prova de codigo pendente |
 | RF-20 Failover | [ ] | Pendente |
 
-**RF concluídos:** 6/20 - **Parciais:** 12/20 - **Pendentes:** 2/20.
+**RF concluídos:** 14/20 - **Parciais:** 4/20 - **Pendentes:** 2/20.
 
 ## Histórico técnico e evidências
 
@@ -789,3 +789,49 @@ Pacote portavel inclui novo script nativo do popup.
 com o icone, ancora em barra Windows movida/multiplos monitores,
 legibilidade DPI real do Windows 11, rolamento em telas pequenas e
 avaliacao do usuario. Nao instalar service, nao habilitar autostart.
+
+## F5-09 / F7-08 - Lifecycle reversivel do servico Windows (27/10/2026)
+
+Foi acrescentado `lao-service-lifecycle.ps1`. O comando padrao e
+`Action Validate` e nao altera SCM, ACL, boot ou processos. Ele revalida
+hash do wrapper/configuracao, integridade do release, conta LocalService,
+variaveis do daemon e modo de inicio antes de permitir qualquer mutacao.
+
+O plano WinSW agora pode declarar `Manual` ou `Automatic`; inicio atrasado
+so e aceito com `Automatic`. Um plano automatico exige ainda a confirmacao
+explicita `-ConfirmAutomaticStart` no momento da instalacao. O lifecycle
+possui acoes separadas de `Install` e `Uninstall`, exige administrador,
+faz backup de `lao.sqlite*`/preferencia de modelo, concede apenas `Modify`
+ao SID LocalService no stateDir e preserva o estado na desinstalacao.
+Falha durante a instalacao tenta remover o servico e restaurar a ACL
+anterior. `-StartAfterInstall` exige `/health/live` antes de declarar
+sucesso. O historico de operacoes fica em ProgramData, sem tokens.
+
+**Limite desta etapa:** os testes exercitam geracao de planos manual e
+Automatic+Delayed, hashes e `Action Validate`, alem da sintaxe do script.
+Nenhuma chamada real `WinSW install/start/stop/uninstall` foi executada
+nesta maquina. F5/F7 so podem fechar apos teste com WinSW autentico em
+Windows descartavel/limpo, incluindo reboot e rollback.
+
+## F5-10 / F6-06 - Historico e notificacoes operacionais (27/10/2026)
+
+Os alertas sustentados de CPU/RAM/VRAM agora possuem historico JSONL
+sanitizado e limitado dentro do stateDir do LAO. So sao persistidas
+transicoes com timestamp e nomes fixos de alertas; nao entram prompts,
+tokens, nomes de processos, caminhos ou conteudo das tarefas. Recuperacao
+para estado normal tambem e registrada. O Dashboard reutiliza a secao
+existente de Eventos para exibir essas transicoes junto aos eventos de
+tarefas, sem adicionar cards nem alterar o layout aprovado.
+
+O Monitor passa a notificar, quando o opt-in de notificacoes estiver
+habilitado, novas revisoes, indisponibilidade do daemon, pressao confirmada
+de recursos, tarefas concluidas e tarefas com falha. As notificacoes de
+tarefa usam somente contagem/estado e orientam abrir o painel; nunca exibem
+objetivo, prompt, saida ou diff. O estado anterior e mantido em memoria para
+nao repetir o mesmo aviso a cada sondagem.
+
+**QA visual real:** uma instancia temporaria do daemon em porta isolada
+passou o smoke do Dashboard com Chrome real em escalas 100%, 125% e 150%:
+5 secoes, 4 cards, largura movel de 390 px, F5 mantendo sessao, logout,
+17 assets locais, 22 modelos no combo e nenhum token em URL/output. O
+daemon de QA e seu stateDir temporario foram encerrados/removidos ao fim.

@@ -6,6 +6,7 @@ import { startLaoHealthServer } from "./health-server.js";
 import { summarizeLaoTaskDetails, validateLaoDashboardToken } from "./dashboard.js";
 import { createLaoModelSelection } from "./model-selection.js";
 import type { LaoDevspaceStatus } from "./devspace-probe.js";
+import { createLaoResourceMonitor } from "./resource-metrics.js";
 
 export interface LaoDaemonOptions {
   config: LaoConfig;
@@ -27,6 +28,8 @@ export async function startLaoDaemon(options: LaoDaemonOptions) {
   const ready = options.devspaceReady ?? (() => false);
   const devspaceStatus = options.devspaceStatus ?? (async () => ready() ? "connected" as const : "unverified" as const);
   const models = createLaoModelSelection(options.config, options.stateDir);
+  const resourceMetrics = createLaoResourceMonitor(undefined,
+    join(options.stateDir, "resource-alerts.jsonl"));
   // The selected model belongs to the LAO state, not the pinned DevSpace config.
   // The state directory is created by the task store below; restore afterwards.
   let store: LaoTaskStore;
@@ -39,6 +42,7 @@ export async function startLaoDaemon(options: LaoDaemonOptions) {
       restartLao: options.restartLao,
       listModels: models.listModels,
       selectModel: models.selectModel,
+      readResourceMetrics: resourceMetrics,
     } : undefined,
   });
   let recovered: number;

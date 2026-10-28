@@ -140,8 +140,12 @@ test("offline portable daemon candidate has fixed native runtime and isolated SQ
       assert.equal(plan.installed, false);
       assert.equal(plan.serviceStarted, false);
       assert.equal(plan.autostartEnabled, false);
+      assert.equal(plan.startMode, "Manual");
+      assert.equal(plan.delayedAutoStart, false);
       assert.equal(plan.serviceAccount, "NT AUTHORITY\\LocalService");
       assert.equal(plan.stopTimeout, "30sec");
+      assert.match(String(plan.configSHA256), /^[a-f0-9]{64}$/);
+      assert.match(String(plan.lifecycleSHA256), /^[a-f0-9]{64}$/);
       const xml = readFileSync(join(serviceDir, "LAODevSpaceService.xml"), "utf8");
       assert.match(xml, /<startmode>Manual<\/startmode>/);
       assert.match(xml, /LAODevSpace/);
@@ -151,6 +155,45 @@ test("offline portable daemon candidate has fixed native runtime and isolated SQ
       assert.doesNotMatch(xml, /<password>/);
       assert.doesNotMatch(xml, /LAO_WRITE_APPROVAL_ENABLED|LAO_WRITE_PROMOTION_ENABLED/);
       assert.ok(readFileSync(join(serviceDir, "LAODevSpaceService.exe")).equals(wrapperBytes));
+      assert.equal(existsSync(join(serviceDir, "lao-service-lifecycle.ps1")), true);
+      const validate = JSON.parse(execFileSync("powershell.exe", [
+        "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+        join(serviceDir, "lao-service-lifecycle.ps1"),
+        "-ServicePlanDir", serviceDir, "-Action", "Validate",
+      ], { encoding: "utf8", timeout: 60_000, windowsHide: true }));
+      assert.equal(validate.valid, true);
+      assert.equal(validate.mutated, false);
+      assert.equal(validate.startMode, "Manual");
+
+      const automaticDir = join(root, "automatic-service-plan");
+      const automaticParams = [...params];
+      automaticParams[automaticParams.indexOf("-OutputDir") + 1] = automaticDir;
+      automaticParams.push("-StartMode", "Automatic", "-DelayedAutoStart");
+      const automatic = JSON.parse(execFileSync("powershell.exe", automaticParams, {
+        encoding: "utf8", timeout: 60_000, windowsHide: true,
+      }));
+      assert.equal(automatic.autostartEnabled, true);
+      assert.equal(automatic.delayedAutoStart, true);
+      const automaticXml = readFileSync(join(automaticDir, "LAODevSpaceService.xml"), "utf8");
+      assert.match(automaticXml, /<startmode>Automatic<\/startmode>/);
+      assert.match(automaticXml, /<delayedAutoStart>true<\/delayedAutoStart>/);
+      const automaticValidate = JSON.parse(execFileSync("powershell.exe", [
+        "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
+        join(automaticDir, "lao-service-lifecycle.ps1"),
+        "-ServicePlanDir", automaticDir, "-Action", "Validate",
+      ], { encoding: "utf8", timeout: 60_000, windowsHide: true }));
+      assert.equal(automaticValidate.valid, true);
+      assert.equal(automaticValidate.startMode, "Automatic");
+      assert.equal(automaticValidate.delayedAutoStart, true);
+
+      const invalidDelayed = [...params];
+      const invalidDelayedDir = join(root, "invalid-delayed-plan");
+      invalidDelayed[invalidDelayed.indexOf("-OutputDir") + 1] = invalidDelayedDir;
+      invalidDelayed.push("-DelayedAutoStart");
+      assert.throws(() => execFileSync("powershell.exe", invalidDelayed, {
+        timeout: 30_000, windowsHide: true, stdio: "pipe",
+      }), /DelayedAutoStart requires StartMode Automatic/);
+      assert.equal(existsSync(invalidDelayedDir), false);
       const rejectedParams = [...params];
       const badPlan = join(root, "rejected-plan");
       rejectedParams[rejectedParams.indexOf("-OutputDir") + 1] = badPlan;
@@ -251,6 +294,7 @@ test("offline standalone Windows candidate includes verified Node and runs bundl
     ], { encoding: "utf8", timeout: 60_000, windowsHide: true }));
     assert.equal(planned.installed, false);
     assert.equal(planned.serviceStarted, false);
+    assert.equal(planned.startMode, "Manual");
     const xml = readFileSync(join(serviceDir, "LAODevSpaceService.xml"), "utf8");
     assert.match(xml, /runtime\\node\.exe/);
     assert.match(xml, /<startmode>Manual<\/startmode>/);

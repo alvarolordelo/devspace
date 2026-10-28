@@ -23,6 +23,7 @@ export interface LaoDashboardOptions {
   restartLao?: () => Promise<void>;
   listModels?: () => Promise<string[]>;
   selectModel?: (model: unknown) => Promise<"selected" | "not_installed" | "invalid">;
+  readResourceMetrics?: typeof readResourceMetrics;
 }
 
 /** Short-lived, read-only browser tickets. The long-lived operator token is never stored in web storage. */
@@ -325,7 +326,7 @@ export async function handleLaoDashboard(
     json(res, 401, { error: "unauthorized" }); return true;
   }
   if (path === "/dashboard/api/metrics") {
-    json(res, 200, await readResourceMetrics()); return true;
+    json(res, 200, await (options.readResourceMetrics ?? readResourceMetrics)()); return true;
   }
   if (detailMatch) {
     const id = detailMatch[1];

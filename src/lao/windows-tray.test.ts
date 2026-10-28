@@ -67,6 +67,9 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.match(settings, /MessageBoxButtons\]::YesNo/);
   assert.match(settings, /LAO_MANAGED_OLLAMA_SERVICE/);
   assert.match(settings, /LAO_MANAGED_DEVSPACE_SERVICE/);
+  assert.match(trayText, /Pressao confirmada de recursos/);
+  assert.match(trayText, /Uma tarefa foi concluida/);
+  assert.match(trayText, /Uma tarefa falhou/);
 });
 
 test("Windows PowerShell 5.1 entrypoints keep the UTF-8 BOM when non-ASCII labels are present", () => {
@@ -249,12 +252,27 @@ test("LAO Windows tray keeps pumping UI events while a slow health request is pe
         setTimeout(() => res.end(JSON.stringify({ live: true })), 1250);
       } else if (req.url === "/health/ready") {
         res.end(JSON.stringify({ ready: true }));
+      } else if (req.url === "/dashboard/api/status") {
+        if (req.headers.authorization !== "Bearer " + token) {
+          res.writeHead(401); res.end("{}"); return;
+        }
+        res.end(JSON.stringify({ blockingReasons: [], modelConfigured: "granite", restartAvailable: true }));
+      } else if (req.url === "/dashboard/api/metrics") {
+        if (req.headers.authorization !== "Bearer " + token) {
+          res.writeHead(401); res.end("{}"); return;
+        }
+        res.end(JSON.stringify({ gpu: null, alerts: {
+          advisoryOnly: true, warnings: ["ram_pressure"],
+        } }));
       } else if (req.url === "/dashboard/api/tasks") {
         if (req.headers.authorization !== "Bearer " + token) {
           res.writeHead(401); res.end("{}"); return;
         }
         res.end(JSON.stringify({ tasks: [
-          { status: "running" }, { status: "awaiting_review" },
+          { id: "00000000-0000-4000-8000-000000000001", status: "running" },
+          { id: "00000000-0000-4000-8000-000000000002", status: "awaiting_review" },
+          { id: "00000000-0000-4000-8000-000000000003", status: "completed" },
+          { id: "00000000-0000-4000-8000-000000000004", status: "failed" },
         ] }));
       } else { res.writeHead(404); res.end("{}"); }
     });
@@ -267,12 +285,16 @@ test("LAO Windows tray keeps pumping UI events while a slow health request is pe
         timeout: 15000, windowsHide: true });
       const result = JSON.parse(stdout) as {
         status: string; activeTasks: number; pendingReviews: number;
-        tasksAuthenticated: boolean; uiHeartbeatTicks: number;
+        tasksAuthenticated: boolean; uiHeartbeatTicks: number; resourceWarnings: string[];
+        completedTaskIds: string[]; failedTaskIds: string[];
       };
       assert.equal(result.status, "review");
       assert.equal(result.activeTasks, 1);
       assert.equal(result.pendingReviews, 1);
       assert.equal(result.tasksAuthenticated, true);
+      assert.deepEqual(result.resourceWarnings, ["ram_pressure"]);
+      assert.deepEqual(result.completedTaskIds, ["00000000-0000-4000-8000-000000000003"]);
+      assert.deepEqual(result.failedTaskIds, ["00000000-0000-4000-8000-000000000004"]);
       assert.ok(result.uiHeartbeatTicks >= 6,
         "the WinForms timer must continue ticking during the delayed HTTP response");
     } finally {

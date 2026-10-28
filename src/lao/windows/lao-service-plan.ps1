@@ -11,7 +11,9 @@ param(
   [Parameter(Mandatory=$true)][string]$OutputDir,
   [Parameter(Mandatory=$true)][string]$WinSWExe,
   [Parameter(Mandatory=$true)][string]$WinSWSha256,
-  [Parameter(Mandatory=$true)][string]$NodeExe
+  [Parameter(Mandatory=$true)][string]$NodeExe,
+  [ValidateSet('Manual','Automatic')][string]$StartMode = 'Manual',
+  [switch]$DelayedAutoStart
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -47,21 +49,27 @@ if (Test-Path -LiteralPath $target) {
 if ($WinSWSha256 -cnotmatch '^[a-fA-F0-9]{64}$') {
   throw 'WinSW must be pinned by an exact SHA-256 digest'
 }
+if ($DelayedAutoStart -and $StartMode -ne 'Automatic') {
+  throw 'DelayedAutoStart requires StartMode Automatic'
+}
 $wrapperInfo = Get-Item -LiteralPath $wrapper
 if ($wrapperInfo.Extension -ine '.exe' -or $wrapperInfo.Length -lt 1 -or
     $wrapperInfo.Length -gt 20971520) {
   throw 'Invalid WinSW executable'
 }
-# Hash with the .NET runtime directly. Some locked-down Windows runners do
-# not expose the Get-FileHash cmdlet even though .NET SHA-256 is available.
-$sha256 = [Security.Cryptography.SHA256]::Create()
-$stream = [IO.File]::OpenRead($wrapper)
-try {
-  $wrapperHash = [BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '')
-} finally {
-  $stream.Dispose()
-  $sha256.Dispose()
+function Get-Sha256([string]$Path) {
+  # Hash with .NET directly. Some locked-down Windows runners do not expose
+  # Get-FileHash even though SHA-256 is available.
+  $sha256 = [Security.Cryptography.SHA256]::Create()
+  $stream = [IO.File]::OpenRead($Path)
+  try {
+    return [BitConverter]::ToString($sha256.ComputeHash($stream)).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $stream.Dispose()
+    $sha256.Dispose()
+  }
 }
+$wrapperHash = Get-Sha256 $wrapper
 if ($wrapperHash -ine $WinSWSha256) {
   throw 'WinSW SHA-256 mismatch'
 }
@@ -106,7 +114,12 @@ function Xml([string]$value) {
   return [Security.SecurityElement]::Escape($value)
 }
 $launcher = Join-Path $release 'bin\devspace-laod.js'
+$lifecycle = Join-Path $release 'src\lao\windows\lao-service-lifecycle.ps1'
+if (-not (Test-Path -LiteralPath $lifecycle -PathType Leaf)) {
+  throw 'Release candidate lacks the service lifecycle script'
+}
 $id = 'LAODevSpaceService'
+$delayedLine = if ($DelayedAutoStart) { '  <delayedAutoStart>true</delayedAutoStart>' } else { '' }
 $xml = @"
 <service>
   <id>LAODevSpace</id>
@@ -115,7 +128,8 @@ $xml = @"
   <executable>$(Xml $node)</executable>
   <arguments>&quot;$(Xml $launcher)&quot;</arguments>
   <workingdirectory>$(Xml $release)</workingdirectory>
-  <startmode>Manual</startmode>
+  <startmode>$StartMode</startmode>
+$delayedLine
   <serviceaccount>
     <username>NT AUTHORITY\LocalService</username>
   </serviceaccount>
@@ -131,21 +145,34 @@ $xml = @"
 </service>
 "@
 [IO.Directory]::CreateDirectory($target) | Out-Null
-[IO.File]::Copy($wrapper, (Join-Path $target ($id + '.exe')), $false)
-[IO.File]::WriteAllText((Join-Path $target ($id + '.xml')), $xml, [Text.UTF8Encoding]::new($false))
+$wrapperTarget = Join-Path $target ($id + '.exe')
+$configTarget = Join-Path $target ($id + '.xml')
+$lifecycleTarget = Join-Path $target 'lao-service-lifecycle.ps1'
+[IO.File]::Copy($wrapper, $wrapperTarget, $false)
+[IO.File]::WriteAllText($configTarget, $xml, [Text.UTF8Encoding]::new($false))
+[IO.File]::Copy($lifecycle, $lifecycleTarget, $false)
 $receipt = [ordered]@{
   kind = 'lao-windows-service-plan'
   preparedAt = (Get-Date).ToUniversalTime().ToString('o')
   winSW_SHA256 = $WinSWSha256.ToLowerInvariant()
+  configSHA256 = (Get-Sha256 $configTarget)
+  lifecycleSHA256 = (Get-Sha256 $lifecycleTarget)
   sourceKind = $manifest.kind
   nodeABI = $runtime.abi
   installed = $false
   serviceStarted = $false
-  autostartEnabled = $false
+  autostartEnabled = ($StartMode -eq 'Automatic')
+  startMode = $StartMode
+  delayedAutoStart = [bool]$DelayedAutoStart
   serviceAccount = 'NT AUTHORITY\LocalService'
+  serviceId = 'LAODevSpace'
   stopTimeout = '30sec'
+  releaseDir = $release
+  nodeExe = $node
+  wrapperFile = $wrapperTarget
+  configFile = $configTarget
   launcher = $launcher
-  instruction = 'Requires separate authorization, explicit state-directory ACL for LocalService, verified wrapper version, backup and disposable Windows operational testing before installation.'
+  instruction = 'Run lao-service-lifecycle.ps1 with Action Validate first. Install/Uninstall require explicit action and administrator rights; automatic boot also requires explicit confirmation.'
 }
 [IO.File]::WriteAllText((Join-Path $target 'SERVICE_PLAN.json'),
   ($receipt | ConvertTo-Json -Depth 4), [Text.UTF8Encoding]::new($false))

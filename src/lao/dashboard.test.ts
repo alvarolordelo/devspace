@@ -330,6 +330,8 @@ test("dashboard markup has a parseable offline script and does not expose tokens
   assert.match(html, /\/dashboard\/api\/metrics/);
   assert.match(html, /id="resource-alerts"/);
   assert.match(html, /Sem alertas de recursos confirmados/);
+  assert.match(html, /recentTransitions/);
+  assert.match(html, /Recursos normalizados/);
   for (const tab of ["status", "tarefas", "modelos", "logs", "configuracoes"]) {
     assert.match(html, new RegExp('data-section="' + tab + '"'));
     assert.match(html, new RegExp('id="section-' + tab + '"'));

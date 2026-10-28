@@ -43,6 +43,7 @@ const approved = [
   "src/lao/windows/lao-autostart.ps1",
   "src/lao/windows/lao-settings.ps1",
   "src/lao/windows/lao-service-plan.ps1",
+  "src/lao/windows/lao-service-lifecycle.ps1",
   "scripts/launch-lao-monitor.ps1",
   "scripts/launch-lao-monitor.cmd",
   "scripts/launch-lao-daemon.ps1",

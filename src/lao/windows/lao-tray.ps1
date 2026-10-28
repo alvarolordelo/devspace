@@ -332,6 +332,9 @@ $script:initialized = $false
 $script:previousStatus = 'offline'
 $script:previousReviews = 0
 $script:previousTasksAuthenticated = $false
+$script:previousResourceWarnings = @()
+$script:previousCompletedTaskIds = @()
+$script:previousFailedTaskIds = @()
 $script:pollStage = 'none'
 $script:pollTask = $null
 $script:nextPollAt = [DateTime]::MinValue
@@ -379,6 +382,9 @@ function Start-LaoAsyncPoll {
         gpuPercent = $null
         vramUsedMiB = $null
         vramTotalMiB = $null
+        resourceWarnings = @()
+        completedTaskIds = @()
+        failedTaskIds = @()
         lastTaskModel = $null
         lastTaskId = $null
         lastTaskPhase = $null
@@ -445,6 +451,13 @@ function Advance-LaoAsyncPoll {
                 $script:pollSnapshot.vramUsedMiB = $payload.gpu.vramUsedMiB
                 $script:pollSnapshot.vramTotalMiB = $payload.gpu.vramTotalMiB
             }
+            if ($null -ne $payload -and $null -ne $payload.alerts -and
+                $payload.alerts.advisoryOnly -eq $true -and
+                $payload.alerts.warnings -is [array]) {
+                $script:pollSnapshot.resourceWarnings = @($payload.alerts.warnings | Where-Object {
+                    $_ -in @('cpu_pressure','ram_pressure','vram_pressure')
+                })
+            }
             $script:pollStage = 'tasks'
             $script:pollTask = $privateClient.GetStringAsync($script:baseUrl + '/dashboard/api/tasks')
         }
@@ -459,6 +472,12 @@ function Advance-LaoAsyncPoll {
                 $script:pollSnapshot.activeTasks = $active
                 $script:pollSnapshot.pendingReviews = $reviews
                 $script:pollSnapshot.tasksAuthenticated = $true
+                $script:pollSnapshot.completedTaskIds = @($payload.tasks | Where-Object {
+                    $_.status -eq 'completed' -and [string]$_.id -match '^[a-fA-F0-9-]{36}$'
+                } | ForEach-Object { [string]$_.id })
+                $script:pollSnapshot.failedTaskIds = @($payload.tasks | Where-Object {
+                    $_.status -eq 'failed' -and [string]$_.id -match '^[a-fA-F0-9-]{36}$'
+                } | ForEach-Object { [string]$_.id })
                 $latest = @($payload.tasks | Where-Object {
                     $_.status -in @('running','validating','preparing')
                 } | Select-Object -First 1)
@@ -498,17 +517,54 @@ function Update-LaoTray($snapshot) {
                 $notify.BalloonTipTitle = 'LAO DevSpace indisponivel'
                 $notify.BalloonTipText = 'O daemon local parou de responder.'
                 $notify.ShowBalloonTip(5000)
-            } elseif ($script:previousTasksAuthenticated -and $snapshot.tasksAuthenticated -and
-                      $newReviews -gt $script:previousReviews -and $newReviews -gt 0) {
-                $notify.BalloonTipTitle = 'LAO DevSpace: revisao'
-                $notify.BalloonTipText = 'Ha tarefas aguardando revisao no painel.'
-                $notify.ShowBalloonTip(5000)
+            } else {
+                $messages = New-Object System.Collections.Generic.List[string]
+                if ($script:previousTasksAuthenticated -and $snapshot.tasksAuthenticated -and
+                    $newReviews -gt $script:previousReviews -and $newReviews -gt 0) {
+                    $messages.Add('Ha tarefas aguardando revisao no painel.')
+                }
+                $newPressure = @($snapshot.resourceWarnings | Where-Object {
+                    $_ -notin $script:previousResourceWarnings
+                })
+                if ($newPressure.Count -gt 0) {
+                    $labels = @{
+                        cpu_pressure='CPU'; ram_pressure='RAM'; vram_pressure='VRAM'
+                    }
+                    $names = @($newPressure | ForEach-Object { $labels[$_] }) -join ', '
+                    $messages.Add('Pressao confirmada de recursos: ' + $names + '.')
+                }
+                if ($script:previousTasksAuthenticated -and $snapshot.tasksAuthenticated) {
+                    $newCompleted = @($snapshot.completedTaskIds | Where-Object {
+                        $_ -notin $script:previousCompletedTaskIds
+                    })
+                    $newFailed = @($snapshot.failedTaskIds | Where-Object {
+                        $_ -notin $script:previousFailedTaskIds
+                    })
+                    if ($newCompleted.Count -eq 1) {
+                        $messages.Add('Uma tarefa foi concluida. Consulte o painel para revisar o resultado.')
+                    } elseif ($newCompleted.Count -gt 1) {
+                        $messages.Add([string]$newCompleted.Count + ' tarefas foram concluidas. Consulte o painel.')
+                    }
+                    if ($newFailed.Count -eq 1) {
+                        $messages.Add('Uma tarefa falhou. Consulte o painel para o diagnostico.')
+                    } elseif ($newFailed.Count -gt 1) {
+                        $messages.Add([string]$newFailed.Count + ' tarefas falharam. Consulte o painel.')
+                    }
+                }
+                if ($messages.Count -gt 0) {
+                    $notify.BalloonTipTitle = 'LAO DevSpace: atencao'
+                    $notify.BalloonTipText = ($messages -join ' ')
+                    $notify.ShowBalloonTip(5000)
+                }
             }
         }
         $script:initialized = $true
         $script:previousStatus = $snapshot.status
         $script:previousReviews = if ($null -eq $snapshot.pendingReviews) { 0 } else { [int]$snapshot.pendingReviews }
         $script:previousTasksAuthenticated = $snapshot.tasksAuthenticated
+        $script:previousResourceWarnings = @($snapshot.resourceWarnings)
+        $script:previousCompletedTaskIds = @($snapshot.completedTaskIds)
+        $script:previousFailedTaskIds = @($snapshot.failedTaskIds)
 }
 
 function Open-LaoDashboard([string]$section = '') {

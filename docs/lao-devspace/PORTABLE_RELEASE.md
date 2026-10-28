@@ -101,6 +101,33 @@ Valida manifest, SHA-256 do WinSW, Node ABI e SQLite nativo. Nunca
 chama sc.exe, WinSW install, Start-Service ou schtasks, nunca
 modifica boot, registro, credenciais ou servicos do Windows.
 
+### Lifecycle explicito de instalacao/desinstalacao
+
+O plano copia tambem `lao-service-lifecycle.ps1`. Por padrao ele somente
+valida o pacote e nao altera o Windows:
+
+```cmd
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\TEMP\lao-service-plan-novo\lao-service-lifecycle.ps1 -ServicePlanDir C:\TEMP\lao-service-plan-novo -Action Validate
+```
+
+Para um plano destinado a iniciar no boot, gere-o explicitamente com
+`-StartMode Automatic -DelayedAutoStart`. `DelayedAutoStart` nao e aceito
+com modo Manual. Mesmo assim, instalar esse plano exige administrador e a
+confirmacao adicional `-ConfirmAutomaticStart`; nao ha habilitacao de boot
+implicita ao apenas preparar ou validar um candidato.
+
+As acoes `Install` e `Uninstall` sao deliberadas e separadas. Antes de
+alterar o SCM o script revalida hashes, release e contrato LocalService.
+Ele preserva e faz backup de `lao.sqlite*` e da preferencia local, concede
+ao LocalService somente acesso de modificacao ao stateDir e, em falha de
+instalacao, tenta remover o servico e restaurar a ACL anterior. A
+desinstalacao remove o servico mas nao apaga o estado. Com
+`-StartAfterInstall`, o sucesso requer `GET /health/live` local.
+
+Estes comandos ainda precisam ser executados primeiro em Windows limpo ou
+VM descartavel com um WinSW autentico e versionado. O projeto nao executa
+automaticamente `Install`/`Uninstall` durante build, teste ou atualizacao.
+
 ## Autenticidade externa opcional (F7-06)
 
 O SHA-256 registrado no manifesto detecta arquivos alterados em relacao

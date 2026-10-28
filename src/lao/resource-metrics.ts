@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { cpus, freemem, totalmem } from "node:os";
 import { promisify } from "node:util";
 import { createLaoResourceAlertEvaluator } from "./resource-alerts.js";
+import { createLaoResourceAlertHistory } from "./resource-alert-history.js";
 
 const execFileAsync = promisify(execFile);
 type CpuReading = Readonly<{ idle: number; total: number }>;
@@ -60,9 +61,13 @@ async function readNvidiaGpu(): Promise<LaoGpuMetrics | null> {
 }
 
 /** Read-only local diagnostics behind the existing dashboard Bearer token. */
-export function createLaoResourceMonitor(gpuProbe: () => Promise<LaoGpuMetrics | null> = readNvidiaGpu) {
+export function createLaoResourceMonitor(
+  gpuProbe: () => Promise<LaoGpuMetrics | null> = readNvidiaGpu,
+  alertHistoryFile?: string,
+) {
   let lastCpu: CpuReading | null = null;
   const assessPressure = createLaoResourceAlertEvaluator();
+  const history = alertHistoryFile ? createLaoResourceAlertHistory(alertHistoryFile) : undefined;
   return async () => {
     const currentCpu = sampleCpu();
     const cpuPercent = cpuUsagePercent(lastCpu, currentCpu);
@@ -79,6 +84,10 @@ export function createLaoResourceMonitor(gpuProbe: () => Promise<LaoGpuMetrics |
       process: { rssBytes: node.rss, heapUsedBytes: node.heapUsed },
       gpu: await gpuProbe(),
     };
-    return { ...reading, alerts: assessPressure(reading) };
+    const alerts = assessPressure(reading);
+    if (history) await history.record(alerts.warnings, reading.checkedAt);
+    return { ...reading, alerts: {
+      ...alerts, recentTransitions: history ? await history.read(20) : [],
+    } };
   };
 }

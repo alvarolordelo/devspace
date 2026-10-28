@@ -192,7 +192,7 @@ max-height:430px;overflow:auto;background:#f4f7fb;padding:14px;border-radius:9px
 (() => {
 "use strict";
 const $=id=>document.getElementById(id);
-let token="",timer=null,loadedTasks=[],activeSection="status";
+let token="",timer=null,loadedTasks=[],loadedResourceEvents=[],activeSection="status";
 const sessionKey="lao-dashboard-session-v1";
 function storeSession(ticket){
  try{sessionStorage.setItem(sessionKey,JSON.stringify(ticket));}catch{}
@@ -201,7 +201,7 @@ function clearSession(){
  try{sessionStorage.removeItem(sessionKey);}catch{}
 }
 function loginScreen(message=""){
- clearInterval(timer);timer=null;token="";loadedTasks=[];
+ clearInterval(timer);timer=null;token="";loadedTasks=[];loadedResourceEvents=[];
  clearSession();
  $("detail").textContent="";
  $("detail-panel").classList.add("hidden");
@@ -217,6 +217,7 @@ function acceptSession(session){
 }
 const sections=["status","tarefas","modelos","logs","configuracoes"];
 const names={status:"Painel de status",tarefas:"Tarefas",modelos:"Modelos locais",logs:"Eventos e logs",configuracoes:"Configurações"};
+const warningLabels={cpu_pressure:"CPU acima de 95%",ram_pressure:"RAM acima de 90%",vram_pressure:"VRAM acima de 90%"};
 const date=s=>{const d=new Date(s);return Number.isNaN(d.getTime())?"—":d.toLocaleString("pt-BR");};
 const node=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const taskIcon=t=>{
@@ -330,17 +331,26 @@ function renderTasks(){
 function renderEvents(){
  const root=$("events"),summary=$("event-summary");
  root.replaceChildren();summary.replaceChildren();
- const items=loadedTasks.slice(0,30);
- for(const [index,t] of items.entries()){
-  const line=node("div","row");line.appendChild(node("span","dot "+(t.status==="failed"?"bad":t.status==="awaiting_review"?"warn":"good")));
-  const info=node("div","row-content");
-  const [label]=rowStatus(t);
-  info.appendChild(node("strong","",label+" · Tarefa "+t.id.slice(0,8)));
-  info.appendChild(node("small","",date(t.updatedAt)));line.appendChild(info);
+ const taskItems=loadedTasks.slice(0,30).map(t=>({kind:"task",at:t.updatedAt,value:t}));
+ const resourceItems=loadedResourceEvents.slice(-20).map(e=>({kind:"resource",at:e.at,value:e}));
+ const items=[...taskItems,...resourceItems].sort((a,b)=>Date.parse(b.at)-Date.parse(a.at)).slice(0,30);
+ for(const [index,item] of items.entries()){
+  const line=node("div","row"),info=node("div","row-content");
+  if(item.kind==="task"){
+   const t=item.value;
+   line.appendChild(node("span","dot "+(t.status==="failed"?"bad":t.status==="awaiting_review"?"warn":"good")));
+   const [label]=rowStatus(t);
+   info.appendChild(node("strong","",label+" · Tarefa "+t.id.slice(0,8)));
+  }else{
+   const warnings=Array.isArray(item.value.warnings)?item.value.warnings.filter(k=>Object.hasOwn(warningLabels,k)):[];
+   line.appendChild(node("span","dot "+(warnings.length?"warn":"good")));
+   info.appendChild(node("strong","",warnings.length?"Recursos · "+warnings.map(k=>warningLabels[k]).join(" · "):"Recursos normalizados"));
+  }
+  info.appendChild(node("small","",date(item.at)));line.appendChild(info);
   root.appendChild(line);
   if(index<3)summary.appendChild(line.cloneNode(true));
  }
- if(!items.length){root.appendChild(node("p","empty","Nenhum evento de tarefas registrado."));summary.appendChild(node("p","empty","Nenhum evento de tarefas registrado."));}
+ if(!items.length){root.appendChild(node("p","empty","Nenhum evento registrado."));summary.appendChild(node("p","empty","Nenhum evento registrado."));}
 }
 async function get(path){
  const r=await fetch(path,{cache:"no-store",credentials:"omit",headers:{Authorization:"Bearer "+token}});
@@ -394,7 +404,6 @@ async function refresh(){
   pctbar("vram-bar",vram);
   $("cores").textContent=metrics.cpu.logicalCores+" núcleos lógicos";
   $("node-memory").textContent=Math.round(metrics.process.rssBytes/1048576)+" MiB RSS";
-  const warningLabels={cpu_pressure:"CPU acima de 95%",ram_pressure:"RAM acima de 90%",vram_pressure:"VRAM acima de 90%"};
   const warnings=metrics.alerts?.advisoryOnly===true&&Array.isArray(metrics.alerts.warnings)
     ?metrics.alerts.warnings.filter(k=>Object.hasOwn(warningLabels,k)).map(k=>warningLabels[k]):null;
   $("resource-alerts").textContent=warnings===null?"Alertas indisponíveis":warnings.length?"Atenção: "+warnings.join(" · "):"Sem alertas de recursos confirmados.";
@@ -402,6 +411,8 @@ async function refresh(){
   $("dependencies").textContent=reasons.length?reasons.join(" · "):"Sem bloqueios de prontidão";
   $("checked").textContent=date(status.checkedAt);
   loadedTasks=Array.isArray(data.tasks)?data.tasks:[];
+  loadedResourceEvents=Array.isArray(metrics.alerts?.recentTransitions)
+    ?metrics.alerts.recentTransitions.filter(e=>e&&typeof e.at==="string"&&Array.isArray(e.warnings)):[];
   renderTasks();renderEvents();
   $("content").classList.remove("hidden");$("login").classList.add("hidden");$("message").textContent="";
   if(sections.includes(location.hash.slice(1)) && location.hash.slice(1)!==activeSection){
