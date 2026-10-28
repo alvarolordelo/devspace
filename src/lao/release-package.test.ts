@@ -154,15 +154,24 @@ test("offline portable daemon candidate has fixed native runtime and isolated SQ
       assert.doesNotMatch(xml, /<username>LocalSystem<\/username>/);
       assert.doesNotMatch(xml, /<password>/);
       assert.doesNotMatch(xml, /LAO_WRITE_APPROVAL_ENABLED|LAO_WRITE_PROMOTION_ENABLED/);
+      assert.match(xml, /LAO_DASHBOARD_TOKEN_FILE/);
+      assert.match(xml, /LAO_DEVSPACE_MCP_TOKEN_FILE/);
+      assert.match(xml, /LAO_RESTART_SUPERVISED/);
       assert.ok(readFileSync(join(serviceDir, "LAODevSpaceService.exe")).equals(wrapperBytes));
       assert.equal(existsSync(join(serviceDir, "lao-service-lifecycle.ps1")), true);
+      const dashboardSecret = join(root, "dashboard-secret.txt");
+      const devspaceSecret = join(root, "devspace-secret.txt");
+      writeFileSync(dashboardSecret, "dashboard-test-secret-12345678901234567890\n");
+      writeFileSync(devspaceSecret, "devspace-test-secret-12345678901234567890\n");
       const validate = JSON.parse(execFileSync("powershell.exe", [
         "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File",
         join(serviceDir, "lao-service-lifecycle.ps1"),
         "-ServicePlanDir", serviceDir, "-Action", "Validate",
+        "-DashboardTokenFile", dashboardSecret, "-DevSpaceTokenFile", devspaceSecret,
       ], { encoding: "utf8", timeout: 60_000, windowsHide: true }));
       assert.equal(validate.valid, true);
       assert.equal(validate.mutated, false);
+      assert.equal(validate.credentialsValidated, true);
       assert.equal(validate.startMode, "Manual");
 
       const automaticDir = join(root, "automatic-service-plan");

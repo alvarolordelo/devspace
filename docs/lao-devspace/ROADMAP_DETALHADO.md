@@ -556,6 +556,22 @@ instalacao/upgrade/rollback/desinstalacao opcionais e validar em Windows
 limpo com WinSW autentico e aprovacao operacional explicita. A branch
 `main` e o DevSpace original v1.0.8 permanecem protegidos.
 
+### Consolidacao posterior do roadmap
+
+Os itens acima preservam o historico das fases. O estado corrente deve ser
+lido em `PROGRESS.md`. Desde essas anotacoes, F4 e F6 foram fechadas: houve
+promocao real controlada no E2E, duas correcoes reais com Granite, dashboard
+aprovado com smoke 100/125/150%, notificacoes e historico persistente de
+recursos. F8 tambem foi fechado com Granite + Spark reais e fallback local
+auditavel em leitura/escrita.
+
+Para F5/F7, o candidato standalone embute Node, existe assinatura Ed25519
+externa opcional, lifecycle Install/Uninstall com rollback, ACL LocalService
+e staging seguro de tokens em ProgramData. WinSW v2.12.0 x64 real foi obtido
+do release oficial e validado pelo SHA-256 fixo. O gate ainda aberto e
+estritamente operacional: a sessao atual nao e elevada, logo SCM/reboot real
+nao pode ser declarado aprovado sem executar a etapa administrativa.
+
 ### F6-03 - Amostragem local de recursos (26/10/2026)
 
 Dashboard passa a consultar um endpoint autenticado de CPU, RAM, memoria

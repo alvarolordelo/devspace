@@ -137,6 +137,9 @@ $delayedLine
   <env name="DEVSPACE_LAO_ENABLED" value="true"/>
   <env name="DEVSPACE_LAO_STATE_DIR" value="%ProgramData%\LAODevSpace\state"/>
   <env name="DEVSPACE_LAO_PORT" value="7877"/>
+  <env name="LAO_DASHBOARD_TOKEN_FILE" value="%ProgramData%\LAODevSpace\secrets\dashboard-token.txt"/>
+  <env name="LAO_DEVSPACE_MCP_TOKEN_FILE" value="%ProgramData%\LAODevSpace\secrets\devspace-mcp-token.txt"/>
+  <env name="LAO_RESTART_SUPERVISED" value="1"/>
   <log mode="roll-by-size">
     <sizeThreshold>10240</sizeThreshold>
     <keepFiles>5</keepFiles>
@@ -171,6 +174,7 @@ $receipt = [ordered]@{
   nodeExe = $node
   wrapperFile = $wrapperTarget
   configFile = $configTarget
+  serviceSecretsRequired = $true
   launcher = $launcher
   instruction = 'Run lao-service-lifecycle.ps1 with Action Validate first. Install/Uninstall require explicit action and administrator rights; automatic boot also requires explicit confirmation.'
 }

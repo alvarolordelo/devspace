@@ -11,7 +11,12 @@ nao modifica o registro e nao altera o DevSpace original.
 O candidato foi testado no Windows com SQLite nativo carregado da
 pasta nova, sem node_modules do checkout fonte. F5 prepara o arquivo
 XML de servico para um WinSW fornecido por operador e validado por hash.
-Nenhum WinSW genuino ou servico SCM foi instalado/testado.
+O WinSW estavel v2.12.0 x64 foi baixado do release oficial e conferido
+localmente com SHA-256
+`05b82d46ad331cc16bdc00de5c6332c1ef818df8ceefcd49c726553209b3a0da`.
+O asset nao possui assinatura Authenticode; por isso origem e hash fixo
+continuam sendo gates separados. A sessao de desenvolvimento atual nao
+esta elevada, portanto nenhuma instalacao SCM foi executada nela.
 
 ## F7-07 - Candidato autonomo offline com Node empacotado
 
@@ -92,11 +97,11 @@ Este comando SOMENTE gera pasta nova contendo LAODevSpaceService.exe,
 LAODevSpaceService.xml e SERVICE_PLAN.json, com startmode Manual.
 O XML fixa explicitamente `NT AUTHORITY\LocalService` (WinSW assume
 LocalSystem, privilegiado, quando nao configurado) e timeout de parada
-de 30 segundos para permitir o encerramento do daemon Node. O script
-**nao cria ACLs**: antes de qualquer instalacao futura, um operador
-devera provisionar `%ProgramData%\LAODevSpace\state` e conceder somente
-ao `LocalService` as permissoes minimas de leitura/escrita nesse estado,
-alem de validar acesso aos demais caminhos necessarios em VM descartavel.
+de 30 segundos para permitir o encerramento do daemon Node. O XML nao
+contem tokens: referencia somente
+`%ProgramData%\LAODevSpace\secrets\dashboard-token.txt` e
+`devspace-mcp-token.txt`. O daemon aceita `LAO_DASHBOARD_TOKEN_FILE` e o
+probe MCP ja aceita `LAO_DEVSPACE_MCP_TOKEN_FILE`.
 Valida manifest, SHA-256 do WinSW, Node ABI e SQLite nativo. Nunca
 chama sc.exe, WinSW install, Start-Service ou schtasks, nunca
 modifica boot, registro, credenciais ou servicos do Windows.
@@ -119,10 +124,25 @@ implicita ao apenas preparar ou validar um candidato.
 As acoes `Install` e `Uninstall` sao deliberadas e separadas. Antes de
 alterar o SCM o script revalida hashes, release e contrato LocalService.
 Ele preserva e faz backup de `lao.sqlite*` e da preferencia local, concede
-ao LocalService somente acesso de modificacao ao stateDir e, em falha de
-instalacao, tenta remover o servico e restaurar a ACL anterior. A
-desinstalacao remove o servico mas nao apaga o estado. Com
+ao LocalService somente acesso de modificacao ao stateDir e cria uma pasta
+de segredos com heranca de ACL removida: SYSTEM/Administrators recebem
+controle total e LocalService recebe Modify para permitir rotacao do OAuth.
+Os arquivos fonte de credencial sao informados por **caminho absoluto**;
+seus conteudos nunca entram no XML nem nos argumentos. Em falha de
+instalacao o lifecycle tenta remover o servico, apagar as copias de segredos
+e restaurar a ACL anterior. A desinstalacao remove o servico e as copias de
+segredos, mas nao apaga o estado. Com
 `-StartAfterInstall`, o sucesso requer `GET /health/live` local.
+
+O preflight pode validar tambem os dois arquivos de credencial sem exigir
+administrador e sem alterar o sistema:
+
+```cmd
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\TEMP\lao-service-plan-novo\lao-service-lifecycle.ps1 -ServicePlanDir C:\TEMP\lao-service-plan-novo -Action Validate -DashboardTokenFile "%LOCALAPPDATA%\LAODevSpace\dashboard-token.txt" -DevSpaceTokenFile "%LOCALAPPDATA%\LAODevSpace\devspace-mcp-token.txt"
+```
+
+`Install` exige os mesmos dois caminhos, privilegio de Administrador e,
+para plano Automatic, `-ConfirmAutomaticStart`.
 
 Estes comandos ainda precisam ser executados primeiro em Windows limpo ou
 VM descartavel com um WinSW autentico e versionado. O projeto nao executa
@@ -165,10 +185,10 @@ As etapas acima sao opcionais e nao instalam servicos ou modificam boot.
 
 ## Gates faltantes
 
-Validar WinSW real em VM descartavel, instalacao e desinstalacao,
-healthcheck, paradas/restart, ACLs de conta dedicada sem privilegios
-administrativos, backup/rollback de SQLite, assinatura, runtime Node
-no instalador e teste de maquina limpa. A instalacao no Windows
-estavel requer autorizacao operacional EXPLICITA.
+Executar a etapa elevada real: instalacao/desinstalacao, healthcheck,
+paradas/restart e reboot em Windows limpo/VM. O pacote, Node standalone,
+WinSW real por hash, ACLs, segredos, backup/rollback de SQLite e lifecycle
+reversivel ja possuem preflight/testes sem mutacao. A instalacao no Windows
+estavel continua exigindo autorizacao operacional e privilegio de Administrador.
 Nao instalar sob LocalSystem por padrao para executar tarefas
 envolvendo arquivos nao confiaveis.

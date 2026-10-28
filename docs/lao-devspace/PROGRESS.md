@@ -16,7 +16,7 @@ Validação adicional do provisionamento: **6 testes direcionados aprovados**, i
 
 **Verificação final desta rodada:** 23 testes direcionados passaram, inclusive recuperação simulada no SCM; o teste adicional de descoberta da credencial passou (5 testes do probe ao todo). `pnpm typecheck`, `pnpm build`, `git diff --check` e verificador da base DevSpace `1.0.8` passaram.
 
-**Regressao consolidada apos os controles de 27/10:** `pnpm test` executou inicialmente 269 testes (261 aprovados, 8 ignorados) e, apos lifecycle do servico + historico/notificacoes, **271 testes, 263 aprovados, 8 ignorados e 0 falhas**. `pnpm typecheck`, `pnpm build`, `git diff --check` e `node scripts/lao-verify-devspace-pin.mjs` tambem passaram. O daemon ativo respondeu `ready=true` sem bloqueios, o Ollama respondeu localmente e o MCP permaneceu protegido por OAuth.
+**Regressao final consolidada em 27/10:** apos lifecycle seguro do servico, historico/notificacoes, failover local e provas reais de retry/multimodelo, `pnpm test` executou **277 testes, 268 aprovados, 9 ignorados e 0 falhas**. `pnpm typecheck`, `pnpm build`, `git diff --check` e `node scripts/lao-verify-devspace-pin.mjs` tambem passaram. O daemon ativo respondeu `ready=true` sem bloqueios, o Ollama respondeu localmente e o MCP permaneceu protegido por OAuth.
 
 **Recuperação gerenciada:** o Monitor agora reconsulta `/dashboard/api/status` autenticado após a confirmação, usa a contagem de todas as tarefas ativas (sem limite da página de 200), verifica as transições `Stopped` e `Running` no SCM, aguarda a dependência responder e persiste resultado sanitizado em `%LOCALAPPDATA%\LAODevSpace\recovery-history.jsonl`. O teste funcional usa serviços SCM simulados e não toca nos processos atuais. Sem serviço Windows explicitamente vinculado, os controles permanecem indisponíveis. A instalação de um gerenciador de ciclo de vida para Ollama/DevSpace ainda requer decisão operacional do usuário; não foi feita.
 
@@ -36,11 +36,11 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F1 Núcleo LAO | [x] | Schemas, estados, SQLite, tarefas/runs/eventos, health e MCP opt-in; LAO OFF manteve tool surface e regressao DevSpace sem falhas |
 | F2 Ollama | [x] | Granite real executou leitura pelo MCP HTTP OAuth de teste (2026-07-28), tarefa persistida e aguardando revisao; configuracao padrao preservada |
 | F3 Escrita isolada | [x] | Granite real escreveu patch em worktree destacado via MCP HTTP OAuth de teste; integridade/sintaxe conferidas, checkout original intacto e aprovacao negada |
-| F4 Avaliacao/revisao | [~] | OAuth MCP, Granite, Docker, aprovacao deterministica e promocao supervisionada de arquivo foram validados no mesmo E2E; resta apenas fechar a prova real de duas correcoes sucessivas do modelo |
-| F5 Serviço e tray | [~] | Daemon, tray, autostart da conta e lifecycle WinSW explicito implementados; instalacao SCM/boot real e teste operacional em Windows limpo continuam pendentes |
+| F4 Avaliacao/revisao | [x] | OAuth MCP, Granite, Docker, duas correcoes reais, aprovacao deterministica e promocao supervisionada foram validados; origem permaneceu limpa ate promocao explicita |
+| F5 Serviço e tray | [~] | Daemon, tray, autostart e lifecycle WinSW com LocalService/segredos/ACL rollback implementados; falta somente executar SCM/reboot em sessao elevada/Windows limpo |
 | F6 Painel | [x] | Dashboard claro aprovado, OAuth MCP real, modelos locais, metricas CPU/RAM/GPU/VRAM, historico persistente sanitizado e smoke real 100/125/150% com F5/logout/mobile |
-| F7 Release | [~] | Candidato standalone, integridade/assinatura externa e lifecycle reversivel preparados; falta executar WinSW autentico, instalacao/rollback e boot em Windows limpo antes do release final |
-| F8 Multimodelo | [~] | Benchmark Ollama real 5x Granite vs Spark concluido; teste simples 2+2, simulacao de agente e failover pendentes |
+| F7 Release | [~] | Standalone, integridade/assinatura externa, WinSW v2.12.0 real por SHA-256 e lifecycle reversivel preparados; falta apenas o gate elevado SCM/reboot em Windows limpo |
+| F8 Multimodelo | [x] | Granite e Spark passaram smoke real; fallback local configuravel foi testado em leitura/escrita e em runner real, sem mascarar outage comum do Ollama |
 
 ## Requisitos funcionais (RF)
 
@@ -53,21 +53,21 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-05 Política de ferramentas | [x] | Modelo não recebe ferramentas; broker valida 1–5 caminhos explícitos, até 5 ações/32 KB, bloqueia symlinks/diff fora da allowlist e shell; testes autorizados executam somente no sandbox Docker fixado |
 | RF-06 Executar agente | [x] | Granite real executou leitura e escrita supervisionadas via MCP autenticado em HTTP local, persistiu run e aguardou review; sem ferramentas no modelo |
 | RF-07 Avaliar com provas | [x] | lao_write_assess vincula criterios declarativos a fingerprint/sintaxe e suite Docker real; promocao exige a mesma evidencia aprovada e revalidacao imediatamente antes da escrita |
-| RF-08 Correcoes limitadas | [~] | lao_retry read-only e lao_write_retry para escrita, ambos com feedback explicito e maximo de 2 revisoes; teste Granite de duas correcoes pendente |
+| RF-08 Correcoes limitadas | [x] | lao_retry e lao_write_retry limitados a 2 revisoes; Granite real executou sequencia supervisionada 1 -> 2 -> 3 em worktree descartavel, com 3 runs e origem intacta |
 | RF-09 Aprovacao explicita | [x] | lao_review segue negando escrita; lao_write_approve separado exige confirmacao por task/run/fingerprint e evidencia Docker; promocao continua uma segunda acao explicita e auditada |
 | RF-10 Persistência/reconsulta | [x] | `lao_result` lê SQLite com runs, eventos, revisões e artefatos persistidos; reabertura e recuperação de execuções interrompidas foram testadas sem retomada automática insegura |
-| RF-11 Boot | [ ] | Não instalado |
-| RF-12 Saúde | [~] | Health local, Ollama e probe MCP OAuth autenticado reais aprovados; falta somente o ciclo de vida do daemon como serviço Windows para fechar o requisito operacional |
+| RF-11 Boot | [!] | Implementacao Automatic+Delayed e preflight prontos; sessao atual nao e Administrador, portanto instalacao SCM e prova apos reboot nao podem ser executadas sem UAC |
+| RF-12 Saúde | [~] | Health local, Ollama e MCP OAuth reais aprovados; lifecycle exige `/health/live` ao instalar, restando executar esse gate sob SCM elevado |
 | RF-13 Painel | [x] | Dashboard real no design aprovado, sessao autenticada, F5/logout, dados reais, mobile 390 px e renderizacao Chrome em 100/125/150% validados |
-| RF-14 Recuperacao | [~] | SQLite lease impede dois daemons no mesmo stateDir, heartbeat/TTL/reclamacao apos crash testados; SCM e reinicio operacional pendentes |
+| RF-14 Recuperacao | [~] | Lease/crash recovery testados; lifecycle preserva SQLite, faz backup, receipt e rollback de ACL/segredos; falta exercitar stop/start/uninstall no SCM elevado |
 | RF-15 Tray | [x] | Monitor Windows WinForms com icones/layout aprovados, mutex, polling assincrono, popup real e acoes seguras; linhas de dependencia nao abrem configuracoes e controles so habilitam quando seguros |
 | RF-16 Autostart configurável | [x] | Switch por usuario habilita/desabilita somente os atalhos LAO na pasta Inicializar, reversivel e sem residuos; boot antes do login pertence separadamente ao RF-11/servico SCM |
 | RF-17 Notificações | [x] | Tray opt-in notifica indisponibilidade, nova revisao, tarefa concluida/falha e pressao sustentada CPU/RAM/VRAM, usando apenas mensagens estaticas sanitizadas |
 | RF-18 Dashboard/histórico | [x] | Painel consulta SQLite, filtros, runs, eventos, testes/diffs, revisao e metricas; alertas de recursos possuem JSONL persistente sanitizado e aparecem na secao Eventos |
-| RF-19 Multimodelo | [~] | Benchmark sequencial 5x real com modelos locais, acertos e latencias documentados em BENCHMARK_20261026.md; prova de codigo pendente |
-| RF-20 Failover | [ ] | Pendente |
+| RF-19 Multimodelo | [x] | Benchmark 5x + smoke real de Granite/Spark; ambos tool-capable e responderam corretamente pelo cliente LAO sem pull/configuracao de modelo |
+| RF-20 Failover | [x] | Fallback local opcional e explicito; leitura e escrita registram o modelo efetivo, trocam apenas antes de efeitos colaterais e nao repetem quando o Ollama inteiro esta offline |
 
-**RF concluídos:** 14/20 - **Parciais:** 4/20 - **Pendentes:** 2/20.
+**RF concluídos:** 17/20 - **Parciais:** 2/20 - **Pendentes:** 0/20 - **Bloqueado operacionalmente:** 1/20.
 
 ## Histórico técnico e evidências
 

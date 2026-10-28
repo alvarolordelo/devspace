@@ -39,6 +39,38 @@ O benchmark pode ser repetido com:
 
 \`node src/lao/lao-benchmark-live.mjs granite4.2-8b:gpu spark-x2.6-q8-100gpu:latest\`
 
-A politica de fallback automatizado continua **desativada**. Pendentes:
-executar tarefa codificada controlada 5x por modelo, validar diffs e regressao,
-registrar uso de GPU/RAM e definir limites de alternancia em caso de falha.
+A politica de fallback automatizado era **desativada** nesta medicao inicial.
+
+## Prova multimodelo e failover posterior
+
+Depois do benchmark, o LAO recebeu fallback **local, opcional e explicito**
+por `DEVSPACE_LAO_FALLBACK_MODEL`. Nao ha selecao aleatoria nem uso de
+entradas Ollama `cloud`: o fallback deve ser diferente do primario e continua
+no mesmo endpoint loopback.
+
+O smoke real `lao-multimodel-live.mjs` confirmou os dois modelos instalados:
+
+- `granite4.2-8b:gpu`: resposta `4`, correta;
+- `spark-x2.6-q8-100gpu:latest`: resposta `4`, correta;
+- ambos reportaram capacidade `tools` pelo Ollama;
+- nenhum modelo foi baixado ou alterado.
+
+Na mesma execucao, um nome de modelo primario propositalmente inexistente
+recebeu rejeicao especifica do Ollama e o `LaoReadOnlyRunner` concluiu a
+tarefa com `spark-x2.6-q8-100gpu:latest`, status `awaiting_review`, sem shell
+e sem escrita em repositorio. Testes automatizados adicionais comprovaram
+failover apos timeout da geracao, fallback de patch **antes** de qualquer
+efeito no worktree e recusa de tentar outro modelo quando o servidor Ollama
+inteiro esta offline.
+
+O failover nao autoaprova, nao promove codigo e nao oculta indisponibilidade
+global do Ollama. A tarefa preserva o modelo solicitado e cada `run` persiste
+o modelo que efetivamente executou, permitindo auditoria do fallback.
+
+## Prova real de duas correcoes
+
+O smoke `lao-retry-live.mjs` usou Granite real num repositorio/worktree
+descartavel. O modelo produziu `value = 1`, recebeu duas decisoes
+`needs_revision` do supervisor e corrigiu sucessivamente para `2` e `3`.
+Foram persistidos tres runs concluidos, `revisionCount=2`; o checkout fonte
+permaneceu limpo e no HEAD original, sem promocao.

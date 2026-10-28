@@ -2,6 +2,7 @@ import { loadLaoConfig } from "./config.js";
 import { laoDaemonEnvironment, startLaoDaemon } from "./daemon.js";
 import { spawn } from "node:child_process";
 import { createLaoDevspaceProbe } from "./devspace-probe.js";
+import { readLaoDashboardToken } from "./daemon-credentials.js";
 
 /** Foreground-only experimental entrypoint; Windows service integration follows. */
 export async function runLaoDaemon(): Promise<void> {
@@ -39,7 +40,7 @@ export async function runLaoDaemon(): Promise<void> {
     child.unref();
   };
   daemon = await startLaoDaemon({
-    config, stateDir, port, dashboardToken: process.env.LAO_DASHBOARD_TOKEN,
+    config, stateDir, port, dashboardToken: readLaoDashboardToken(),
     devspaceStatus: createLaoDevspaceProbe(),
     restartLao,
   });

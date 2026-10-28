@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -17,4 +18,9 @@ test("Windows service preparation scripts are parseable and installation stays e
       "-NoProfile", "-NonInteractive", "-Command", script,
     ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
     assert.match(result, /Service lifecycle syntax valid/);
+    const text = readFileSync(lifecycle, "utf8");
+    assert.match(text, /Grant-LocalServiceRead/);
+    assert.match(text, /install-receipt\.json/);
+    assert.match(text, /Restore-Acl \$release/);
+    assert.match(text, /Restore-Acl \$planDir/);
   });

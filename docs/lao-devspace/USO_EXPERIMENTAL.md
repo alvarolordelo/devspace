@@ -1,10 +1,10 @@
 # LAO DevSpace — Modo experimental (leitura e escrita isolada sob supervisão)
 
-Este material descreve a fase experimental no worktree `feature/lao-devspace`. **Não modifica o DevSpace estável e não instala serviço ou tray.** Escrita é permitida somente no worktree isolado gerenciado e com aprovação de caminho pelo supervisor, não no checkout original.
+Este material descreve a operação controlada no worktree `feature/lao-devspace`. **Não modifica o DevSpace estável.** Tray, dashboard, staging standalone e lifecycle de serviço já existem; a instalação SCM real continua separada e elevada. Escrita de modelo ocorre somente no worktree isolado gerenciado; promoção para checkout `feature/*` exige gates adicionais e nunca faz commit/push/merge.
 
 ## Ativação
 
-O LAO começa **OFF**. Somente a instância da branch de desenvolvimento pode recebê-lo por variável de ambiente `DEVSPACE_LAO_ENABLED=true`. O Ollama deve escutar em `http://127.0.0.1:11434` (loopback). A configuração padrão escolhe `granite4.2-8b:gpu`, com seleção opcional pelo host.
+O LAO começa **OFF**. Somente a instância da branch de desenvolvimento pode recebê-lo por variável de ambiente `DEVSPACE_LAO_ENABLED=true`. O Ollama deve escutar em `http://127.0.0.1:11434` (loopback). A configuração padrão escolhe `granite4.2-8b:gpu`, com seleção opcional pelo host. Um segundo modelo local pode ser configurado explicitamente em `DEVSPACE_LAO_FALLBACK_MODEL`; entradas `cloud` sao recusadas e o fallback nunca mascara outage global do Ollama.
 
 Não altere as variáveis ou portas da instância estável para testar a feature. O LAO não muda configurações globais do Ollama.
 
@@ -29,7 +29,7 @@ As ferramentas adicionais ficam ocultas quando `DEVSPACE_LAO_ENABLED` não é ex
 
 A partir do worktree da feature, verificar `pnpm typecheck`, `pnpm exec tsx --test src/lao/*.test.ts`, `pnpm test` e `pnpm build`. As verificações de chat nos testes usam transporte simulado; só chame de execução real quando houver resultado registrado do Granite via Ollama.
 
-`LaoTaskStore.recoverInterrupted()` permite marcar execuções antigas como interrompidas ao reiniciar o futuro processo LAO. Isso não retoma a tarefa automaticamente. Há um daemon **experimental de primeiro plano**, iniciado manualmente após build, com `DEVSPACE_LAO_ENABLED=true` e `node bin/devspace-laod.js`. Usa `127.0.0.1:7877` por padrão, porta configurável em `DEVSPACE_LAO_PORT` e diretório SQLite independente em `DEVSPACE_LAO_STATE_DIR`. A sondagem de prontidão informa indisponibilidade enquanto o MCP não tiver sido autenticadamente confirmado; nunca presume verde. **Não foi instalado** serviço Windows SCM, tray, autostart ou fila automática.
+`LaoTaskStore.recoverInterrupted()` marca execuções antigas como interrompidas e nunca as retoma automaticamente. O daemon pode rodar em foreground ou no plano WinSW preparado, sempre em `127.0.0.1:7877` por padrão, porta configurável em `DEVSPACE_LAO_PORT` e SQLite independente em `DEVSPACE_LAO_STATE_DIR`. A prontidão exige MCP autenticado e Ollama real. O tray WinForms e o autostart por usuario foram implementados/testados; serviço SCM/boot exige elevação e permanece uma operação separada do build.
 
 ## CI da branch
 
