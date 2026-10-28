@@ -1,6 +1,7 @@
 import { LAO_CONTRACT_VERSION, laoHealthSchema, type LaoHealthSnapshot } from "./contracts.js";
 import type { LaoConfig } from "./config.js";
 import { LaoOllamaClient } from "./ollama-client.js";
+import type { LaoDevspaceStatus } from "./devspace-probe.js";
 
 /**
  * Report readiness honestly: LAO being alive is different from having an
@@ -8,11 +9,13 @@ import { LaoOllamaClient } from "./ollama-client.js";
  */
 export async function measureLaoReadiness(
   config: LaoConfig,
-  input: { devspaceReady: boolean; client?: LaoOllamaClient; signal?: AbortSignal },
+  input: { devspaceReady?: boolean; devspaceStatus?: LaoDevspaceStatus; client?: LaoOllamaClient; signal?: AbortSignal },
 ): Promise<LaoHealthSnapshot> {
   const reasons: string[] = [];
   if (!config.enabled) reasons.push("lao_disabled");
-  if (!input.devspaceReady) reasons.push("devspace_unverified");
+  const devspaceStatus = input.devspaceStatus ?? (input.devspaceReady ? "connected" : "unverified");
+  if (devspaceStatus === "unverified") reasons.push("devspace_unverified");
+  if (devspaceStatus === "offline") reasons.push("devspace_unavailable");
   if (config.enabled) {
     try {
       const client = input.client ?? new LaoOllamaClient(config);

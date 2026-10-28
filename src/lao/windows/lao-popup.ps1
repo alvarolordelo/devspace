@@ -306,7 +306,8 @@ function Update-LaoPopup($popup,$snapshot) {
         Set-LaoPopupRow $popup ollama 'Não verificado' unknown
     }else{
         $mcpNotReady=$reasons -contains 'devspace_unverified'
-        Set-LaoPopupRow $popup mcp $(if($mcpNotReady){'Não verificado'}else{'Conectado'}) $(if($mcpNotReady){'unknown'}else{'good'})
+        $mcpOffline=$reasons -contains 'devspace_unavailable'
+        Set-LaoPopupRow $popup mcp $(if($mcpOffline){'Offline'}elseif($mcpNotReady){'Não verificado'}else{'Conectado'}) $(if($mcpOffline){'bad'}elseif($mcpNotReady){'unknown'}else{'good'})
         $ollamaDown=$reasons -contains 'ollama_unavailable'
         Set-LaoPopupRow $popup ollama $(if($ollamaDown){'Offline'}else{'Respondendo'}) $(if($ollamaDown){'bad'}else{'good'})
     }

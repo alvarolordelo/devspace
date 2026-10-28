@@ -1,5 +1,9 @@
 # LAO DevSpace — controles solicitados após aprovação do layout
 
+## Estado MCP autenticado
+
+O LAO standalone verifica o DevSpace por uma chamada MCP `tools/list` protegida por OAuth. Um token de acesso **dedicado ao LAO** deve estar em arquivo local fora do repositório e ser informado por `LAO_DEVSPACE_MCP_TOKEN_FILE`; o lançador Windows reconhece o arquivo `%LOCALAPPDATA%\LAODevSpace\devspace-mcp-token.txt` quando existente. Não usar o token do Dashboard nem copiar a credencial do conector ChatGPT. O endpoint opcional `LAO_DEVSPACE_MCP_URL` aceita somente `http://127.0.0.1:<porta>/mcp`. A verificação negativa por autenticação não habilita reinício. A renovação do OAuth e o provisionamento do cliente dedicado permanecem pendentes para operação contínua.
+
 **Data:** 27/10/2026. O popup principal de 420 DIP, seu logotipo, cores, ícones e hierarquia permanecem exatamente como aprovados. As funcionalidades abaixo são interações, não uma reformulação da tela.
 
 ## Inicialização automática: switch, desligado por padrão

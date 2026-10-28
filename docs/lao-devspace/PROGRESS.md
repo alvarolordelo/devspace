@@ -1,5 +1,15 @@
 # LAO DevSpace — Progresso verificável
 
+## Verificação MCP autenticada — 27/10/2026
+
+O daemon standalone agora consulta `tools/list` no endpoint MCP local com um token OAuth dedicado, quando `LAO_DEVSPACE_MCP_TOKEN_FILE` aponta para um arquivo absoluto. Um HTTP 200 só marca **Conectado** se a resposta MCP autenticada contém as ferramentas esperadas. Falha de autenticação, token ausente, resposta inesperada ou timeout mantém **Não verificado**. Duas conexões recusadas marcam **Offline**. O Monitor e o Dashboard mostram os três estados sem alterar o layout aprovado.
+
+O lançador Windows aceita automaticamente `%LOCALAPPDATA%\LAODevSpace\devspace-mcp-token.txt` quando ele já existe; não cria nem copia credenciais. O operador ainda precisa autorizar um cliente OAuth próprio do LAO e fornecer um token válido; o token expira conforme a configuração do DevSpace, portanto renovação automática ainda é pendente. O processo LAO já em execução precisa de seu próximo início normal para carregar esta alteração.
+
+Teste de integração passou contra um servidor DevSpace MCP real de teste, protegido por OAuth, além dos testes de estados e UI. Na máquina atual a porta 7676 retorna HTTP 401 sem credencial, então o estado honesto permanece **Não verificado**. Portas 7676/7877/11434 estavam ouvindo, Ollama `/api/version` e LAO `/health/live` retornaram 200, e não há serviços Windows Ollama/DevSpace/LAO instalados. Ollama usa um atalho na pasta Inicializar da conta; DevSpace é um processo Node sem serviço Windows identificado. Nenhum processo externo foi reiniciado.
+
+Validação da rodada: `pnpm typecheck` e `pnpm build` aprovados; `pnpm test`: **266 testes, 258 aprovados, 8 ignorados, 0 falhas**; verificador da versão fixa `1.0.8` aprovado. O smoke real do probe sem credencial retornou **unverified**; a conexão positiva foi comprovada no teste OAuth ponta a ponta isolado, ainda não na instalação ativa do usuário.
+
 **Atualizado:** 27/10/2026 · **Branch:** `feature/lao-devspace` · **Worktree:** `D:\desenvolvimento\lao-devspace`
 
 **Design:** popup da bandeja em seu estado de atenção **aprovado visualmente pelo usuário em 27/10**, a partir de captura real do Windows. Não alterar a interface sem novo pedido. Para lacunas operacionais e evidências atuais, consultar [STATUS_FUNCIONAL_20261027.md](STATUS_FUNCIONAL_20261027.md). O bloqueio P0 atual é a conexão MCP não verificada: `devspaceReady` da execução standalone não recebe um probe autenticado.

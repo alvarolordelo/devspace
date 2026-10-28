@@ -28,6 +28,12 @@ if (-not (Test-Path -LiteralPath $entry -PathType Leaf)) {
 }
 $node = (Get-Command node.exe -ErrorAction Stop).Source
 $env:LAO_DASHBOARD_TOKEN = $token
+$mcpTokenFile = Join-Path $env:LOCALAPPDATA 'LAODevSpace\devspace-mcp-token.txt'
+if (-not $env:LAO_DEVSPACE_MCP_TOKEN_FILE -and
+    (Test-Path -LiteralPath $mcpTokenFile -PathType Leaf)) {
+    # A separately authorized OAuth access token; never reuse the dashboard token.
+    $env:LAO_DEVSPACE_MCP_TOKEN_FILE = $mcpTokenFile
+}
 $env:DEVSPACE_LAO_ENABLED = 'true'
 $env:DEVSPACE_LAO_PORT = [string]$Port
 $env:DEVSPACE_LAO_STATE_DIR = [IO.Path]::GetFullPath($StateDir)

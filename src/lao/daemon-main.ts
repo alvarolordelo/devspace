@@ -1,6 +1,7 @@
 import { loadLaoConfig } from "./config.js";
 import { laoDaemonEnvironment, startLaoDaemon } from "./daemon.js";
 import { spawn } from "node:child_process";
+import { createLaoDevspaceProbe } from "./devspace-probe.js";
 
 /** Foreground-only experimental entrypoint; Windows service integration follows. */
 export async function runLaoDaemon(): Promise<void> {
@@ -39,6 +40,7 @@ export async function runLaoDaemon(): Promise<void> {
   };
   daemon = await startLaoDaemon({
     config, stateDir, port, dashboardToken: process.env.LAO_DASHBOARD_TOKEN,
+    devspaceStatus: createLaoDevspaceProbe(),
     restartLao,
   });
   console.log(JSON.stringify({

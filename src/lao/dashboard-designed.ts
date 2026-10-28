@@ -365,9 +365,10 @@ async function refresh(){
     :"Reinício indisponível nesta instância do LAO";
   $("lao-service").textContent=status.live===true?"Respondendo":"Sem resposta";
   dot("lao-dot",status.live===true?"good":"bad");
-  const mcp=!reasons.includes("devspace_unverified");
-  $("devspace-mcp").textContent=mcp?"Verificado":"Não verificado";
-  dot("mcp-dot",mcp?"good":"neutral");
+  const mcpOffline=reasons.includes("devspace_unavailable");
+  const mcp=!mcpOffline&&!reasons.includes("devspace_unverified");
+  $("devspace-mcp").textContent=mcp?"Conectado":mcpOffline?"Offline":"Não verificado";
+  dot("mcp-dot",mcp?"good":mcpOffline?"bad":"neutral");
   const offline=reasons.includes("ollama_unavailable");
   $("ollama-state").textContent=offline?"Indisponível":reasons.includes("lao_disabled")?"Não verificado":"Respondendo";
   dot("ollama-dot",offline?"bad":reasons.includes("lao_disabled")?"neutral":"good");

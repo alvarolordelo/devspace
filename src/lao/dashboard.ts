@@ -8,6 +8,7 @@ import { dashboardHtml } from "./dashboard-ui.js";
 import { createLaoResourceMonitor } from "./resource-metrics.js";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import type { LaoDevspaceStatus } from "./devspace-probe.js";
 
 const readResourceMetrics = createLaoResourceMonitor();
 
@@ -15,7 +16,8 @@ export interface LaoDashboardOptions {
   token: string;
   listTasks: () => LaoTask[];
   taskDetails?: (id: string) => ReturnType<typeof summarizeLaoTaskDetails> | null;
-  devspaceReady: () => boolean;
+  devspaceReady?: () => boolean;
+  devspaceStatus?: () => Promise<LaoDevspaceStatus>;
   sessions?: LaoDashboardSessions;
   /** Optional foreground LAO-only restart. Never controls DevSpace, Ollama or Windows SCM. */
   restartLao?: () => Promise<void>;
@@ -341,7 +343,9 @@ export async function handleLaoDashboard(
     json(res, 200, { tasks }); return true;
   }
   const status = await measureLaoReadiness(config, {
-    devspaceReady: options.devspaceReady(),
+    devspaceStatus: options.devspaceStatus
+      ? await options.devspaceStatus()
+      : options.devspaceReady?.() ? "connected" : "unverified",
   });
   json(res, 200, {
     ...status, modelConfigured: config.defaultModel,

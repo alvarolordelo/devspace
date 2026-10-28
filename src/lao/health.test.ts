@@ -27,6 +27,12 @@ test("tool-capable model and verified DevSpace allow ready status", async () => 
   const health = await measureLaoReadiness(enabled, { client: client(["tools"]), devspaceReady: true });
   assert.equal(health.ready, true);
 });
+test("confirmed MCP listener outage is distinct from missing authentication", async () => {
+  const health = await measureLaoReadiness(enabled, {
+    client: client(["tools"]), devspaceStatus: "offline",
+  });
+  assert.deepEqual(health.blockingReasons, ["devspace_unavailable"]);
+});
 test("model missing tools blocks readiness", async () => {
   const health = await measureLaoReadiness(enabled, { client: client(["completion"]), devspaceReady: true });
   assert.deepEqual(health.blockingReasons, ["model_tools_unsupported"]);

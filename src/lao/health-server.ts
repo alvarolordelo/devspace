@@ -3,11 +3,12 @@ import type { AddressInfo } from "node:net";
 import type { LaoConfig } from "./config.js";
 import { measureLaoReadiness } from "./health.js";
 import { createLaoDashboardSessions, handleLaoDashboard, type LaoDashboardOptions } from "./dashboard.js";
+import type { LaoDevspaceStatus } from "./devspace-probe.js";
 
 /** Explicitly started, loopback-only health listener. Not installed as a service. */
 export async function startLaoHealthServer(
   config: LaoConfig,
-  options: { port: number; devspaceReady: () => boolean; dashboard?: LaoDashboardOptions },
+  options: { port: number; devspaceReady?: () => boolean; devspaceStatus?: () => Promise<LaoDevspaceStatus>; dashboard?: LaoDashboardOptions },
 ): Promise<{ port: number; close: () => Promise<void>; server: Server }> {
   if (!config.enabled) throw new Error("LAO disabled: no health server may start");
   if (!Number.isSafeInteger(options.port) || options.port < 0 || options.port > 65535) {
@@ -31,7 +32,9 @@ export async function startLaoHealthServer(
     }
     const result = req.url === "/health/live"
       ? { live: true }
-      : await measureLaoReadiness(config, { devspaceReady: options.devspaceReady() });
+      : await measureLaoReadiness(config, { devspaceStatus: options.devspaceStatus
+        ? await options.devspaceStatus()
+        : options.devspaceReady?.() ? "connected" : "unverified" });
     res.writeHead(req.url === "/health/ready" && !("ready" in result && result.ready) ? 503 : 200, {
       "content-type": "application/json", "cache-control": "no-store",
     });

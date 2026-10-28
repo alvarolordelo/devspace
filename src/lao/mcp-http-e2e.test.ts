@@ -11,6 +11,7 @@ import { loadConfig } from "../config.js";
 import { SqliteOAuthStore } from "../oauth-store.js";
 import { createServer } from "../server.js";
 import { writeTestDevspaceConfig } from "../test-support/config.test.js";
+import { createLaoDevspaceProbe } from "./devspace-probe.js";
 
 test("authenticated MCP runs LAO with bounded fake or optional live Ollama", async (t) => {
   const live = process.env.LAO_MCP_LIVE === "true";
@@ -84,6 +85,11 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
     clientId: client.client_id, scopes: ["devspace"],
     expiresAt: Math.floor(Date.now()/1000) + 3600, resource: bearer,
   });
+  const probeToken = "p".repeat(43);
+  store.saveAccessToken(createHash("sha256").update(probeToken).digest("base64url"), {
+    clientId: client.client_id, scopes: ["devspace"],
+    expiresAt: Math.floor(Date.now()/1000) + 3600, resource: bearer,
+  });
   store.close();
   const tracked = ["DEVSPACE_LAO_ENABLED", "DEVSPACE_LAO_OLLAMA_URL", "DEVSPACE_LAO_MODEL",
     "LAO_WRITE_APPROVAL_ENABLED", "LAO_WRITE_PROMOTION_ENABLED"];
@@ -121,6 +127,12 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   const a = listener.address();
   assert.ok(a && typeof a !== "string");
   const endpoint = "http://127.0.0.1:" + a.port + "/mcp";
+  const probeFile = join(root, "lao-probe-token.txt");
+  writeFileSync(probeFile, probeToken);
+  assert.equal(await createLaoDevspaceProbe({
+    LAO_DEVSPACE_MCP_URL: endpoint,
+    LAO_DEVSPACE_MCP_TOKEN_FILE: probeFile,
+  })(), "connected", "standalone LAO verifies the real OAuth-protected MCP endpoint");
   let id = 0;
   const rpc = async (method: string, params: object, authenticated = true) => {
     const response = await fetch(endpoint, {
