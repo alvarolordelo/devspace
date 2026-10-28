@@ -11,13 +11,13 @@ test("CPU utilization requires two valid readings and does not guess on reset", 
 });
 
 test("GPU probe accepts bounded NVIDIA numbers only and refuses noisy output", () => {
-  assert.deepEqual(parseNvidiaSmiMetrics("42, 256, 6144\r\n"), {
-    utilizationPercent: 42, vramUsedMiB: 256, vramTotalMiB: 6144,
+  assert.deepEqual(parseNvidiaSmiMetrics("NVIDIA GeForce RTX 2060, 42, 256, 6144\r\n"), {
+    name: "NVIDIA GeForce RTX 2060", utilizationPercent: 42, vramUsedMiB: 256, vramTotalMiB: 6144,
   });
-  for (const input of ["", "N/A, 200, 6144", "-1, 200, 6144",
-    "101, 200, 6144", "50, 7000, 6144", "5, 30, 0",
-    "50, 0, 6144\n20, 0, 6144", "20, 30, 6144, extra",
-    "20, 30, 6144; unexpected"] ) {
+  for (const input of ["", "RTX, N/A, 200, 6144", "RTX, -1, 200, 6144",
+    "RTX, 101, 200, 6144", "RTX, 50, 7000, 6144", "RTX, 5, 30, 0",
+    "RTX, 50, 0, 6144\nRTX, 20, 0, 6144", "RTX, 20, 30, 6144, extra",
+    "RTX, 20, 30, 6144; unexpected", "bad\tname, 20, 30, 6144"] ) {
     assert.equal(parseNvidiaSmiMetrics(input), null, input);
   }
 });

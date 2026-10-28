@@ -8,9 +8,25 @@ import { dashboardHtml } from "./dashboard-ui.js";
 import { createLaoResourceMonitor } from "./resource-metrics.js";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import type { LaoDevspaceStatus } from "./devspace-probe.js";
+import type { LaoDashboardLanguage } from "./dashboard-designed.js";
 
 const readResourceMetrics = createLaoResourceMonitor();
+
+async function readDashboardLanguage(): Promise<LaoDashboardLanguage> {
+  const fallback: LaoDashboardLanguage = Intl.DateTimeFormat().resolvedOptions().locale
+    .toLowerCase().startsWith("pt") ? "pt-BR" : "en-US";
+  const localAppData = process.env.LOCALAPPDATA;
+  if (!localAppData) return fallback;
+  try {
+    const raw = await readFile(join(localAppData, "LAODevSpace", "ui-preferences.json"), "utf8");
+    const language = (JSON.parse(raw) as { language?: unknown }).language;
+    return language === "pt-BR" || language === "en-US" ? language : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 export interface LaoDashboardOptions {
   token: string;
@@ -277,7 +293,7 @@ export async function handleLaoDashboard(
         "'; style-src 'nonce-" + nonce +
         "'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
     });
-    res.end(dashboardHtml(nonce));
+    res.end(dashboardHtml(nonce, await readDashboardLanguage()));
     return true;
   }
   if (path === "/dashboard/assets/logo.png") {

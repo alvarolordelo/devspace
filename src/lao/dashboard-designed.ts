@@ -1,9 +1,85 @@
 /** Approved LAO white-panel visual language; locally rendered, read-only. */
-export function designedDashboardHtml(nonce: string): string {
+export type LaoDashboardLanguage = "pt-BR" | "en-US";
+export function designedDashboardHtml(nonce: string, language: LaoDashboardLanguage = "pt-BR"): string {
+  const t = language === "en-US" ? {
+    htmlLang:"en", title:"Status dashboard", localMonitor:"Local monitor", restricted:"Local access only",
+    readAuth:"Authenticated read", noAuto:"No automatic execution", status:"Status", tasks:"Tasks", models:"Models",
+    settings:"Settings", checking:"Checking...", notVerified:"Not verified", defaultModel:"Default model",
+    chooseModel:"Click to choose a local model", installedModels:"Installed local models", resources:"System resources",
+    details:"View details", gpuUse:"NVIDIA utilization", gpuMemory:"GPU memory", waitingSample:"Waiting for sample",
+    systemMemory:"System memory", waitingMetrics:"Waiting for metrics...", realSamples:"Real local samples. GPU percentage does not represent model layers loaded on GPU.",
+    viewAll:"View all", noTasks:"No tasks recorded.", localModels:"Local models", viewModels:"View models",
+    waitingModel:"Waiting for default model data.", recentEvents:"Recent events", noEvents:"No events available.",
+    taskHistory:"Task history", state:"State", all:"All", awaitingReview:"Awaiting review", running:"Running",
+    approved:"Approved", rejected:"Rejected", failed:"Failed", noFilterTasks:"No tasks in this filter.",
+    modelSelected:"Model selected in LAO", modelInfo:"A configured model does not mean it is loaded in VRAM.",
+    modelApiNote:"Installed model listing and load state are not yet available in this read-only API. We do not claim “loaded” without confirmation.",
+    eventInfo:"Sanitized task event summary. No raw logs, prompts or credentials.", settingsDiag:"Settings and diagnostics",
+    settingsInfo:"Local diagnostics dashboard. Restarting the LAO daemon requires confirmation; DevSpace MCP and Ollama are not restarted.",
+    operationState:"Operation state", processUsage:"Process usage", latestCheck:"Latest check", autostart:"Automatic startup",
+    notConfiguredHere:"Not configured from this dashboard", executions:"Runs, tests and review", close:"Close",
+    evidence:"Summarized evidence, without prompts or raw diffs.", newTask:"+ New task", viewEvents:"View events",
+    restartLao:"Restart LAO", footer:"LAO DevSpace · Refreshes every 10 s · No auto-approval", logout:"Sign out",
+    auth:"Authentication", authInfo:"Enter the token once. This tab session remains active after F5 refresh (up to 8 hours), without saving the primary token in the browser.",
+    localToken:"Local token", enter:"Sign in", statusPanel:"Status dashboard", restrictedAccess:"Restricted access",
+    queryingOllama:"Querying Ollama…", noLocalModels:"No local model installed.", activeTasks:"There are active tasks.",
+    modelUnavailable:"Model unavailable or not installed.", modelPrefix:"Models", taskApproved:"Approved", taskCompleted:"Completed",
+    taskFailed:"Failed", taskRejected:"Rejected", taskCancelled:"Cancelled", unknown:"Unknown", modelNotProvided:"Model not provided",
+    modelUnknown:"Unknown model", view:"View", taskDetails:"Task details", last200:"tasks (last 200)", task:"Task",
+    resourcesNormalized:"Resources normalized", noRecordedEvents:"No events recorded.", sessionExpired:"Session expired or invalid",
+    queryUnavailable:"Query unavailable", loading:"Loading...", activeLabel:"Active", attention:"Attention", responding:"Responding",
+    noResponse:"No response", connected:"Connected", offline:"Offline", unavailable:"Unavailable", notProvided:"Not provided",
+    availabilityVerified:"Availability verified", configuredNotLoaded:"Configured model · load state not verified",
+    logicalCores:"logical cores", alertsUnavailable:"Alerts unavailable", attentionPrefix:"Attention", noResourceAlerts:"No confirmed resource alerts.",
+    noReadinessBlocks:"No readiness blocks", connectionUnavailable:"Connection unavailable", collectionUnavailable:"Collection unavailable",
+    measurementsUnavailable:"Measurements temporarily unavailable.", invalidToken:"Invalid token", authUnavailable:"Authentication unavailable",
+    invalidSession:"Invalid session", sessionExpiredAgain:"The session expired. Sign in again.", restartOnly:"Restart only the local LAO DevSpace? DevSpace MCP and Ollama will not be interrupted.",
+    restartUnavailable:"Restart unavailable or not authorized.", restartBlocked:"There are active tasks; restart blocked.", restarting:"Restarting LAO…",
+    restartRequested:"Restart requested. Waiting for the daemon to respond again.", restartAllowedTitle:"Restart only the local LAO daemon, with confirmation",
+    inUse:"in use", gpuUnavailable:"GPU unavailable",
+    restartUnavailableTitle:"Restart unavailable in this LAO instance", brandAlt:"LAO DevSpace brand", mainMenu:"Main menu", panelSections:"Dashboard sections",
+  } : {
+    htmlLang:"pt-BR", title:"Painel de status", localMonitor:"Monitor local", restricted:"Acesso somente local",
+    readAuth:"Leitura autenticada", noAuto:"Sem execução automática", status:"Status", tasks:"Tarefas", models:"Modelos",
+    settings:"Configurações", checking:"Verificando...", notVerified:"Não verificado", defaultModel:"Modelo padrão",
+    chooseModel:"Clique para escolher um modelo local", installedModels:"Modelos locais instalados", resources:"Recursos do sistema",
+    details:"Ver detalhes", gpuUse:"Utilização NVIDIA", gpuMemory:"Memória da GPU", waitingSample:"Aguardando amostra",
+    systemMemory:"Memória do sistema", waitingMetrics:"Aguardando medições...", realSamples:"Amostras locais reais. Percentual de GPU não representa camadas do modelo carregadas em GPU.",
+    viewAll:"Ver todas", noTasks:"Nenhuma tarefa registrada.", localModels:"Modelos locais", viewModels:"Ver modelos",
+    waitingModel:"Aguardando dados do modelo padrão.", recentEvents:"Eventos recentes", noEvents:"Nenhum evento disponível.",
+    taskHistory:"Histórico de tarefas", state:"Estado", all:"Todos", awaitingReview:"Aguardando revisão", running:"Executando",
+    approved:"Aprovadas", rejected:"Rejeitadas", failed:"Falhas", noFilterTasks:"Nenhuma tarefa nesse filtro.",
+    modelSelected:"Modelo selecionado no LAO", modelInfo:"Modelo configurado não significa que o modelo esteja carregado em VRAM.",
+    modelApiNote:"A listagem de modelos instalados e o estado de carregamento ainda não estão disponíveis nesta API somente-leitura. Não indicamos “carregado” sem confirmação.",
+    eventInfo:"Resumo sanitizado dos registros de tarefas. Sem logs brutos, prompts ou credenciais.", settingsDiag:"Configurações e diagnósticos",
+    settingsInfo:"Painel de diagnóstico local. O reinício do daemon LAO exige confirmação; DevSpace MCP e Ollama não são reiniciados.",
+    operationState:"Estado da operação", processUsage:"Consumo do processo", latestCheck:"Coleta mais recente", autostart:"Inicialização automática",
+    notConfiguredHere:"Não configurada por este painel", executions:"Execuções, testes e revisão", close:"Fechar",
+    evidence:"Evidência resumida, sem prompts nem diffs brutos.", newTask:"+ Nova tarefa", viewEvents:"Ver eventos",
+    restartLao:"Reiniciar LAO", footer:"LAO DevSpace · Atualiza a cada 10 s · Sem autoaprovação", logout:"Sair",
+    auth:"Autenticação", authInfo:"Informe o token uma vez. A sessão desta aba permanece ativa ao atualizar com F5 (até 8 horas), sem salvar o token principal no navegador.",
+    localToken:"Token local", enter:"Entrar", statusPanel:"Painel de status", restrictedAccess:"Acesso restrito",
+    queryingOllama:"Consultando Ollama…", noLocalModels:"Nenhum modelo local instalado.", activeTasks:"Há tarefas em execução.",
+    modelUnavailable:"Modelo indisponível ou não instalado.", modelPrefix:"Modelos", taskApproved:"Aprovada", taskCompleted:"Concluída",
+    taskFailed:"Falhou", taskRejected:"Rejeitada", taskCancelled:"Cancelada", unknown:"Desconhecida", modelNotProvided:"Modelo não informado",
+    modelUnknown:"Modelo desconhecido", view:"Ver", taskDetails:"Detalhes da tarefa", last200:"tarefas (últimas 200)", task:"Tarefa",
+    resourcesNormalized:"Recursos normalizados", noRecordedEvents:"Nenhum evento registrado.", sessionExpired:"Sessão expirada ou inválida",
+    queryUnavailable:"Consulta indisponível", loading:"Carregando...", activeLabel:"Ativo", attention:"Atenção", responding:"Respondendo",
+    noResponse:"Sem resposta", connected:"Conectado", offline:"Offline", unavailable:"Indisponível", notProvided:"Não informado",
+    availabilityVerified:"Disponibilidade verificada", configuredNotLoaded:"Modelo configurado · carregamento não verificado",
+    logicalCores:"núcleos lógicos", alertsUnavailable:"Alertas indisponíveis", attentionPrefix:"Atenção", noResourceAlerts:"Sem alertas de recursos confirmados.",
+    noReadinessBlocks:"Sem bloqueios de prontidão", connectionUnavailable:"Conexão indisponível", collectionUnavailable:"Coleta indisponível",
+    measurementsUnavailable:"Medições temporariamente indisponíveis.", invalidToken:"Token inválido", authUnavailable:"Autenticação indisponível",
+    invalidSession:"Sessão inválida", sessionExpiredAgain:"A sessão expirou. Entre novamente.", restartOnly:"Reiniciar somente o LAO DevSpace local? O DevSpace MCP e o Ollama não serão interrompidos.",
+    restartUnavailable:"Reinício não autorizado ou indisponível.", restartBlocked:"Há tarefas em execução; reinício bloqueado.", restarting:"Reiniciando LAO…",
+    restartRequested:"Reinício solicitado. Aguardando daemon responder novamente.", restartAllowedTitle:"Reiniciar somente o daemon local LAO, mediante confirmação",
+    inUse:"em uso", gpuUnavailable:"GPU indisponível",
+    restartUnavailableTitle:"Reinício indisponível nesta instância do LAO", brandAlt:"Marca LAO DevSpace", mainMenu:"Menu principal", panelSections:"Seções do painel",
+  };
   return String.raw`<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8">
+<html lang="${t.htmlLang}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LAO DevSpace | Painel de status</title>
+<title>LAO DevSpace | ${t.title}</title>
 <style nonce="__NONCE__">
 :root{color-scheme:light;font:15px "Segoe UI",Inter,Arial,sans-serif;
 --text:#111827;--muted:#667085;--panel:#fff;--bg:#f6f9fe;--border:#e2e8f0;
@@ -44,9 +120,10 @@ h2{font-size:18px;margin:0;letter-spacing:-.25px}.subtitle{font-size:13px;color:
 .link{border:0;background:transparent;color:var(--blue);font-weight:700;font-size:13px;padding:7px 2px}
 .link:hover{text-decoration:underline}
 .status-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
-.status-grid .panel{min-height:125px;padding:18px 17px}
+.status-grid .panel{min-height:105px;padding:16px 17px}
+.status-head{display:flex;align-items:center;gap:9px;margin-bottom:10px;min-width:0}
 .tile-icon{width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;
-font-size:22px;color:var(--navy);margin-bottom:8px}
+font-size:22px;color:var(--navy);margin:0;flex-shrink:0}
 .tile-icon img{width:24px;height:24px;object-fit:contain}
 .model-choice{cursor:pointer;border-bottom:1px dashed #a5b4c7;display:inline-block}
 .model-choice:focus-visible{outline:2px solid #145edc;border-radius:3px}
@@ -54,11 +131,13 @@ font-size:22px;color:var(--navy);margin-bottom:8px}
 color:#101c31;padding:7px;margin-top:5px;font:inherit}
 .inline-icon{width:20px;height:20px;vertical-align:-4px;margin-right:7px;object-fit:contain}
 .action img{width:18px;height:18px;vertical-align:-4px;margin-right:7px;object-fit:contain}
-.tile-label{font-size:13px;font-weight:700;margin-bottom:9px}
+.tile-label{font-size:13px;font-weight:700;margin:0;min-width:0}
 .tile-value{display:flex;align-items:center;gap:8px;font-size:13px;line-height:1.45;overflow-wrap:anywhere}
 .resource-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .resource{border:1px solid var(--border);border-radius:11px;padding:15px;min-width:0}
 .resource strong{font-size:13px}.resource .value{font-size:17px;font-weight:750;margin:9px 0;color:var(--navy)}
+.resource-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;min-width:0}
+.resource-head small{margin:0!important;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:72%;font-size:11px!important}
 .progress{width:100%;height:9px;background:#edf2f7;border-radius:20px;overflow:hidden}
 .progress>span{display:block;height:100%;width:0;background:var(--green);border-radius:20px;transition:width .35s}
 .resource small{display:block;color:var(--muted);margin-top:10px;font-size:12px}
@@ -106,91 +185,93 @@ max-height:430px;overflow:auto;background:#f4f7fb;padding:14px;border-radius:9px
 </style></head><body>
 <section id="login" class="login-shell">
  <div class="panel">
-  <div class="brand-row"><img src="/dashboard/assets/logo.png" alt="Marca LAO DevSpace" width="54" height="54">
-  <div><h1>LAO DevSpace</h1><span class="muted">Painel de status · acesso local</span></div></div>
-  <h2>Autenticação</h2>
-  <p class="muted">Informe o token uma vez. A sessão desta aba permanece ativa ao atualizar com F5 (até 8 horas), sem salvar o token principal no navegador.</p>
-  <form id="form"><input id="token" aria-label="Token local" type="password" autocomplete="off" required placeholder="Token local"><button type="submit">Entrar</button></form>
+  <div class="brand-row"><img src="/dashboard/assets/logo.png" alt="${t.brandAlt}" width="54" height="54">
+  <div><h1>LAO DevSpace</h1><span class="muted">${t.statusPanel} · ${t.restricted.toLowerCase()}</span></div></div>
+  <h2>${t.auth}</h2>
+  <p class="muted">${t.authInfo}</p>
+  <form id="form"><input id="token" aria-label="${t.localToken}" type="password" autocomplete="off" required placeholder="${t.localToken}"><button type="submit">${t.enter}</button></form>
   <p id="message" class="error" role="alert"></p>
  </div>
 </section>
 <div id="content" class="shell hidden">
- <aside class="sidebar" aria-label="Menu principal">
-  <div class="brand"><img src="/dashboard/assets/logo.png" alt="" width="54" height="54"><div><strong>LAO DevSpace</strong><small>Monitor local</small></div></div>
-  <nav class="nav" aria-label="Seções do painel">
-   <button type="button" data-section="status" aria-current="page"><img src="/dashboard/assets/icons/status.png" alt="" aria-hidden="true"> Status</button>
-   <button type="button" data-section="tarefas"><img src="/dashboard/assets/icons/logs.png" alt="" aria-hidden="true"> Tarefas</button>
-   <button type="button" data-section="modelos"><img src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"> Modelos</button>
+ <aside class="sidebar" aria-label="${t.mainMenu}">
+  <div class="brand"><img src="/dashboard/assets/logo.png" alt="" width="54" height="54"><div><strong>LAO DevSpace</strong><small>${t.localMonitor}</small></div></div>
+  <nav class="nav" aria-label="${t.panelSections}">
+   <button type="button" data-section="status" aria-current="page"><img src="/dashboard/assets/icons/status.png" alt="" aria-hidden="true"> ${t.status}</button>
+   <button type="button" data-section="tarefas"><img src="/dashboard/assets/icons/logs.png" alt="" aria-hidden="true"> ${t.tasks}</button>
+   <button type="button" data-section="modelos"><img src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"> ${t.models}</button>
    <button type="button" data-section="logs"><img src="/dashboard/assets/icons/revisao.png" alt="" aria-hidden="true"> Logs</button>
-   <button type="button" data-section="configuracoes"><img src="/dashboard/assets/icons/configuracoes.png" alt="" aria-hidden="true"> Configurações</button>
+   <button type="button" data-section="configuracoes"><img src="/dashboard/assets/icons/configuracoes.png" alt="" aria-hidden="true"> ${t.settings}</button>
   </nav>
-  <div class="sidebar-note">Acesso somente local<br>Leitura autenticada<br>Sem execução automática</div>
+  <div class="sidebar-note">${t.restricted}<br>${t.readAuth}<br>${t.noAuto}</div>
  </aside>
  <main class="main">
-  <header class="header"><div><h1>LAO DevSpace</h1><p id="section-description">Painel de status</p></div>
-   <div id="connection" class="pill neutral" role="status"><span class="dot"></span><span id="connection-text">Verificando...</span></div>
+  <header class="header"><div><h1>LAO DevSpace</h1><p id="section-description">${t.statusPanel}</p></div>
+   <div id="connection" class="pill neutral" role="status"><span class="dot"></span><span id="connection-text">${t.checking}</span></div>
   </header>
   <div id="section-status">
    <section class="section"><div class="status-grid">
-    <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/status.png" alt="" aria-hidden="true"></div><div class="tile-label">LAO Service</div><div class="tile-value"><span id="lao-dot" class="dot"></span><span id="lao-service">Verificando...</span></div></div>
-    <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/abrir-painel.png" alt="" aria-hidden="true"></div><div class="tile-label">DevSpace MCP</div><div class="tile-value"><span id="mcp-dot" class="dot"></span><span id="devspace-mcp">Não verificado</span></div></div>
-    <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/ollama.png" alt="" aria-hidden="true"></div><div class="tile-label">Ollama</div><div class="tile-value"><span id="ollama-dot" class="dot"></span><span id="ollama-state">Não verificado</span></div></div>
-    <div class="panel"><div class="tile-icon"><img src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"></div><div class="tile-label">Modelo padrão</div><div id="model-name" class="tile-value model-choice" role="button" tabindex="0" title="Clique para escolher um modelo local" aria-label="Escolher modelo local do Ollama">—</div><select id="model-select" class="model-select hidden" aria-label="Modelos locais instalados"></select></div>
+    <div class="panel"><div class="status-head"><div class="tile-icon"><img src="/dashboard/assets/icons/status.png" alt="" aria-hidden="true"></div><div class="tile-label">LAO Service</div></div><div class="tile-value"><span id="lao-dot" class="dot"></span><span id="lao-service">${t.checking}</span></div></div>
+    <div class="panel"><div class="status-head"><div class="tile-icon"><img src="/dashboard/assets/icons/abrir-painel.png" alt="" aria-hidden="true"></div><div class="tile-label">DevSpace MCP</div></div><div class="tile-value"><span id="mcp-dot" class="dot"></span><span id="devspace-mcp">${t.notVerified}</span></div></div>
+    <div class="panel"><div class="status-head"><div class="tile-icon"><img src="/dashboard/assets/icons/ollama.png" alt="" aria-hidden="true"></div><div class="tile-label">Ollama</div></div><div class="tile-value"><span id="ollama-dot" class="dot"></span><span id="ollama-state">${t.notVerified}</span></div></div>
+    <div class="panel"><div class="status-head"><div class="tile-icon"><img src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"></div><div class="tile-label">${t.defaultModel}</div></div><div id="model-name" class="tile-value model-choice" role="button" tabindex="0" title="${t.chooseModel}" aria-label="${t.chooseModel}">—</div><select id="model-select" class="model-select hidden" aria-label="${t.installedModels}"></select></div>
    </div></section>
    <section class="section panel">
-    <div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/recursos.png" alt="" aria-hidden="true"> Recursos do sistema</h2><button data-section="configuracoes" class="link" type="button">Ver detalhes</button></div>
+    <div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/recursos.png" alt="" aria-hidden="true"> ${t.resources}</h2><button data-section="configuracoes" class="link" type="button">${t.details}</button></div>
     <div class="resource-grid">
-     <div class="resource"><strong>GPU</strong><div class="value" id="gpu">—</div><div class="progress"><span id="gpu-bar"></span></div><small>Utilização NVIDIA</small></div>
-     <div class="resource"><strong>VRAM</strong><div class="value" id="vram">—</div><div class="progress"><span id="vram-bar"></span></div><small>Memória da GPU</small></div>
-     <div class="resource"><strong>CPU</strong><div class="value" id="cpu">—</div><div class="progress"><span id="cpu-bar"></span></div><small id="cores">Aguardando amostra</small></div>
-     <div class="resource"><strong>RAM</strong><div class="value" id="ram">—</div><div class="progress"><span id="ram-bar"></span></div><small>Memória do sistema</small></div>
+     <div class="resource"><div class="resource-head"><strong>GPU</strong><small id="gpu-name">${t.waitingSample}</small></div><div class="value" id="gpu">—</div><div class="progress"><span id="gpu-bar"></span></div></div>
+     <div class="resource"><div class="resource-head"><strong>VRAM</strong><small id="vram-percent">—</small></div><div class="value" id="vram">—</div><div class="progress"><span id="vram-bar"></span></div></div>
+     <div class="resource"><div class="resource-head"><strong>CPU</strong><small id="cores">${t.waitingSample}</small></div><div class="value" id="cpu">—</div><div class="progress"><span id="cpu-bar"></span></div></div>
+     <div class="resource"><div class="resource-head"><strong>RAM</strong><small id="ram-percent">—</small></div><div class="value" id="ram">—</div><div class="progress"><span id="ram-bar"></span></div></div>
     </div>
-    <p id="resource-alerts" class="fineprint" aria-live="polite">Aguardando medições...</p>
-    <div class="fineprint">Amostras locais reais. Percentual de GPU não representa camadas do modelo carregadas em GPU.</div>
+    <p id="resource-alerts" class="fineprint" aria-live="polite">${t.waitingMetrics}</p>
+    <div class="fineprint">${t.realSamples}</div>
    </section>
    <section class="section panel">
-    <div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/logs.png" alt="" aria-hidden="true"> Tarefas</h2><button class="link" type="button" data-section="tarefas">Ver todas</button></div>
-    <div id="task-summary"></div><div id="summary-empty" class="empty">Nenhuma tarefa registrada.</div>
+    <div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/logs.png" alt="" aria-hidden="true"> ${t.tasks}</h2><button class="link" type="button" data-section="tarefas">${t.viewAll}</button></div>
+    <div id="task-summary"></div><div id="summary-empty" class="empty">${t.noTasks}</div>
    </section>
    <div class="two-columns section">
-    <section class="panel models"><div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"> Modelos locais</h2><button class="link" type="button" data-section="modelos">Ver modelos</button></div><div id="model-summary" class="empty">Aguardando dados do modelo padrão.</div></section>
-    <section class="panel events"><div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/revisao.png" alt="" aria-hidden="true"> Eventos recentes</h2><button class="link" type="button" data-section="logs">Ver todos</button></div><div id="event-summary" class="empty">Nenhum evento disponível.</div></section>
+    <section class="panel models"><div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"> ${t.localModels}</h2><button class="link" type="button" data-section="modelos">${t.viewModels}</button></div><div id="model-summary" class="empty">${t.waitingModel}</div></section>
+    <section class="panel events"><div class="section-title"><h2><img class="inline-icon" src="/dashboard/assets/icons/revisao.png" alt="" aria-hidden="true"> ${t.recentEvents}</h2><button class="link" type="button" data-section="logs">${t.viewAll}</button></div><div id="event-summary" class="empty">${t.noEvents}</div></section>
    </div>
   </div>
   <section id="section-tarefas" class="section panel hidden">
-   <div class="section-title"><h2>Histórico de tarefas</h2><span class="subtitle" id="total">—</span></div>
-   <div class="toolbar"><label for="filter">Estado:</label><select id="filter">
-     <option value="all">Todos</option><option value="awaiting_review">Aguardando revisão</option>
-     <option value="running">Executando</option><option value="approved">Aprovadas</option>
-     <option value="rejected">Rejeitadas</option><option value="failed">Falhas</option>
-   </select></div><div id="tasks"></div><div id="empty" class="empty">Nenhuma tarefa nesse filtro.</div>
+   <div class="section-title"><h2>${t.taskHistory}</h2><span class="subtitle" id="total">—</span></div>
+   <div class="toolbar"><label for="filter">${t.state}:</label><select id="filter">
+     <option value="all">${t.all}</option><option value="awaiting_review">${t.awaitingReview}</option>
+     <option value="running">${t.running}</option><option value="approved">${t.approved}</option>
+     <option value="rejected">${t.rejected}</option><option value="failed">${t.failed}</option>
+   </select></div><div id="tasks"></div><div id="empty" class="empty">${t.noFilterTasks}</div>
   </section>
   <section id="section-modelos" class="section panel hidden">
-   <h2>Modelos locais</h2><p class="muted">Modelo configurado não significa que o modelo esteja carregado em VRAM.</p>
-   <div class="row"><div class="row-icon"><img src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"></div><div class="row-content"><strong id="model-detail">—</strong><small>Modelo selecionado no LAO</small></div><span id="model-capability" class="row-status">Não verificado</span></div>
-   <p class="fineprint">A listagem de modelos instalados e o estado de carregamento ainda não estão disponíveis nesta API somente-leitura. Não indicamos “carregado” sem confirmação.</p>
+   <h2>${t.localModels}</h2><p class="muted">${t.modelInfo}</p>
+   <div class="row"><div class="row-icon"><img src="/dashboard/assets/icons/modelos.png" alt="" aria-hidden="true"></div><div class="row-content"><strong id="model-detail">—</strong><small>${t.modelSelected}</small></div><span id="model-capability" class="row-status">${t.notVerified}</span></div>
+   <p class="fineprint">${t.modelApiNote}</p>
   </section>
-  <section id="section-logs" class="section panel hidden"><h2>Eventos recentes</h2><p class="muted">Resumo sanitizado dos registros de tarefas. Sem logs brutos, prompts ou credenciais.</p><div id="events"></div></section>
-  <section id="section-configuracoes" class="section panel hidden"><h2>Configurações e diagnósticos</h2>
-   <p class="muted">Painel de diagnóstico local. O reinício do daemon LAO exige confirmação; DevSpace MCP e Ollama não são reiniciados.</p>
-   <div class="row"><div class="row-content"><strong>Estado da operação</strong><small id="dependencies">—</small></div></div>
-   <div class="row"><div class="row-content"><strong>Consumo do processo</strong><small id="node-memory">—</small></div></div>
-   <div class="row"><div class="row-content"><strong>Coleta mais recente</strong><small id="checked">—</small></div></div>
-   <div class="row"><div class="row-content"><strong>Inicialização automática</strong><small>Não configurada por este painel</small></div></div>
+  <section id="section-logs" class="section panel hidden"><h2>${t.recentEvents}</h2><p class="muted">${t.eventInfo}</p><div id="events"></div></section>
+  <section id="section-configuracoes" class="section panel hidden"><h2>${t.settingsDiag}</h2>
+   <p class="muted">${t.settingsInfo}</p>
+   <div class="row"><div class="row-content"><strong>${t.operationState}</strong><small id="dependencies">—</small></div></div>
+   <div class="row"><div class="row-content"><strong>${t.processUsage}</strong><small id="node-memory">—</small></div></div>
+   <div class="row"><div class="row-content"><strong>${t.latestCheck}</strong><small id="checked">—</small></div></div>
+   <div class="row"><div class="row-content"><strong>${t.autostart}</strong><small>${t.notConfiguredHere}</small></div></div>
   </section>
-  <section id="detail-panel" class="panel hidden" aria-live="polite"><div class="section-title"><h2>Execuções, testes e revisão</h2><button type="button" id="close-detail" class="link">Fechar</button></div><p class="fineprint">Evidência resumida, sem prompts nem diffs brutos.</p><pre id="detail"></pre></section>
+  <section id="detail-panel" class="panel hidden" aria-live="polite"><div class="section-title"><h2>${t.executions}</h2><button type="button" id="close-detail" class="link">${t.close}</button></div><p class="fineprint">${t.evidence}</p><pre id="detail"></pre></section>
   <div class="actions">
-    <button type="button" class="action primary" disabled title="Envio de tarefas requer integração autenticada e aprovação">+ Nova tarefa</button>
-    <button type="button" class="action" data-section="logs"><img src="/dashboard/assets/icons/revisao.png" alt="" aria-hidden="true"> Ver eventos</button>
-    <button type="button" id="restart-lao" class="action" disabled title="Reinício disponível somente quando o daemon LAO confirmar suporte"><img src="/dashboard/assets/icons/reiniciar.png" alt="" aria-hidden="true"> Reiniciar LAO</button>
-    <button type="button" class="action" data-section="configuracoes"><img src="/dashboard/assets/icons/configuracoes.png" alt="" aria-hidden="true"> Configurações</button>
+    <button type="button" class="action primary" disabled>${t.newTask}</button>
+    <button type="button" class="action" data-section="logs"><img src="/dashboard/assets/icons/revisao.png" alt="" aria-hidden="true"> ${t.viewEvents}</button>
+    <button type="button" id="restart-lao" class="action" disabled><img src="/dashboard/assets/icons/reiniciar.png" alt="" aria-hidden="true"> ${t.restartLao}</button>
+    <button type="button" class="action" data-section="configuracoes"><img src="/dashboard/assets/icons/configuracoes.png" alt="" aria-hidden="true"> ${t.settings}</button>
   </div>
-  <div class="footer"><span>LAO DevSpace · Atualiza a cada 10 s · Sem autoaprovação</span><button id="logout" class="link" type="button">Sair</button></div>
+  <div class="footer"><span>${t.footer}</span><button id="logout" class="link" type="button">${t.logout}</button></div>
  </main>
 </div>
 <script nonce="__NONCE__">
 (() => {
 "use strict";
+const UI=${JSON.stringify(t)};
+const uiLanguage=${JSON.stringify(language)};
 const $=id=>document.getElementById(id);
 let token="",timer=null,loadedTasks=[],loadedResourceEvents=[],activeSection="status";
 const sessionKey="lao-dashboard-session-v1";
@@ -206,7 +287,7 @@ function loginScreen(message=""){
  $("detail").textContent="";
  $("detail-panel").classList.add("hidden");
  $("login").classList.remove("hidden");$("content").classList.add("hidden");
- $("connection-text").textContent="Acesso restrito";$("message").textContent=message;
+ $("connection-text").textContent=UI.restrictedAccess;$("message").textContent=message;
 }
 function acceptSession(session){
  if(!session || !/^[A-Za-z0-9_-]{43}$/.test(session.sessionToken) ||
@@ -216,9 +297,9 @@ function acceptSession(session){
  return true;
 }
 const sections=["status","tarefas","modelos","logs","configuracoes"];
-const names={status:"Painel de status",tarefas:"Tarefas",modelos:"Modelos locais",logs:"Eventos e logs",configuracoes:"Configurações"};
-const warningLabels={cpu_pressure:"CPU acima de 95%",ram_pressure:"RAM acima de 90%",vram_pressure:"VRAM acima de 90%"};
-const date=s=>{const d=new Date(s);return Number.isNaN(d.getTime())?"—":d.toLocaleString("pt-BR");};
+const names={status:UI.statusPanel,tarefas:UI.tasks,modelos:UI.localModels,logs:UI.recentEvents,configuracoes:UI.settings};
+const warningLabels=uiLanguage==="en-US"?{cpu_pressure:"CPU above 95%",ram_pressure:"RAM above 90%",vram_pressure:"VRAM above 90%"}:{cpu_pressure:"CPU acima de 95%",ram_pressure:"RAM acima de 90%",vram_pressure:"VRAM acima de 90%"};
+const date=s=>{const d=new Date(s);return Number.isNaN(d.getTime())?"—":d.toLocaleString(uiLanguage);};
 const node=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const taskIcon=t=>{
  const box=node("div","row-icon");
@@ -236,11 +317,11 @@ async function openModelCombo(){
  if(!token)return;
  selector.classList.remove("hidden");
  selector.disabled=true;
- selector.replaceChildren(node("option","", "Consultando Ollama…"));
+ selector.replaceChildren(node("option","",UI.queryingOllama));
  try{
   const response=await get("/dashboard/api/models");
   const names=Array.isArray(response.models)?response.models:[];
-  if(!names.length)throw Error("Nenhum modelo local instalado.");
+  if(!names.length)throw Error(UI.noLocalModels);
   selector.replaceChildren();
   for(const name of names){
    const option=node("option","",name);option.value=name;
@@ -251,7 +332,7 @@ async function openModelCombo(){
   selector.focus();
  }catch(err){
   selector.classList.add("hidden");
-  $("connection-text").textContent="Modelos: "+err.message;
+  $("connection-text").textContent=UI.modelPrefix+": "+err.message;
  }
 }
 $("model-name").addEventListener("click",openModelCombo);
@@ -270,7 +351,7 @@ $("model-select").addEventListener("change",async event=>{
   });
   if(!response.ok){
    const error=(await response.json()).error;
-   throw Error(error==="active_tasks"?"Há tarefas em execução.":"Modelo indisponível ou não instalado.");
+   throw Error(error==="active_tasks"?UI.activeTasks:UI.modelUnavailable);
   }
   $("model-name").textContent=model;
   $("model-detail").textContent=model;
@@ -296,10 +377,10 @@ function section(name){
 document.querySelectorAll("[data-section]").forEach(b=>b.addEventListener("click",()=>section(b.dataset.section)));
 function dot(id,state){$(id).className="dot "+state;}
 function rowStatus(t){
- const m={awaiting_review:["Aguardando revisão","warn"],approved:["Aprovada","good"],
- completed:["Concluída","good"],failed:["Falhou","bad"],rejected:["Rejeitada","bad"],
- running:["Executando",""],validating:["Validando",""],cancelled:["Cancelada",""]};
- return m[t.status]||[String(t.status||"Desconhecida"),""];
+ const m={awaiting_review:[UI.awaitingReview,"warn"],approved:[UI.taskApproved,"good"],
+ completed:[UI.taskCompleted,"good"],failed:[UI.taskFailed,"bad"],rejected:[UI.taskRejected,"bad"],
+ running:[UI.running,""],validating:[uiLanguage==="en-US"?"Validating":"Validando",""],cancelled:[UI.taskCancelled,""]};
+ return m[t.status]||[String(t.status||UI.unknown),""];
 }
 function renderTasks(){
  const val=$("filter").value;
@@ -308,11 +389,11 @@ function renderTasks(){
  for(const t of items){
   const row=node("div","row");row.appendChild(taskIcon(t));
   const info=node("div","row-content");info.appendChild(node("strong","",t.id));
-  info.appendChild(node("small","",String(t.model||"Modelo não informado")+" · "+date(t.updatedAt)));
+  info.appendChild(node("small","",String(t.model||UI.modelNotProvided)+" · "+date(t.updatedAt)));
   row.appendChild(info);
   const [label,cls]=rowStatus(t);row.appendChild(node("span","row-status "+cls,label));
-  const button=node("button","detail-button","Ver");
-  button.type="button";button.setAttribute("aria-label","Detalhes da tarefa "+t.id);
+  const button=node("button","detail-button",UI.view);
+  button.type="button";button.setAttribute("aria-label",UI.taskDetails+" "+t.id);
   button.addEventListener("click",()=>showDetails(t.id));
   row.appendChild(button);root.appendChild(row);
  }
@@ -321,12 +402,12 @@ function renderTasks(){
  for(const t of loadedTasks.slice(0,3)){
   const row=node("div","row");row.appendChild(taskIcon(t));
   const info=node("div","row-content");info.appendChild(node("strong","",t.id.slice(0,8)+"…"));
-  info.appendChild(node("small","",String(t.model||"Modelo desconhecido")+" · "+date(t.updatedAt)));
+  info.appendChild(node("small","",String(t.model||UI.modelUnknown)+" · "+date(t.updatedAt)));
   row.appendChild(info);const [label,cls]=rowStatus(t);
   row.appendChild(node("span","row-status "+cls,label));summary.appendChild(row);
  }
  $("summary-empty").classList.toggle("hidden",loadedTasks.length>0);
- $("total").textContent=loadedTasks.length+" tarefas (últimas 200)";
+ $("total").textContent=loadedTasks.length+" "+UI.last200;
 }
 function renderEvents(){
  const root=$("events"),summary=$("event-summary");
@@ -340,25 +421,25 @@ function renderEvents(){
    const t=item.value;
    line.appendChild(node("span","dot "+(t.status==="failed"?"bad":t.status==="awaiting_review"?"warn":"good")));
    const [label]=rowStatus(t);
-   info.appendChild(node("strong","",label+" · Tarefa "+t.id.slice(0,8)));
+   info.appendChild(node("strong","",label+" · "+UI.task+" "+t.id.slice(0,8)));
   }else{
    const warnings=Array.isArray(item.value.warnings)?item.value.warnings.filter(k=>Object.hasOwn(warningLabels,k)):[];
    line.appendChild(node("span","dot "+(warnings.length?"warn":"good")));
-   info.appendChild(node("strong","",warnings.length?"Recursos · "+warnings.map(k=>warningLabels[k]).join(" · "):"Recursos normalizados"));
+   info.appendChild(node("strong","",warnings.length?(UI.resources+" · "+warnings.map(k=>warningLabels[k]).join(" · ")):UI.resourcesNormalized));
   }
   info.appendChild(node("small","",date(item.at)));line.appendChild(info);
   root.appendChild(line);
   if(index<3)summary.appendChild(line.cloneNode(true));
  }
- if(!items.length){root.appendChild(node("p","empty","Nenhum evento registrado."));summary.appendChild(node("p","empty","Nenhum evento registrado."));}
+ if(!items.length){root.appendChild(node("p","empty",UI.noRecordedEvents));summary.appendChild(node("p","empty",UI.noRecordedEvents));}
 }
 async function get(path){
  const r=await fetch(path,{cache:"no-store",credentials:"omit",headers:{Authorization:"Bearer "+token}});
- if(!r.ok)throw Error(r.status===401?"Sessão expirada ou inválida":"Consulta indisponível");
+ if(!r.ok)throw Error(r.status===401?UI.sessionExpired:UI.queryUnavailable);
  return r.json();
 }
 async function showDetails(id){
- section("tarefas");$("detail-panel").classList.remove("hidden");$("detail").textContent="Carregando...";
+ section("tarefas");$("detail-panel").classList.remove("hidden");$("detail").textContent=UI.loading;
  try{const data=await get("/dashboard/api/tasks/"+id);$("detail").textContent=JSON.stringify(data,null,2);}
  catch(e){$("detail").textContent=e.message;}
 }
@@ -366,51 +447,59 @@ async function refresh(){
  try{
   const [status,data,metrics]=await Promise.all([get("/dashboard/api/status"),get("/dashboard/api/tasks"),get("/dashboard/api/metrics")]);
   const reasons=Array.isArray(status.blockingReasons)?status.blockingReasons:[];
-  const ready=status.ready===true;
-  $("connection").className="pill "+(ready?"good":"warn");
-  $("connection-text").textContent=ready?"Ativo":"Atenção";
+  const taskList=Array.isArray(data.tasks)?data.tasks:[];
+  const pendingReview=taskList.some(t=>t.status==="awaiting_review");
+  const componentsHealthy=status.live===true &&
+    !reasons.includes("devspace_unavailable") && !reasons.includes("devspace_unverified") &&
+    !reasons.includes("ollama_unavailable");
+  $("connection").className="pill "+(componentsHealthy?(pendingReview?"warn":"good"):"warn");
+  $("connection-text").textContent=componentsHealthy
+    ?(pendingReview?UI.awaitingReview:(status.activeTasks>0?UI.running:UI.activeLabel))
+    :UI.attention;
   $("restart-lao").disabled=status.restartAvailable!==true;
   $("restart-lao").title=status.restartAvailable===true
-    ?"Reiniciar somente o daemon local LAO, mediante confirmação"
-    :"Reinício indisponível nesta instância do LAO";
-  $("lao-service").textContent=status.live===true?"Respondendo":"Sem resposta";
+    ?UI.restartAllowedTitle:UI.restartUnavailableTitle;
+  $("lao-service").textContent=status.live===true?UI.responding:UI.noResponse;
   dot("lao-dot",status.live===true?"good":"bad");
   const mcpOffline=reasons.includes("devspace_unavailable");
   const mcp=!mcpOffline&&!reasons.includes("devspace_unverified");
-  $("devspace-mcp").textContent=mcp?"Conectado":mcpOffline?"Offline":"Não verificado";
+  $("devspace-mcp").textContent=mcp?UI.connected:mcpOffline?UI.offline:UI.notVerified;
   dot("mcp-dot",mcp?"good":mcpOffline?"bad":"neutral");
   const offline=reasons.includes("ollama_unavailable");
-  $("ollama-state").textContent=offline?"Indisponível":reasons.includes("lao_disabled")?"Não verificado":"Respondendo";
+  $("ollama-state").textContent=offline?UI.unavailable:reasons.includes("lao_disabled")?UI.notVerified:UI.responding;
   dot("ollama-dot",offline?"bad":reasons.includes("lao_disabled")?"neutral":"good");
-  const model=status.modelConfigured||"Não informado";
+  const model=status.modelConfigured||UI.notProvided;
   $("model-name").textContent=model;$("model-detail").textContent=model;
   const modelOk=!reasons.some(x=>["model_missing","model_tools_unsupported","ollama_unavailable"].includes(x));
-  $("model-capability").textContent=offline?"Ollama offline":modelOk?"Disponibilidade verificada":"Indisponível";
+  $("model-capability").textContent=offline?"Ollama offline":modelOk?UI.availabilityVerified:UI.unavailable;
   $("model-capability").className="row-status "+(offline||!modelOk?"warn":"good");
   $("model-summary").replaceChildren();
   const modelRow=node("div","row");
   modelRow.appendChild(node("span","dot "+(modelOk?"good":"warn")));
   const modelInfo=node("div","row-content");modelInfo.appendChild(node("strong","",model));
-  modelInfo.appendChild(node("small","","Modelo configurado · carregamento não verificado"));
+  modelInfo.appendChild(node("small","",UI.configuredNotLoaded));
   modelRow.appendChild(modelInfo);$("model-summary").appendChild(modelRow);
   const cpu=percent(metrics.cpu.utilizationPercent),gpu=metrics.gpu?percent(metrics.gpu.utilizationPercent):null;
   const ram=percent(metrics.ram.utilizationPercent);
   const vram=metrics.gpu?percent(100*metrics.gpu.vramUsedMiB/metrics.gpu.vramTotalMiB):null;
-  $("cpu").textContent=cpu===null?"Aguardando amostra":cpu+"%";pctbar("cpu-bar",cpu);
+  $("gpu-name").textContent=metrics.gpu?.name?.replace(/^NVIDIA\s+(?:GeForce\s+)?/i,"")||UI.gpuUnavailable;
+  $("cpu").textContent=cpu===null?UI.waitingSample:cpu+"%";pctbar("cpu-bar",cpu);
   $("gpu").textContent=gpu===null?"—":gpu+"%";pctbar("gpu-bar",gpu);
   $("ram").textContent=Math.round(metrics.ram.usedBytes/1048576)+" / "+Math.round(metrics.ram.totalBytes/1048576)+" MiB";
+  $("ram-percent").textContent=ram===null?"—":ram+"% "+UI.inUse;
   pctbar("ram-bar",ram);
   $("vram").textContent=metrics.gpu?metrics.gpu.vramUsedMiB+" / "+metrics.gpu.vramTotalMiB+" MiB":"—";
+  $("vram-percent").textContent=vram===null?"—":Math.round(vram*10)/10+"% "+UI.inUse;
   pctbar("vram-bar",vram);
-  $("cores").textContent=metrics.cpu.logicalCores+" núcleos lógicos";
+  $("cores").textContent=metrics.cpu.logicalCores+" "+UI.logicalCores;
   $("node-memory").textContent=Math.round(metrics.process.rssBytes/1048576)+" MiB RSS";
   const warnings=metrics.alerts?.advisoryOnly===true&&Array.isArray(metrics.alerts.warnings)
     ?metrics.alerts.warnings.filter(k=>Object.hasOwn(warningLabels,k)).map(k=>warningLabels[k]):null;
-  $("resource-alerts").textContent=warnings===null?"Alertas indisponíveis":warnings.length?"Atenção: "+warnings.join(" · "):"Sem alertas de recursos confirmados.";
+  $("resource-alerts").textContent=warnings===null?UI.alertsUnavailable:warnings.length?UI.attentionPrefix+": "+warnings.join(" · "):UI.noResourceAlerts;
   $("resource-alerts").className="fineprint "+(warnings?.length?"warn-text":"");
-  $("dependencies").textContent=reasons.length?reasons.join(" · "):"Sem bloqueios de prontidão";
+  $("dependencies").textContent=reasons.length?reasons.join(" · "):UI.noReadinessBlocks;
   $("checked").textContent=date(status.checkedAt);
-  loadedTasks=Array.isArray(data.tasks)?data.tasks:[];
+  loadedTasks=taskList;
   loadedResourceEvents=Array.isArray(metrics.alerts?.recentTransitions)
     ?metrics.alerts.recentTransitions.filter(e=>e&&typeof e.at==="string"&&Array.isArray(e.warnings)):[];
   renderTasks();renderEvents();
@@ -420,22 +509,23 @@ async function refresh(){
   }
  }catch(err){
   $("restart-lao").disabled=true;
-  if(err.message==="Sessão expirada ou inválida"){
-   loginScreen("A sessão expirou. Entre novamente.");return;
+  if(err.message===UI.sessionExpired){
+   loginScreen(UI.sessionExpiredAgain);return;
   }
-  $("connection").className="pill bad";$("connection-text").textContent="Conexão indisponível";
+  $("connection").className="pill bad";$("connection-text").textContent=UI.connectionUnavailable;
   if(!$("login").classList.contains("hidden"))$("message").textContent=err.message;
   else{
-   $("dependencies").textContent="Coleta indisponível: "+err.message;
+   $("dependencies").textContent=UI.collectionUnavailable+": "+err.message;
    for(const [label,indicator] of [["lao-service","lao-dot"],["devspace-mcp","mcp-dot"],["ollama-state","ollama-dot"]]){
-    $(label).textContent="Não verificado";dot(indicator,"neutral");
+    $(label).textContent=UI.notVerified;dot(indicator,"neutral");
    }
-   for(const id of ["gpu","vram","cpu","ram","node-memory"]){$(id).textContent="—";}
+   for(const id of ["gpu","vram","cpu","ram","node-memory","vram-percent","ram-percent"]){$(id).textContent="—";}
    for(const id of ["gpu-bar","vram-bar","cpu-bar","ram-bar"]){pctbar(id,null);}
-   $("cores").textContent="Coleta indisponível";
-   $("resource-alerts").textContent="Medições temporariamente indisponíveis.";
+   $("cores").textContent=UI.collectionUnavailable;
+   $("gpu-name").textContent=UI.gpuUnavailable;
+   $("resource-alerts").textContent=UI.measurementsUnavailable;
    $("checked").textContent="—";
-   $("model-capability").textContent="Não verificado";
+   $("model-capability").textContent=UI.notVerified;
    $("model-capability").className="row-status";
    const modelIndicator=document.querySelector("#model-summary .dot");
    if(modelIndicator)modelIndicator.className="dot neutral";
@@ -452,8 +542,8 @@ $("form").addEventListener("submit",async e=>{
    method:"POST",cache:"no-store",credentials:"omit",
    headers:{Authorization:"Bearer "+operatorToken},
   });
-  if(!response.ok)throw Error(response.status===403?"Token inválido":"Autenticação indisponível");
-  if(!acceptSession(await response.json()))throw Error("Sessão inválida");
+  if(!response.ok)throw Error(response.status===403?UI.invalidToken:UI.authUnavailable);
+  if(!acceptSession(await response.json()))throw Error(UI.invalidSession);
   await refresh();
   if(!$("content").classList.contains("hidden"))timer=setInterval(refresh,10000);
  }catch(err){$("message").textContent=err.message;}
@@ -463,7 +553,7 @@ window.addEventListener("hashchange",()=>{if(sections.includes(location.hash.sli
 $("close-detail").addEventListener("click",()=>$("detail-panel").classList.add("hidden"));
 $("restart-lao").addEventListener("click",async()=>{
  if($("restart-lao").disabled)return;
- if(!window.confirm("Reiniciar somente o LAO DevSpace local? O DevSpace MCP e o Ollama não serão interrompidos."))return;
+ if(!window.confirm(UI.restartOnly))return;
  $("restart-lao").disabled=true;
  try{
   const response=await fetch("/dashboard/api/restart",{
@@ -472,11 +562,11 @@ $("restart-lao").addEventListener("click",async()=>{
   });
   if(response.status!==202){
    const code=(await response.json()).error;
-   throw Error(code==="active_tasks"?"Há tarefas em execução; reinício bloqueado.":"Reinício não autorizado ou indisponível.");
+   throw Error(code==="active_tasks"?UI.restartBlocked:UI.restartUnavailable);
   }
   $("connection").className="pill warn";
-  $("connection-text").textContent="Reiniciando LAO…";
-  $("dependencies").textContent="Reinício solicitado. Aguardando daemon responder novamente.";
+  $("connection-text").textContent=UI.restarting;
+  $("dependencies").textContent=UI.restartRequested;
   // The normal status refresh re-enables the button only when LAO is back.
   setTimeout(refresh,2500);
  }catch(err){

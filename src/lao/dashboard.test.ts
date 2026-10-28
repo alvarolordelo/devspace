@@ -54,10 +54,10 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
       assert.match(csp, /connect-src 'self'/);
       assert.equal(home.headers.get("cache-control"), "no-store");
       const html = await home.text();
-      assert.match(html, /Painel de status/);
+      assert.match(html, /Painel de status|Status dashboard/);
       assert.match(html, /LAO DevSpace/);
-      assert.match(html, /Modelos locais/);
-      assert.match(html, /Eventos recentes/);
+      assert.match(html, /Modelos locais|Local models/);
+      assert.match(html, /Eventos recentes|Recent events/);
       assert.match(html, /class="sidebar"/);
       assert.match(html, /textContent/);
       assert.doesNotMatch(html, /alert\('unsafe'\)/);
@@ -326,7 +326,10 @@ test("dashboard markup has a parseable offline script and does not expose tokens
   assert.match(html, /id="cpu"/);
   assert.match(html, /id="ram"/);
   assert.match(html, /id="gpu"/);
+  assert.match(html, /id="gpu-name"/);
   assert.match(html, /id="vram"/);
+  assert.match(html, /id="vram-percent"/);
+  assert.match(html, /class="status-head"/);
   assert.match(html, /\/dashboard\/api\/metrics/);
   assert.match(html, /id="resource-alerts"/);
   assert.match(html, /Sem alertas de recursos confirmados/);
@@ -338,4 +341,17 @@ test("dashboard markup has a parseable offline script and does not expose tokens
   }
   assert.match(html, /Modelo configurado · carregamento não verificado/);
   assert.match(html, /O reinício do daemon LAO exige confirmação/);
+
+  const english = dashboardHtml("nonce-test-en", "en-US");
+  const englishScript = english.match(/<script nonce="nonce-test-en">([\s\S]*?)<\/script>/)?.[1];
+  assert.ok(englishScript);
+  assert.doesNotThrow(() => new Script(englishScript));
+  assert.match(english, /<html lang="en">/);
+  assert.match(english, /Status dashboard/);
+  assert.match(english, /System resources/);
+  assert.match(english, /Settings and diagnostics/);
+  assert.match(english, /No confirmed resource alerts/);
+  assert.match(english, /Configured model · load state not verified/);
+  assert.doesNotMatch(english, />Configurações</);
+  assert.doesNotMatch(english, />Tarefas</);
 });

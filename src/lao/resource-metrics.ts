@@ -28,7 +28,7 @@ export function cpuUsagePercent(previous: CpuReading | null, current: CpuReading
 }
 
 export type LaoGpuMetrics = Readonly<{
-  utilizationPercent: number; vramUsedMiB: number; vramTotalMiB: number;
+  name: string; utilizationPercent: number; vramUsedMiB: number; vramTotalMiB: number;
 }>;
 
 /** Accept a single physical GPU result; never report arbitrary driver output. */
@@ -36,20 +36,26 @@ export function parseNvidiaSmiMetrics(raw: string): LaoGpuMetrics | null {
   const lines = raw.trim().split(/\r?\n/);
   if (lines.length !== 1) return null;
   const fields = lines[0]!.split(",").map(x => x.trim());
-  if (fields.length !== 3 || fields.some(x => !/^\d{1,6}$/.test(x))) return null;
-  const [utilizationPercent, vramUsedMiB, vramTotalMiB] = fields.map(Number);
+  if (fields.length !== 4) return null;
+  const [name, utilizationRaw, usedRaw, totalRaw] = fields;
+  if (!name || name.length > 80 || !/^[\x20-\x7e]+$/.test(name) ||
+      ![utilizationRaw, usedRaw, totalRaw].every(x => /^\d{1,6}$/.test(x ?? ""))) return null;
+  const utilizationPercent = Number(utilizationRaw);
+  const vramUsedMiB = Number(usedRaw);
+  const vramTotalMiB = Number(totalRaw);
   if (utilizationPercent === undefined || vramUsedMiB === undefined ||
       vramTotalMiB === undefined || utilizationPercent > 100 ||
       vramTotalMiB <= 0 || vramUsedMiB > vramTotalMiB) return null;
-  return { utilizationPercent, vramUsedMiB, vramTotalMiB };
+  return { name, utilizationPercent, vramUsedMiB, vramTotalMiB };
 }
 
 async function readNvidiaGpu(): Promise<LaoGpuMetrics | null> {
   try {
     // Fixed executable and arguments; never execute instructions from a task
-    // or expose hardware identifiers. Absence/timeout is not a health failure.
+    // or expose unique hardware identifiers. The GPU product name is local
+    // diagnostic metadata only. Absence/timeout is not a health failure.
     const { stdout } = await execFileAsync("nvidia-smi", [
-      "--query-gpu=utilization.gpu,memory.used,memory.total",
+      "--query-gpu=name,utilization.gpu,memory.used,memory.total",
       "--format=csv,noheader,nounits",
     ], { timeout: 1500, windowsHide: true, maxBuffer: 4096,
       // NVIDIA's Windows NVML loader requires ProgramFiles to locate its DLLs.
