@@ -138,6 +138,19 @@ if ($UiCheckOnly) {
         if ($ui.ModelCombo.DropDownStyle -ne [Windows.Forms.ComboBoxStyle]::DropDownList) {
             throw 'Modelos locais devem usar uma lista de seleção, não texto arbitrário'
         }
+        if ($ui.ModelCombo.Top -ne $ui.Rows.model.Value.Top -or
+            $ui.ModelCombo.Left -ne $ui.Rows.model.Value.Left -or
+            $ui.ModelCombo.Width -ne $ui.Rows.model.Value.Width -or
+            $ui.ModelCombo.Top -le $ui.Rows.ollama.Value.Bottom) {
+            throw 'Model dropdown is not aligned to the Modelo padrão row'
+        }
+        Resize-LaoPopupContents $ui 340
+        if ($ui.ModelCombo.Top -ne $ui.Rows.model.Value.Top -or
+            $ui.ModelCombo.Left -ne $ui.Rows.model.Value.Left -or
+            $ui.ModelCombo.Right -gt 340) {
+            throw 'Model dropdown overlaps another row or overflows compact popup'
+        }
+        Resize-LaoPopupContents $ui 420
         foreach ($state in @('active','offline','review','idle')) {
             $snapshot = [pscustomobject]@{
                 status=$state; statusAuthenticated=$true

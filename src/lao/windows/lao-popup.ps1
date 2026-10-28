@@ -158,8 +158,12 @@ function New-LaoPopup {
     $modelCombo=[Windows.Forms.ComboBox]::new()
     $modelCombo.DropDownStyle=[Windows.Forms.ComboBoxStyle]::DropDownList
     $modelCombo.Font=[Drawing.Font]::new('Segoe UI',11)
-    $modelCombo.Location=[Drawing.Point]::new(183,83)
-    $modelCombo.Size=[Drawing.Size]::new(211,32)
+    # Overlay only the value of the "Modelo padrão" row, never "Ollama".
+    # Derive coordinates from the row itself so DPI/layout changes cannot
+    # accidentally move the combo one line above the approved position.
+    $modelCombo.Location=$rows.model.Value.Location
+    $modelCombo.Size=[Drawing.Size]::new($rows.model.Value.Width,31)
+    $modelCombo.DropDownWidth=320
     $modelCombo.Visible=$false
     $modelCombo.IntegralHeight=$true
     $scroll.Controls.Add($modelCombo)
@@ -397,8 +401,9 @@ function Resize-LaoPopupContents($popup,[int]$width) {
         $row.Value.Width=[Math]::Max(103,$width-$row.Value.Left-22)
         $row.Title.Width=[Math]::Min(158,[Math]::Max(118,$row.Value.Left-$row.Title.Left-8))
     }
-    $popup.ModelCombo.Left=[Math]::Max(174,$width-238)
-    $popup.ModelCombo.Width=[Math]::Max(140,$width-$popup.ModelCombo.Left-23)
+    $popup.ModelCombo.Left=$popup.Rows.model.Value.Left
+    $popup.ModelCombo.Top=$popup.Rows.model.Value.Top
+    $popup.ModelCombo.Width=$popup.Rows.model.Value.Width
     $popup.Card.Width=$width-38
     $popup.CardCaption.Width=[Math]::Max(170,$popup.Card.Width-91)
     $popup.CardTitle.Width=[Math]::Max(170,$popup.Card.Width-91)
