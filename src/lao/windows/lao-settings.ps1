@@ -306,6 +306,32 @@ function Invoke-LaoDependencyRecovery([string]$Kind,$Snapshot) {
     }
 }
 
+function Update-LaoSettingsLanguage($Refs) {
+    if (-not $Refs) { return }
+    $Refs.Form.Text=Get-LaoUiText 'SettingsTitle'
+    $Refs.AutoStartTitle.Text=Get-LaoUiText 'AutoStartTitle'
+    $Refs.AutoStartDescription.Text=Get-LaoUiText 'AutoStartDesc'
+    $Refs.Toggle.AccessibleName=Get-LaoUiText 'StartWithWindows'
+    $Refs.Toggle.Text=$(if($Refs.Toggle.Checked){Get-LaoUiText 'On'}else{Get-LaoUiText 'Off'})
+    $Refs.ServicesTitle.Text=Get-LaoUiText 'ManageComponents'
+    $Refs.Notice.Text=Get-LaoUiText 'RestartNotice'
+    $Refs.LanguageTitle.Text=Get-LaoUiText 'Language'
+    $Refs.Foot.Text=Get-LaoUiText 'SettingsFoot'
+    $snapshot=if($Refs.SnapshotProvider){& $Refs.SnapshotProvider}else{$null}
+    foreach($kind in @('Ollama','DevSpace')) {
+        $button=$Refs.Controls[$kind]
+        if(-not $button){continue}
+        $starting=$script:localStarts.ContainsKey($kind)
+        $action=Get-LaoSettingsComponentAction $kind $snapshot
+        $button.Enabled=-not $starting -and $null -ne $action
+        $button.Text=$(if($starting){Get-LaoUiText 'Starting'}elseif($action -and $action.Operation -eq 'Restart'){(Get-LaoUiText 'Restart')+' '+$kind}elseif($action){(Get-LaoUiText 'Start')+' '+$kind}else{$kind})
+        $button.AccessibleDescription=$(if($button.Enabled){
+            (Get-LaoUiText 'Start')+' / '+(Get-LaoUiText 'Restart')+' '+$kind
+        }else{Get-LaoUiText 'NoSafeAction'})
+        $button.Tag.StatusLabel.Text=$(if($starting){Get-LaoUiText 'AwaitingResponse'}elseif($snapshot -and $snapshot.tasksAuthenticated -and $snapshot.activeTasks -gt 0){Get-LaoUiText 'ActiveTaskBlocked'}elseif($action -and $action.Operation -eq 'Restart'){Get-LaoUiText 'ActiveRestart'}elseif($action){Get-LaoUiText 'StoppedStart'}elseif(-not $snapshot -or -not $snapshot.statusAuthenticated -or ($kind -eq 'DevSpace' -and @($snapshot.reasons) -contains 'devspace_unverified')){Get-LaoUiText 'ConnectionUnverified'}else{Get-LaoUiText 'NoSafeAction'})
+    }
+}
+
 function New-LaoSettingsForm($Assets,$SnapshotProvider) {
     $form=[Windows.Forms.Form]::new()
     $form.Text=Get-LaoUiText 'SettingsTitle'
@@ -422,19 +448,17 @@ function New-LaoSettingsForm($Assets,$SnapshotProvider) {
     $form.Controls.Add($languageCombo)
     $foot=AddText (Get-LaoUiText 'SettingsFoot') 20 378 353 46
     $foot.ForeColor=[Drawing.Color]::DimGray
+    $languageCombo.Tag=[pscustomobject]@{
+        Form=$form;AutoStartTitle=$title;AutoStartDescription=$description
+        Toggle=$toggle;ServicesTitle=$services;Notice=$notice
+        LanguageTitle=$languageTitle;Foot=$foot;Controls=$controls
+        SnapshotProvider=$SnapshotProvider
+    }
     $languageCombo.Add_SelectedIndexChanged({
         $selected=if($this.SelectedIndex -eq 1){'pt-BR'}else{'en-US'}
         if($selected -eq (Get-LaoUiLanguage)){return}
         Set-LaoUiLanguage $selected
-        $form.Text=Get-LaoUiText 'SettingsTitle'
-        $title.Text=Get-LaoUiText 'AutoStartTitle'
-        $description.Text=Get-LaoUiText 'AutoStartDesc'
-        $toggle.AccessibleName=Get-LaoUiText 'StartWithWindows'
-        $toggle.Text=$(if($toggle.Checked){Get-LaoUiText 'On'}else{Get-LaoUiText 'Off'})
-        $services.Text=Get-LaoUiText 'ManageComponents'
-        $notice.Text=Get-LaoUiText 'RestartNotice'
-        $languageTitle.Text=Get-LaoUiText 'Language'
-        $foot.Text=Get-LaoUiText 'SettingsFoot'
+        Update-LaoSettingsLanguage $this.Tag
         if(Get-Command Update-LaoTrayLanguage -ErrorAction SilentlyContinue){Update-LaoTrayLanguage}
     })
     $refresh=[Windows.Forms.Timer]::new()
