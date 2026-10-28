@@ -3,6 +3,8 @@ import { LaoOllamaError, type LaoOllamaClient } from "./ollama-client.js";
 import type { LaoRun, LaoTask, LaoTaskInput } from "./contracts.js";
 import { LAO_MAX_CONTEXT_FILES, LAO_MAX_CONTEXT_FILE_BYTES, type LaoSourceFile } from "./read-context.js";
 import type { LaoTaskStore } from "./task-store.js";
+import { LaoModelAttemptError, laoFailoverAllowed, laoModelCandidates,
+  laoModelErrorCode } from "./model-failover.js";
 
 /**
  * Read-only phase of LAO: no filesystem, shell, patch or tool definitions are
@@ -12,6 +14,7 @@ export class LaoReadOnlyRunner {
   constructor(
     private readonly store: LaoTaskStore,
     private readonly ollama: Pick<LaoOllamaClient, "inspectModel" | "chatReadOnly">,
+    private readonly fallbackModel: string | null = null,
   ) {}
 
   createTask(input: LaoTaskInput): LaoTask {
@@ -52,10 +55,6 @@ export class LaoReadOnlyRunner {
     let run: LaoRun | undefined;
     try {
       if (effectiveSignal.aborted) throw new Error("Task cancelled or timed out");
-      const info = await this.ollama.inspectModel(task.model, {
-        timeoutMs: Math.min(5000, task.limits.maxWallSeconds * 1000), signal: effectiveSignal,
-      });
-      if (!info.supportsTools) throw new Error("Requested model lacks tools capability");
       const prompt = [
         "You are a read-only technical assistant. You have no tools and cannot execute code or tests.",
         "The source snapshots below, if present, were explicitly selected by the supervisor.",
@@ -74,28 +73,57 @@ export class LaoReadOnlyRunner {
       ].join("\n");
       if (prompt.length > 20000) throw new Error("Task context exceeds read-only prompt budget");
       this.store.transition(taskId, "running");
-      run = this.store.startRun(taskId, sourceFiles.map(file => ({
+      const manifest = sourceFiles.map(file => ({
         path: file.path, sha256: createHash("sha256").update(file.content).digest("hex"),
-      })));
-      const response = await this.ollama.chatReadOnly(prompt, {
-        model: task.model,
-        signal: effectiveSignal,
-        timeoutMs: Math.min(task.limits.maxWallSeconds * 1000, 180000),
-        maxOutputTokens: 512,
-      });
-      if (effectiveSignal.aborted) throw new Error("Task cancelled or timed out");
-      if (!response.trim()) throw new Error("Ollama returned an empty response");
-      const completed = this.store.completeRun(run.id, { status: "completed", summary: response });
-      this.store.transition(taskId, "validating");
-      // A response is never considered proof that acceptance criteria passed.
-      const awaiting = this.store.transition(taskId, "awaiting_review");
-      return { task: awaiting, run: completed };
+      }));
+      const candidates = laoModelCandidates(task.model, this.fallbackModel);
+      let lastError: unknown;
+      for (let index = 0; index < candidates.length; index++) {
+        const model = candidates[index]!;
+        try {
+          const info = await this.ollama.inspectModel(model, {
+            timeoutMs: Math.min(5000, task.limits.maxWallSeconds * 1000), signal: effectiveSignal,
+          });
+          if (!info.supportsTools) {
+            throw new LaoModelAttemptError("UNSUPPORTED_CAPABILITY",
+              "Requested model lacks tools capability");
+          }
+          run = this.store.startRun(taskId, manifest, model);
+          const response = await this.ollama.chatReadOnly(prompt, {
+            model, signal: effectiveSignal,
+            timeoutMs: Math.min(task.limits.maxWallSeconds * 1000, 180000),
+            maxOutputTokens: 512,
+          });
+          if (effectiveSignal.aborted) throw new Error("Task cancelled or timed out");
+          if (!response.trim()) {
+            throw new LaoModelAttemptError("EMPTY_RESPONSE", "Ollama returned an empty response");
+          }
+          const completed = this.store.completeRun(run.id, { status: "completed", summary: response });
+          run = undefined;
+          this.store.transition(taskId, "validating");
+          // A response is never considered proof that acceptance criteria passed.
+          const awaiting = this.store.transition(taskId, "awaiting_review");
+          return { task: awaiting, run: completed };
+        } catch (error) {
+          if (run) {
+            try { this.store.completeRun(run.id, { status: "failed", errorCode: laoModelErrorCode(error) }); }
+            catch { /* retain primary model error */ }
+            run = undefined;
+          }
+          lastError = error;
+          const canTryNext = index + 1 < candidates.length && !effectiveSignal.aborted &&
+            laoFailoverAllowed(error);
+          if (canTryNext) continue;
+          throw error;
+        }
+      }
+      throw lastError ?? new Error("No LAO model candidate was available");
     } catch (error) {
       if (run) {
         try {
           this.store.completeRun(run.id, { status: signal?.aborted ? "cancelled" : "failed",
             errorCode: deadlineController.signal.aborted && !signal?.aborted
-              ? "TIMEOUT" : error instanceof LaoOllamaError ? error.code : "EXECUTION_ERROR" });
+              ? "TIMEOUT" : laoModelErrorCode(error) });
         } catch { /* retain primary error */ }
       }
       try {

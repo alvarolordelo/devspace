@@ -351,7 +351,7 @@ export class LaoTaskStore {
   }
 
   /** Records one run before model execution so crashes leave an audit record. */
-  startRun(taskId: string, sourceManifest: LaoRun["sourceManifest"] = []): LaoRun {
+  startRun(taskId: string, sourceManifest: LaoRun["sourceManifest"] = [], modelOverride?: string): LaoRun {
     return this.sqlite.transaction(() => {
       const task = this.requireTask(taskId);
       if (task.status !== "running") throw new Error("Run requires running task");
@@ -361,7 +361,7 @@ export class LaoTaskStore {
       if (existing) throw new Error("A model run is already in progress");
       const run = laoRunSchema.parse({
         schemaVersion: RUN_VERSION, id: randomUUID(), taskId,
-        model: task.model, status: "running",
+        model: modelOverride ?? task.model, status: "running",
         startedAt: new Date().toISOString(), finishedAt: null,
         toolCalls: 0, summary: null, errorCode: null, sourceManifest,
       });

@@ -113,7 +113,8 @@ export function registerLaoMcpTools(
         ? await loadLaoReadContext(context.workspaces as Pick<WorkspaceRegistry, "resolvePath">, workspace, selectedFiles)
         : [];
       return await withStore(context.stateDir, async (store) => {
-        const runner = new LaoReadOnlyRunner(store, context.ollama ?? new LaoOllamaClient(config));
+        const runner = new LaoReadOnlyRunner(store, context.ollama ?? new LaoOllamaClient(config),
+          config.fallbackModel);
         const task = runner.createTask({
           workspaceId: workspace_id, model: model ?? readLaoPreferredModel(config.defaultModel), goal,
           acceptanceCriteria: acceptance_criteria,
@@ -166,7 +167,8 @@ export function registerLaoMcpTools(
         const snapshots = selectedFiles.length
           ? await loadLaoReadContext(context.workspaces as Pick<WorkspaceRegistry, "resolvePath">, workspace, selectedFiles)
           : [];
-        const runner = new LaoReadOnlyRunner(store, context.ollama ?? new LaoOllamaClient(config));
+        const runner = new LaoReadOnlyRunner(store, context.ollama ?? new LaoOllamaClient(config),
+          config.fallbackModel);
         try {
           const result = await runner.runTask(task_id, extra?.signal, snapshots);
           return asToolResult({
@@ -227,7 +229,7 @@ export function registerLaoMcpTools(
         const managed = (await openManaged({ path: source.root, mode: "worktree" })).workspace;
         const task = await withStore(context.stateDir, store =>
           new LaoIsolatedWriteRunner(store, context.ollama ?? new LaoOllamaClient(config),
-            context.worktreeRoot!).createTask({
+            context.worktreeRoot!, config.fallbackModel).createTask({
             workspaceId: managed.id, model: model ?? readLaoPreferredModel(config.defaultModel),
             goal, acceptanceCriteria: acceptance_criteria,
             permissions: { read: true, write: "isolated_worktree",
@@ -269,7 +271,8 @@ export function registerLaoMcpTools(
               context.workspaces as Pick<WorkspaceRegistry, "resolvePath">, workspace, chosen)
             : [];
           const runner = new LaoIsolatedWriteRunner(
-            store, context.ollama ?? new LaoOllamaClient(config), context.worktreeRoot!);
+            store, context.ollama ?? new LaoOllamaClient(config), context.worktreeRoot!,
+            config.fallbackModel);
           try {
             const result = await runner.runTask(task_id, workspace, extra?.signal, snapshots);
             return asToolResult({
@@ -328,7 +331,8 @@ export function registerLaoMcpTools(
             throw new Error("Worktree changed after the supervisor review");
           }
           const runner = new LaoIsolatedWriteRunner(
-            store, context.ollama ?? new LaoOllamaClient(config), context.worktreeRoot!);
+            store, context.ollama ?? new LaoOllamaClient(config), context.worktreeRoot!,
+            config.fallbackModel);
           try {
             const result = await runner.runTask(task_id, workspace, extra?.signal, snapshots);
             return asToolResult({
