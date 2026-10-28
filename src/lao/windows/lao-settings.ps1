@@ -39,7 +39,90 @@ function Get-LaoDependencyRecoveryAction([string]$Kind,$Snapshot,$Service=$null)
     }
 }
 
+# A recovery decision uses a new authenticated daemon result, not the tray's
+# 15-second display cache. The daemon counts all active tasks for this gate.
+function Get-LaoDependencyFreshSnapshot {
+    if (-not $script:dashboardToken -or -not $script:baseUrl) { return $null }
+    try {
+        $value=Invoke-RestMethod -Method Get `
+            -Uri ($script:baseUrl + '/dashboard/api/status') `
+            -Headers @{Authorization=('Bearer '+$script:dashboardToken)} `
+            -TimeoutSec 10 -MaximumRedirection 0 -ErrorAction Stop
+        if ($null -eq $value.activeTasks -or $null -eq $value.blockingReasons -or
+            [int]$value.activeTasks -lt 0) { return $null }
+        return [pscustomobject]@{
+            statusAuthenticated=$true; tasksAuthenticated=$true
+            activeTasks=[int]$value.activeTasks; reasons=@($value.blockingReasons)
+        }
+    } catch { return $null }
+}
+
+function Write-LaoRecoveryHistory([string]$Kind,[string]$ServiceName,
+    [string]$Operation,[string]$Result) {
+    try {
+        $directory=Join-Path $env:LOCALAPPDATA 'LAODevSpace'
+        [IO.Directory]::CreateDirectory($directory) | Out-Null
+        $path=Join-Path $directory 'recovery-history.jsonl'
+        $item=[ordered]@{
+            at=(Get-Date).ToUniversalTime().ToString('o')
+            dependency=$Kind; service=$ServiceName
+            operation=$Operation; result=$Result
+        }
+        Add-Content -LiteralPath $path -Value ($item | ConvertTo-Json -Compress) -Encoding UTF8
+        return $true
+    } catch { return $false }
+}
+
+function Invoke-LaoDependencyRecoveryOperation($Action) {
+    $kind=[string]$Action.Kind
+    $service=[string]$Action.ServiceName
+    $operation=[string]$Action.Operation
+    $result='failed'
+    $verified=$false
+    try {
+        if ($operation -eq 'Restart') {
+            Stop-Service -Name $service -ErrorAction Stop
+            (Get-Service -Name $service -ErrorAction Stop).WaitForStatus(
+                [ServiceProcess.ServiceControllerStatus]::Stopped,
+                [TimeSpan]::FromSeconds(15))
+        }
+        Start-Service -Name $service -ErrorAction Stop
+        (Get-Service -Name $service -ErrorAction Stop).WaitForStatus(
+            [ServiceProcess.ServiceControllerStatus]::Running,
+            [TimeSpan]::FromSeconds(15))
+        if ($kind -eq 'DevSpace') {
+            # The daemon caches authenticated MCP probes for 10 seconds.
+            # Never accept a pre-restart green response as post-restart proof.
+            $cacheExpiry=(Get-Date).AddSeconds(11)
+            while ((Get-Date) -lt $cacheExpiry) {
+                [Windows.Forms.Application]::DoEvents()
+                Start-Sleep -Milliseconds 250
+            }
+        }
+        $deadline=(Get-Date).AddSeconds(25)
+        $reason=if($kind -eq 'Ollama'){'ollama_unavailable'}else{'devspace_unavailable'}
+        do {
+            $health=Get-LaoDependencyFreshSnapshot
+            if ($health -and $health.statusAuthenticated -and
+                $health.reasons -notcontains $reason -and
+                ($kind -ne 'DevSpace' -or
+                 $health.reasons -notcontains 'devspace_unverified') -and
+                $health.activeTasks -eq 0) {
+                $result='verified'; $verified=$true; break
+            }
+            [Windows.Forms.Application]::DoEvents()
+            Start-Sleep -Milliseconds 800
+        } while ((Get-Date) -lt $deadline)
+        if (-not $verified) { $result='running_unverified' }
+    } catch {
+        $result='failed'
+    }
+    $recorded=Write-LaoRecoveryHistory $kind $service $operation $result
+    return $verified -and $recorded
+}
+
 function Invoke-LaoDependencyRecovery([string]$Kind,$Snapshot) {
+    if ($script:dependencyRecoveryInProgress) { return $false }
     $candidate=Get-LaoDependencyRecoveryAction $Kind $Snapshot
     if (-not $candidate) { return $false }
     $verb=if($candidate.Operation -eq 'Start'){'Iniciar'}else{'Reiniciar'}
@@ -51,23 +134,25 @@ function Invoke-LaoDependencyRecovery([string]$Kind,$Snapshot) {
     if ($confirmed -ne [Windows.Forms.DialogResult]::Yes) { return $false }
     # Re-evaluate after confirmation: a recovery request must never turn into
     # an unconditional restart of a service that became healthy meanwhile.
-    $fresh=Get-LaoDependencyRecoveryAction $Kind $Snapshot
-    if (-not $fresh -or $fresh.ServiceName -cne $candidate.ServiceName -or
-        $fresh.Operation -ne $candidate.Operation) {
-        return $false
-    }
+    $script:dependencyRecoveryInProgress=$true
     try {
-        if ($fresh.Operation -eq 'Start') {
-            Start-Service -Name $fresh.ServiceName -ErrorAction Stop
-        } else {
-            Restart-Service -Name $fresh.ServiceName -ErrorAction Stop
+        $freshSnapshot=Get-LaoDependencyFreshSnapshot
+        $fresh=Get-LaoDependencyRecoveryAction $Kind $freshSnapshot
+        if (-not $fresh -or $fresh.ServiceName -cne $candidate.ServiceName -or
+            $fresh.Operation -ne $candidate.Operation) {
+            return $false
         }
-        return $true
-    } catch {
-        [Windows.Forms.MessageBox]::Show(
-            'O Windows recusou a ação: '+$_.Exception.Message,
-            'LAO DevSpace') | Out-Null
-        return $false
+        $verified=Invoke-LaoDependencyRecoveryOperation $fresh
+        if (-not $verified) {
+            [Windows.Forms.MessageBox]::Show(
+                'A ação não pôde ser verificada ou registrada. Consulte o histórico de recuperação.',
+                'LAO DevSpace') | Out-Null
+        }
+        return $verified
+    } finally {
+        $script:dependencyRecoveryInProgress=$false
+        if ((Get-Command Start-LaoAsyncPoll -ErrorAction SilentlyContinue) -and
+            $script:pollStage -eq 'none') { Start-LaoAsyncPoll }
     }
 }
 

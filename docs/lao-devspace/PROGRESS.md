@@ -2,17 +2,27 @@
 
 ## Verificação MCP autenticada — 27/10/2026
 
-O daemon standalone agora consulta `tools/list` no endpoint MCP local com um token OAuth dedicado, quando `LAO_DEVSPACE_MCP_TOKEN_FILE` aponta para um arquivo absoluto. Um HTTP 200 só marca **Conectado** se a resposta MCP autenticada contém as ferramentas esperadas. Falha de autenticação, token ausente, resposta inesperada ou timeout mantém **Não verificado**. Duas conexões recusadas marcam **Offline**. O Monitor e o Dashboard mostram os três estados sem alterar o layout aprovado.
+O daemon standalone agora consulta `tools/list` no endpoint MCP local com um token OAuth dedicado. Ele usa `LAO_DEVSPACE_MCP_TOKEN_FILE` quando definido ou, no Windows, o arquivo autorizado em `%LOCALAPPDATA%\LAODevSpace\devspace-mcp-token.txt`. Um HTTP 200 só marca **Conectado** se a resposta MCP autenticada contém as ferramentas esperadas. Falha de autenticação, token ausente, resposta inesperada ou timeout mantém **Não verificado**. Duas conexões recusadas marcam **Offline**. O Monitor e o Dashboard mostram os três estados sem alterar o layout aprovado.
 
-O lançador Windows aceita automaticamente `%LOCALAPPDATA%\LAODevSpace\devspace-mcp-token.txt` quando ele já existe; não cria nem copia credenciais. O operador ainda precisa autorizar um cliente OAuth próprio do LAO e fornecer um token válido; o token expira conforme a configuração do DevSpace, portanto renovação automática ainda é pendente. O processo LAO já em execução precisa de seu próximo início normal para carregar esta alteração.
+O lançador Windows aceita automaticamente `%LOCALAPPDATA%\LAODevSpace\devspace-mcp-token.txt` quando ele já existe; não cria nem copia credenciais. `node scripts/authorize-lao-devspace.mjs` prepara um cliente OAuth exclusivo e abre a página oficial do DevSpace, onde o operador aprova o acesso com sua senha. O script guarda tokens fora do repositório e o probe renova o acesso pelo endpoint OAuth local, persistindo a rotação do refresh token. A autorização inicial na instalação ativa foi concluída pelo operador.
 
-Teste de integração passou contra um servidor DevSpace MCP real de teste, protegido por OAuth, além dos testes de estados e UI. Na máquina atual a porta 7676 retorna HTTP 401 sem credencial, então o estado honesto permanece **Não verificado**. Portas 7676/7877/11434 estavam ouvindo, Ollama `/api/version` e LAO `/health/live` retornaram 200, e não há serviços Windows Ollama/DevSpace/LAO instalados. Ollama usa um atalho na pasta Inicializar da conta; DevSpace é um processo Node sem serviço Windows identificado. Nenhum processo externo foi reiniciado.
+Teste de integração passou contra um servidor DevSpace MCP real de teste, protegido por OAuth, além dos testes de estados e UI. A porta 7676 retorna HTTP 401 sem credencial; com a credencial OAuth autorizada, o probe real retorna **Conectado**. Portas 7676/7877/11434 estão ouvindo, Ollama `/api/version` e LAO `/health/live` retornaram 200, e não há serviços Windows Ollama/DevSpace/LAO instalados. Ollama usa um atalho na pasta Inicializar da conta; DevSpace é um processo Node sem serviço Windows identificado. Nenhum processo externo foi reiniciado.
 
-Validação da rodada: `pnpm typecheck` e `pnpm build` aprovados; `pnpm test`: **266 testes, 258 aprovados, 8 ignorados, 0 falhas**; verificador da versão fixa `1.0.8` aprovado. O smoke real do probe sem credencial retornou **unverified**; a conexão positiva foi comprovada no teste OAuth ponta a ponta isolado, ainda não na instalação ativa do usuário.
+Validação da primeira rodada: `pnpm typecheck` e `pnpm build` aprovados; `pnpm test`: **266 testes, 258 aprovados, 8 ignorados, 0 falhas**; verificador da versão fixa `1.0.8` aprovado. O smoke do probe sem credencial retornou **unverified**; depois, a conexão positiva, a rotação OAuth e a autorização interativa foram comprovadas contra o DevSpace ativo.
+
+Validação adicional do provisionamento: **6 testes direcionados aprovados**, incluindo fluxo de autorização completo em servidor local de ensaio, probe autenticado, rotação real do refresh token pelo servidor DevSpace de teste e estados negativos. `pnpm typecheck` e `pnpm build` aprovados após essa alteração. A autorização interativa no DevSpace ativo foi concluída na página oficial pelo operador.
+
+**Autorização real concluída:** o operador aprovou o cliente OAuth dedicado na página local do DevSpace. O script gravou a credencial renovável somente em `%LOCALAPPDATA%\LAODevSpace\devspace-mcp-token.txt`. O probe contra a instância MCP ativa retornou **connected**. Um daemon LAO temporário e isolado, usando o Ollama e o DevSpace reais, respondeu `ready=true`, `blockingReasons=[]`, `activeTasks=0`; ele foi encerrado. Após autorização operacional, somente o LAO foi reiniciado. O primeiro reinício revelou que o supervisor antigo não recarregava o caminho da credencial; o probe passou a localizá-la diretamente no Windows. Depois do segundo reinício, o daemon atual respondeu `ready=true`, `blockingReasons=[]`, `activeTasks=0`, `restartAvailable=true`. DevSpace (PID 8896) e Ollama (PID 36276) permaneceram ativos, sem reinício.
+
+**Verificação final desta rodada:** 23 testes direcionados passaram, inclusive recuperação simulada no SCM; o teste adicional de descoberta da credencial passou (5 testes do probe ao todo). `pnpm typecheck`, `pnpm build`, `git diff --check` e verificador da base DevSpace `1.0.8` passaram.
+
+**Regressao consolidada apos os controles de 27/10:** `pnpm test` executou **269 testes, 261 aprovados, 8 ignorados e 0 falhas**. `pnpm typecheck`, `pnpm build`, `git diff --check` e `node scripts/lao-verify-devspace-pin.mjs` tambem passaram. O daemon ativo respondeu `ready=true` sem bloqueios, o Ollama respondeu localmente e o MCP permaneceu protegido por OAuth.
+
+**Recuperação gerenciada:** o Monitor agora reconsulta `/dashboard/api/status` autenticado após a confirmação, usa a contagem de todas as tarefas ativas (sem limite da página de 200), verifica as transições `Stopped` e `Running` no SCM, aguarda a dependência responder e persiste resultado sanitizado em `%LOCALAPPDATA%\LAODevSpace\recovery-history.jsonl`. O teste funcional usa serviços SCM simulados e não toca nos processos atuais. Sem serviço Windows explicitamente vinculado, os controles permanecem indisponíveis. A instalação de um gerenciador de ciclo de vida para Ollama/DevSpace ainda requer decisão operacional do usuário; não foi feita.
 
 **Atualizado:** 27/10/2026 · **Branch:** `feature/lao-devspace` · **Worktree:** `D:\desenvolvimento\lao-devspace`
 
-**Design:** popup da bandeja em seu estado de atenção **aprovado visualmente pelo usuário em 27/10**, a partir de captura real do Windows. Não alterar a interface sem novo pedido. Para lacunas operacionais e evidências atuais, consultar [STATUS_FUNCIONAL_20261027.md](STATUS_FUNCIONAL_20261027.md). O bloqueio P0 atual é a conexão MCP não verificada: `devspaceReady` da execução standalone não recebe um probe autenticado.
+**Design:** popup da bandeja em seu estado de atenção **aprovado visualmente pelo usuário em 27/10**, a partir de captura real do Windows. Não alterar a interface sem novo pedido. Para lacunas operacionais e evidências históricas, consultar [STATUS_FUNCIONAL_20261027.md](STATUS_FUNCIONAL_20261027.md). O bloqueio P0 da conexão MCP não verificada foi resolvido na instalação ativa pelo probe OAuth autenticado.
 
 **Controles solicitados em 27/10:** switch de inicialização automática por usuário, combo com modelos locais do Ollama e controles de reinício de dependências foram acrescentados mantendo a interface principal. Os dois comandos externos só podem ficar habilitados quando houver Windows Services gerenciados, atualmente ausentes nesta máquina. Ver [CONTROLES_INTERATIVOS_20261027.md](CONTROLES_INTERATIVOS_20261027.md).
 
@@ -27,8 +37,8 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | F2 Ollama | [x] | Granite real executou leitura pelo MCP HTTP OAuth de teste (2026-07-28), tarefa persistida e aguardando revisao; configuracao padrao preservada |
 | F3 Escrita isolada | [x] | Granite real escreveu patch em worktree destacado via MCP HTTP OAuth de teste; integridade/sintaxe conferidas, checkout original intacto e aprovacao negada |
 | F4 Avaliacao/revisao | [~] | Integracao OAuth MCP/Granite/Docker validada; aprovacao de patch isolado disponivel somente mediante segundo opt-in, confirmacao do supervisor e evidencia de testes. Promocao segura continua pendente |
-| F5 Serviço e tray | [~] | Daemon opt-in em foreground; tray Windows manual com icones aprovados, sem instalacao SCM, autostart ou teste GUI interativo |
-| F6 Painel | [~] | Dashboard HTTP local autenticado, status, filtro por estado e detalhe de execuções, eventos, testes e evidências resumidas; tray, notificações e teste visual interativo pendentes |
+| F5 Serviço e tray | [~] | Daemon opt-in, tray WinForms aprovado, sondagem assincrona, notificacoes opt-in e autostart da conta implementados; instalacao SCM/boot e teste operacional em Windows limpo continuam pendentes |
+| F6 Painel | [~] | Dashboard claro aprovado, OAuth MCP real, modelos locais, metricas CPU/RAM/GPU/VRAM, alertas e historico sanitizado; falta fechar QA interativo final e historico persistente dos alertas de recurso |
 | F7 Release | [~] | CI Windows anterior validado; adicionado gate de versao fixa ANTES de instalar dependencias e `pnpm install --frozen-lockfile`; CI Windows run `40260097979` aprovada com gate da base antes do install; instalador e rollback pendentes |
 | F8 Multimodelo | [~] | Benchmark Ollama real 5x Granite vs Spark concluido; teste simples 2+2, simulacao de agente e failover pendentes |
 
@@ -45,19 +55,19 @@ Legenda: **[x]** concluído e testado no escopo declarado; **[~]** implementado 
 | RF-07 Avaliar com provas | [~] | lao_write_assess mapeia criterios declarativos a fingerprint/sintaxe e suite Docker real no mesmo run; linguagem natural nao aprovada; gate de promocao pendente |
 | RF-08 Correcoes limitadas | [~] | lao_retry read-only e lao_write_retry para escrita, ambos com feedback explicito e maximo de 2 revisoes; teste Granite de duas correcoes pendente |
 | RF-09 Aprovacao explicita | [~] | lao_review segue negando escrita; lao_write_approve separado registra aprovacao por run/fingerprint apos confirmacao e aceite Docker verificado, sem promover ou alterar origem |
-| RF-10 Persistência/reconsulta | [~] | `lao_result` lê SQLite com runs, eventos, revisões e artefatos de escrita persistidos; reabertura testada; recuperação autônoma de tarefas no boot pendente |
+| RF-10 Persistência/reconsulta | [x] | `lao_result` lê SQLite com runs, eventos, revisões e artefatos persistidos; reabertura e recuperação de execuções interrompidas foram testadas sem retomada automática insegura |
 | RF-11 Boot | [ ] | Não instalado |
-| RF-12 Saúde | [~] | `monitor-status.ts`, `health.ts`, `lao_status`, daemon experimental testado; faltam probe MCP autenticado e serviço Windows |
-| RF-13 Painel | [~] | Health endpoints locais opt-in; visual real pendente |
+| RF-12 Saúde | [~] | Health local, Ollama e probe MCP OAuth autenticado reais aprovados; falta somente o ciclo de vida do daemon como serviço Windows para fechar o requisito operacional |
+| RF-13 Painel | [~] | Dashboard real no design aprovado, sessao autenticada, F5, dados reais e renderizacao em 100/125/150% testados; falta QA interativo final no uso normal |
 | RF-14 Recuperacao | [~] | SQLite lease impede dois daemons no mesmo stateDir, heartbeat/TTL/reclamacao apos crash testados; SCM e reinicio operacional pendentes |
 | RF-15 Tray | [~] | Monitor Windows manual em PowerShell/WinForms, usa icones aprovados, mutex e health local; teste GUI interativo ainda pendente |
-| RF-16 Autostart configurável | [ ] | Pendente |
-| RF-17 Notificações | [ ] | Pendente |
-| RF-18 Dashboard/histórico | [~] | Painel local consulta SQLite com filtro por estado, detalhes de runs, histórico de eventos, resumos de testes/diffs e decisão de revisão; validação visual e diagnósticos de consumo ainda pendentes |
+| RF-16 Autostart configurável | [~] | Switch por usuario cria/remove somente os atalhos LAO na pasta Inicializar; boot antes do login depende do futuro servico SCM |
+| RF-17 Notificações | [~] | Tray possui notificacoes opt-in para mudancas de disponibilidade/revisao; notificacoes de pressao de recursos e preferencias finas permanecem pendentes |
+| RF-18 Dashboard/histórico | [~] | Painel consulta SQLite, filtros, runs, eventos, testes/diffs, revisao e metricas reais; falta persistencia historica especifica dos alertas de recurso e QA final |
 | RF-19 Multimodelo | [~] | Benchmark sequencial 5x real com modelos locais, acertos e latencias documentados em BENCHMARK_20261026.md; prova de codigo pendente |
 | RF-20 Failover | [ ] | Pendente |
 
-**RF concluídos:** 5/20 - **Parciais:** 11/20 - **Pendentes:** 4/20.
+**RF concluídos:** 6/20 - **Parciais:** 12/20 - **Pendentes:** 2/20.
 
 ## Histórico técnico e evidências
 

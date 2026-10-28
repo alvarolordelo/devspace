@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -35,6 +35,25 @@ test("missing credential and authentication rejection remain unverified", async 
     const tokenFile = join(root, "token.txt");
     writeFileSync(tokenFile, "a".repeat(43));
     assert.equal(await createLaoDevspaceProbe({ LAO_DEVSPACE_MCP_TOKEN_FILE: tokenFile }, unauthorized)(), "unverified");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("Windows daemon finds the dedicated OAuth file after a supervised restart", {
+  skip: process.platform !== "win32",
+}, async () => {
+  const root = mkdtempSync(join(tmpdir(), "lao-mcp-default-"));
+  try {
+    const directory = join(root, "LAODevSpace");
+    mkdirSync(directory);
+    const token = "b".repeat(43);
+    writeFileSync(join(directory, "devspace-mcp-token.txt"), token);
+    const transport = (async (_url: URL, init: RequestInit) => {
+      assert.equal((init.headers as Record<string, string>).authorization, `Bearer ${token}`);
+      return new Response(JSON.stringify({ jsonrpc: "2.0", result: { tools: [
+        { name: "open_workspace" }, { name: "read" },
+      ] } }), { status: 200, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    assert.equal(await createLaoDevspaceProbe({ LOCALAPPDATA: root }, transport)(), "connected");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

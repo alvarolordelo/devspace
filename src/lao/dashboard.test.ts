@@ -256,7 +256,17 @@ test("LAO restart requires authenticated same-origin confirmation, rejects activ
     const status = await fetch(url + "/dashboard/api/status", {
       headers: { Authorization: "Bearer " + token },
     });
-    assert.equal((await status.json()).restartAvailable, true);
+    const statusPayload = await status.json();
+    assert.equal(statusPayload.restartAvailable, true);
+    assert.equal(statusPayload.activeTasks, 0);
+    jobs.push(...Array.from({ length: 200 }, () => ({ status: "created" })));
+    jobs.push({ status: "running" });
+    const completeCount = await fetch(url + "/dashboard/api/status", {
+      headers: { Authorization: "Bearer " + token },
+    });
+    assert.equal((await completeCount.json()).activeTasks, 1,
+      "recovery safety must count every task, including beyond the dashboard page");
+    jobs.length = 0;
     assert.equal((await fetch(path, { method: "GET", headers })).status, 403);
     assert.equal((await fetch(path, { method: "POST" })).status, 403);
     assert.equal((await fetch(path, { method: "POST", headers: {

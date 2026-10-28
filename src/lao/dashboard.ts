@@ -350,6 +350,8 @@ export async function handleLaoDashboard(
   json(res, 200, {
     ...status, modelConfigured: config.defaultModel,
     restartAvailable: Boolean(options.restartLao),
+    activeTasks: options.listTasks().filter(task =>
+      ["preparing", "running", "validating"].includes(task.status)).length,
   });
   return true;
 }

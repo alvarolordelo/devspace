@@ -1,6 +1,8 @@
 # LAO DevSpace — Roadmap de Produto e Engenharia
 
-> **Atualização 27/10/2026:** o daemon standalone passou a executar um probe MCP `tools/list` autenticado com token OAuth dedicado em arquivo local. O teste de integração OAuth real passou. A máquina de desenvolvimento permanece **Não verificada** por falta da credencial dedicada; duas conexões recusadas são distinguidas como **Offline**. Próximo gate: provisionamento OAuth/renovação automática e teste de conexão contínua na instalação do usuário. Reinício de Ollama/DevSpace continua indisponível porque não há serviços gerenciados nesta máquina.
+> **Atualização 27/10/2026:** o daemon standalone passou a executar um probe MCP `tools/list` autenticado com token OAuth dedicado em arquivo local. O teste de integração OAuth real, inclusive rotação de refresh token, passou. O operador concluiu a autorização na página oficial do DevSpace. O probe contra a instância ativa retornou **connected**, e um daemon LAO temporário confirmou `ready=true`; o daemon antigo ainda precisa reiniciar, mediante autorização operacional, para atualizar o Monitor. Duas conexões recusadas são distinguidas como **Offline**. Reinício de Ollama/DevSpace continua indisponível porque não há serviços gerenciados nesta máquina.
+
+> **Recuperação de dependências:** o fluxo para serviços Windows explicitamente vinculados foi reforçado com revalidação autenticada após confirmação, contagem completa de tarefas, verificação da parada e retorno, coleta de saúde e histórico local. Testes usaram SCM simulado. Ainda é necessário definir e autorizar um gerenciador exclusivo para os processos atuais antes de habilitar reinícios reais.
 ## Local Agent Orchestrator + DevSpace
 
 **Versão do plano:** 1.0

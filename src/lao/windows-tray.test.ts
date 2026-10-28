@@ -52,8 +52,11 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.match(trayText, /dashboard\/api\/models\/select/);
   assert.match(trayText, /function Open-LaoSettings/);
   assert.match(settings, /Iniciar LAO e Monitor com Windows/);
-  assert.match(settings, /Restart-Service -Name \$fresh\.ServiceName/);
-  assert.match(settings, /Start-Service -Name \$fresh\.ServiceName/);
+  assert.match(settings, /Stop-Service -Name \$service -ErrorAction Stop/);
+  assert.match(settings, /Start-Service -Name \$service -ErrorAction Stop/);
+  assert.match(settings, /WaitForStatus\(/);
+  assert.match(settings, /Get-LaoDependencyFreshSnapshot/);
+  assert.match(settings, /Write-LaoRecoveryHistory/);
   assert.match(settings, /function Get-LaoDependencyRecoveryAction/);
   assert.match(settings, /devspace_unavailable/);
   assert.doesNotMatch(settings, /reasons\s*-contains\s*'devspace_unverified'/,
@@ -87,6 +90,15 @@ test("LAO Windows tray uses approved icons and parses without opening a GUI",
     ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
     assert.match(stdout, /LAO tray check passed/);
     // The operator must still explicitly start the monitor in an interactive session.
+});
+
+test("managed dependency recovery verifies stop, start and audit with mocked SCM",
+  { skip: process.platform !== "win32" }, () => {
+    const script = fileURLToPath(new URL("../../test/lao-recovery-safety.ps1", import.meta.url));
+    const stdout = execFileSync("powershell.exe", [
+      "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File", script,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.match(stdout, /LAO recovery safety check passed/);
   });
 
 test("native LAO popup matches the approved 420 DIP structure without opening a window",
