@@ -34,6 +34,7 @@ const approved = [
   "pnpm-lock.yaml",
   "pnpm-workspace.yaml",
   "docs/lao-devspace/DEVSPACE_VERSION_PIN.json",
+  "docs/lao-devspace/LAO_VERSION.json",
   "docs/lao-devspace/DASHBOARD_MVP.md",
   "docs/lao-devspace/TRAY_MVP.md",
   "docs/lao-devspace/USO_EXPERIMENTAL.md",
@@ -92,8 +93,16 @@ for (const record of checked) {
   await mkdir(dirname(dest), { recursive: true });
   await cp(join(project, record.path), dest, { errorOnExist: true, force: false });
 }
+const laoVersionMetadata = JSON.parse(await readFile(join(project, "docs/lao-devspace/LAO_VERSION.json"), "utf8"));
+if (laoVersionMetadata.schemaVersion !== 1 || laoVersionMetadata.product !== "LAO DevSpace" ||
+    typeof laoVersionMetadata.version !== "string" ||
+    !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(laoVersionMetadata.version) ||
+    laoVersionMetadata.stableDevspaceVersion !== "1.0.8") {
+  throw new Error("Invalid LAO version metadata");
+}
 const manifest = {
   schemaVersion: 1, kind: "lao-devspace-release-candidate",
+  laoVersion: laoVersionMetadata.version,
   stableDevspaceVersion: "1.0.8",
   installed: false, serviceInstalled: false, autostartEnabled: false,
   nodeModulesIncluded: false, requiresOfflineFrozenDependencies: true,

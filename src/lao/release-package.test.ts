@@ -21,7 +21,10 @@ test("release candidate is noninstalling, hash manifest agrees and no overwrite 
       encoding: "utf8", timeout: 20_000, windowsHide: true,
     });
     const manifest = JSON.parse(readFileSync(join(output, "RELEASE_MANIFEST.json"), "utf8"));
+    assert.equal(manifest.laoVersion, "1.1.0-beta.4");
     assert.equal(manifest.stableDevspaceVersion, "1.0.8");
+    assert.ok(manifest.files.some((file: {path: string}) =>
+      file.path === "docs/lao-devspace/LAO_VERSION.json"));
     assert.equal(manifest.installed, false);
     assert.equal(manifest.serviceInstalled, false);
     assert.equal(manifest.autostartEnabled, false);

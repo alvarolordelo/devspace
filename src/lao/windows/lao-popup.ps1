@@ -19,7 +19,7 @@ function New-LaoPopup {
     # Use vector-origin PNG assets, never font glyphs or improvised drawings.
     $assetDir = [IO.Path]::GetDirectoryName($LogoPath)
     $assets = @{}
-    foreach($name in @('abrir-painel','logs','reiniciar','configuracoes','revisao',
+    foreach($name in @('abrir-painel','logs','reiniciar','iniciar','configuracoes','revisao',
                        'chevron-direita','documento-verde','documento-amarelo',
                        'documento-vermelho')) {
         $assetPath=Join-Path $assetDir ("lao-action-" + $name + "-64.png")
@@ -110,21 +110,23 @@ function New-LaoPopup {
     $heading = LaoLabel 'Aguardando sinal' 133 55 218 27 13 $false
     $heading.ForeColor = $colors.gray
     $header.Controls.Add($heading)
-    $settings = [Windows.Forms.Button]::new()
-    $settings.Text = ''
-    $settings.AccessibleName = 'Configurações'
-    $settings.Tag=$assets['configuracoes']
-    $settings.FlatStyle = [Windows.Forms.FlatStyle]::Flat
-    $settings.FlatAppearance.BorderSize = 0
-    $settings.ForeColor = $colors.muted
-    $settings.BackColor = [Drawing.Color]::White
-    $settings.Location = [Drawing.Point]::new(365,28)
-    $settings.Size = [Drawing.Size]::new(42,42)
-    $settings.Add_Paint({
+    $startAll = [Windows.Forms.Button]::new()
+    $startAll.Text = ''
+    $startAll.AccessibleName = 'Iniciar LAO, DevSpace e Ollama'
+    $startAll.AccessibleDescription = 'Verifica os três serviços e inicia apenas os que estiverem parados'
+    $startAll.Tag=$assets['iniciar']
+    $startAll.FlatStyle = [Windows.Forms.FlatStyle]::Flat
+    $startAll.FlatAppearance.BorderSize = 0
+    $startAll.ForeColor = $colors.muted
+    $startAll.BackColor = [Drawing.Color]::White
+    $startAll.Location = [Drawing.Point]::new(365,28)
+    $startAll.Size = [Drawing.Size]::new(42,42)
+    $startAll.Cursor=[Windows.Forms.Cursors]::Hand
+    $startAll.Add_Paint({
         $_.Graphics.InterpolationMode=[Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
         $_.Graphics.DrawImage($this.Tag,[Drawing.Rectangle]::new(7,7,28,28))
     })
-    $header.Controls.Add($settings)
+    $header.Controls.Add($startAll)
     LaoLine $header 95
     $rows = @{}
     $fields = @(
@@ -150,7 +152,21 @@ function New-LaoPopup {
         $value.TextAlign=[Drawing.ContentAlignment]::MiddleRight
         $scroll.Controls.AddRange([Windows.Forms.Control[]]@($symbol,$label,$value))
         LaoLine $scroll ($y+39)
-        $rows[$key]=@{Dot=$symbol;Value=$value;Title=$label}
+        $arrow=$null
+        if ($key -in @('service','mcp','ollama')) {
+            $arrow=[Windows.Forms.Button]::new()
+            $arrow.Size=[Drawing.Size]::new(28,32)
+            $arrow.Location=[Drawing.Point]::new(371,$y+4)
+            $arrow.FlatStyle=[Windows.Forms.FlatStyle]::Flat
+            $arrow.FlatAppearance.BorderSize=0
+            $arrow.BackColor=[Drawing.Color]::White
+            $arrow.Image=[Drawing.Bitmap]::new($assets['chevron-direita'],[Drawing.Size]::new(16,16))
+            $arrow.AccessibleName='Iniciar '+[string]$entry[1]
+            $arrow.Cursor=[Windows.Forms.Cursors]::Hand
+            $arrow.Visible=$false
+            $scroll.Controls.Add($arrow)
+        }
+        $rows[$key]=@{Dot=$symbol;Value=$value;Title=$label;Start=$arrow}
         $y+=40
     }
     # Normally hidden: selecting the approved model row opens a real WinForms
@@ -256,7 +272,7 @@ function New-LaoPopup {
     return @{Form=$form;Logo=$logo;Brand=$brand;HeaderDot=$dot;HeaderText=$heading;
       Rows=$rows;Colors=$colors;Card=$card;CardIcon=$cardIcon;
       CardCaption=$cardCaption;CardTitle=$cardTitle;CardDetails=$cardDetails;
-      Actions=$actions;Settings=$settings;IconBox=$iconBox;Freshness=$freshness;
+        Actions=$actions;StartAll=$startAll;IconBox=$iconBox;Freshness=$freshness;
       ModelCombo=$modelCombo;
       Assets=$assets}
 }
@@ -275,9 +291,41 @@ function Set-LaoPopupRow($popup,[string]$name,[string]$text,[string]$kind) {
     $row.Value.ForeColor=if($kind -in @('bad','review')){$color}else{$popup.Colors.text}
 }
 
+function Set-LaoComponentRow($popup,[string]$name,[string]$kind,[string]$status,[string]$state) {
+    $row=$popup.Rows[$name]
+    if(!$row){return}
+    $version=$script:componentVersions[$kind]
+    $row.Value.Font=[Drawing.Font]::new('Segoe UI',$(if($version){10.2}else{12.4}),[Drawing.FontStyle]::Regular)
+    $full=if($version){$status+' · v'+$version}else{$status}
+    Set-LaoPopupRow $popup $name $full $state
+
+    # Never let a version hide the operational status. If the measured text
+    # still overflows, keep the status visible and expose the complete version
+    # through accessibility/tooltip text instead of rendering ellipsis.
+    $measured=[Windows.Forms.TextRenderer]::MeasureText($row.Value.Text,$row.Value.Font).Width
+    if($measured -gt $row.Value.ClientSize.Width) {
+        $row.Value.Text=$status
+        $row.Value.AccessibleDescription=if($version){$status+'; versão '+$version}else{$status}
+    } else {
+        $row.Value.AccessibleDescription=$full
+    }
+}
+
 function Update-LaoPopup($popup,$snapshot) {
     if(!$popup -or !$snapshot){return}
-    $state=[string]$snapshot.status
+    $reasons=@($snapshot.reasons)
+    $laoLive=([string]$snapshot.status -ne 'offline')
+    $devspaceOk=$snapshot.statusAuthenticated -and
+        $reasons -notcontains 'devspace_unavailable' -and
+        $reasons -notcontains 'devspace_unverified'
+    $ollamaOk=$snapshot.statusAuthenticated -and $reasons -notcontains 'ollama_unavailable'
+    $state=if(-not $laoLive){
+        'offline'
+    }elseif($null -ne $snapshot.pendingReviews -and $snapshot.pendingReviews -gt 0){
+        'review'
+    }elseif($devspaceOk -and $ollamaOk){
+        'active'
+    }else{'idle'}
     $color=switch($state){
         active {$popup.Colors.green}
         review {$popup.Colors.yellow}
@@ -293,23 +341,22 @@ function Update-LaoPopup($popup,$snapshot) {
     }
     $popup.HeaderText.ForeColor=$color
     $live=$state -ne 'offline'
-    Set-LaoPopupRow $popup service $(if($live){'Respondendo'}else{'Sem resposta'}) $(if($live){'good'}else{'bad'})
+    Set-LaoComponentRow $popup service 'LAO' $(if($laoLive){'Respondendo'}else{'Sem resposta'}) $(if($laoLive){'good'}else{'bad'})
     $observed=[DateTimeOffset]::MinValue
     if([DateTimeOffset]::TryParse([string]$snapshot.checkedAt,[ref]$observed)){
         $popup.Freshness.Text='Última verificação: '+$observed.ToLocalTime().ToString('HH:mm:ss')+' · — = indisponível'
     }else{
         $popup.Freshness.Text='Sem coleta confirmada · — = indisponível'
     }
-    $reasons=@($snapshot.reasons)
     if(!$snapshot.statusAuthenticated){
-        Set-LaoPopupRow $popup mcp 'Não verificado' unknown
-        Set-LaoPopupRow $popup ollama 'Não verificado' unknown
+        Set-LaoComponentRow $popup mcp 'DevSpace' 'Não verificado' unknown
+        Set-LaoComponentRow $popup ollama 'Ollama' 'Não verificado' unknown
     }else{
         $mcpNotReady=$reasons -contains 'devspace_unverified'
         $mcpOffline=$reasons -contains 'devspace_unavailable'
-        Set-LaoPopupRow $popup mcp $(if($mcpOffline){'Offline'}elseif($mcpNotReady){'Não verificado'}else{'Conectado'}) $(if($mcpOffline){'bad'}elseif($mcpNotReady){'unknown'}else{'good'})
+        Set-LaoComponentRow $popup mcp 'DevSpace' $(if($mcpOffline){'Offline'}elseif($mcpNotReady){'Não verificado'}else{'Conectado'}) $(if($mcpOffline){'bad'}elseif($mcpNotReady){'unknown'}else{'good'})
         $ollamaDown=$reasons -contains 'ollama_unavailable'
-        Set-LaoPopupRow $popup ollama $(if($ollamaDown){'Offline'}else{'Respondendo'}) $(if($ollamaDown){'bad'}else{'good'})
+        Set-LaoComponentRow $popup ollama 'Ollama' $(if($ollamaDown){'Offline'}else{'Respondendo'}) $(if($ollamaDown){'bad'}else{'good'})
     }
     Set-LaoPopupRow $popup model $(if($snapshot.modelConfigured){[string]$snapshot.modelConfigured}else{'—'}) unknown
     Set-LaoPopupRow $popup gpu $(if($null -ne $snapshot.gpuPercent){"$($snapshot.gpuPercent)%"}else{'—'}) unknown
@@ -396,10 +443,14 @@ function Set-LaoPopupShape($form) {
 function Resize-LaoPopupContents($popup,[int]$width) {
     $popup.Brand.Width=[Math]::Max(142,$width-170)
     $popup.HeaderText.Width=[Math]::Max(100,$width-202)
-    $popup.Settings.Left=$width-56
+    $popup.StartAll.Left=$width-56
     foreach($row in $popup.Rows.Values){
         $row.Value.Left=[Math]::Max(207,$width-196)
         $row.Value.Width=[Math]::Max(103,$width-$row.Value.Left-22)
+        if ($row.Start) {
+            $row.Start.Left=$width-49
+            if ($row.Start.Visible) { $row.Value.Width-=28 }
+        }
         $row.Title.Width=[Math]::Min(158,[Math]::Max(118,$row.Value.Left-$row.Title.Left-8))
     }
     $popup.ModelCombo.Left=$popup.Rows.model.Value.Left

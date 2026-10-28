@@ -160,9 +160,9 @@ if ($UiCheckOnly) {
             $ui.Rows.service.Dot.Font.Size -lt 13 -or
             $ui.Rows.service.Title.Font.Size -lt 13 -or
             $ui.Card.Height -lt 150 -or
-            $ui.Assets.Count -ne 9 -or
+            $ui.Assets.Count -ne 10 -or
             $ui.Actions.dashboard.Tag -isnot [Drawing.Image] -or
-            $ui.Settings.Tag -isnot [Drawing.Image] -or
+            $ui.StartAll.Tag -isnot [Drawing.Image] -or
             $ui.CardIcon.Image -isnot [Drawing.Image]) {
             throw 'Approved popup visual hierarchy, spacing or icon order differs'
         }
@@ -188,9 +188,15 @@ if ($UiCheckOnly) {
         }
         Resize-LaoPopupContents $ui 420
         foreach ($state in @('active','offline','review','idle')) {
+            $fixtureReasons=switch($state){
+                active {@()}
+                review {@()}
+                offline {@('devspace_unverified','ollama_unavailable')}
+                default {@('devspace_unverified')}
+            }
             $snapshot = [pscustomobject]@{
                 status=$state; statusAuthenticated=$true
-                reasons=@('devspace_unverified','ollama_unavailable')
+                reasons=$fixtureReasons
                 modelConfigured='granite4.2-8b:gpu'
                 gpuPercent=25; vramUsedMiB=1024; vramTotalMiB=6144
                 tasksAuthenticated=$true; activeTasks=0
@@ -208,10 +214,10 @@ if ($UiCheckOnly) {
             }
             if ($state -eq 'review' -and
                 (-not $ui.Actions.context.Enabled -or
-                 $ui.CardTitle.Text -ne 'Aguardando revisão' -or
+                 $ui.CardTitle.Text -ne ('Aguardando revis'+[char]0xE3+'o') -or
                  $ui.Actions.context.Tag -ne $ui.Assets['revisao'] -or
                  $ui.CardIcon.Image -ne $ui.Assets['documento-amarelo'] -or
-                 $ui.Rows.last.Title.Text -ne 'Pendências')) {
+                 $ui.Rows.last.Title.Text -ne ('Pend'+[char]0xEA+'ncias'))) {
                 throw 'Review popup did not expose its approval context'
             }
             if ($state -eq 'offline' -and
@@ -240,8 +246,8 @@ if ($UiCheckOnly) {
                 throw 'Narrow popup width overlaps health row labels'
             }
         }
-        if ($ui.HeaderText.Right -ge $ui.Settings.Left) {
-            throw 'Narrow popup header overlaps settings'
+        if ($ui.HeaderText.Right -ge $ui.StartAll.Left) {
+            throw 'Narrow popup header overlaps start button'
         }
         $ui.Form.ClientSize=[Drawing.Size]::new(420,768)
         Resize-LaoPopupContents $ui 420
@@ -249,7 +255,7 @@ if ($UiCheckOnly) {
             throw 'Native popup footer is clipped at reference height'
         }
         $uiSamples=[ordered]@{
-            settings=$ui.Settings.AccessibleName
+            startAll=$ui.StartAll.AccessibleName
             model=$ui.Rows.model.Title.Text
             last=$ui.Rows.last.Title.Text
             statusDot=$ui.HeaderDot.Text
@@ -328,6 +334,7 @@ $notify.ContextMenuStrip = $menu
 $context = [Windows.Forms.ApplicationContext]::new()
 $timer = [Windows.Forms.Timer]::new()
 $timer.Interval = 200
+[void](Initialize-LaoComponentVersions)
 $script:initialized = $false
 $script:previousStatus = 'offline'
 $script:previousReviews = 0
@@ -597,6 +604,21 @@ function Open-LaoSettings {
 
 function Update-LaoDependencyRowActions($snapshot) {
     if (-not $script:popup) { return }
+    foreach ($key in @('service','mcp','ollama')) {
+        $kind=switch($key){service{'LAO'};mcp{'DevSpace'};ollama{'Ollama'}}
+        $row=$script:popup.Rows[$key]
+        $starting=$script:localStarts.ContainsKey($kind)
+        $recovery=if($kind -ne 'LAO'){Get-LaoDependencyRecoveryAction $kind $snapshot}else{$null}
+        $row.Start.Visible=$starting -or (Test-LaoLocalStartAvailable $kind $snapshot) -or $null -ne $recovery
+        $row.Start.AccessibleName=$(if($recovery -and $recovery.Operation -eq 'Restart'){'Reiniciar '+$kind}else{'Iniciar '+$kind})
+        $row.Start.Enabled=-not $starting
+        if ($starting) { $row.Value.Text='Iniciando…' }
+    }
+    Resize-LaoPopupContents $script:popup $script:popup.Form.ClientSize.Width
+    if ($snapshot.status -eq 'offline') {
+        $script:popup.Actions.context.Enabled=-not $script:localStarts.ContainsKey('LAO')
+        $script:popup.Actions.context.Text=$(if($script:localStarts.ContainsKey('LAO')){'Iniciando LAO…'}else{'Iniciar LAO'})
+    }
     foreach ($key in @('ollama','mcp')) {
         $kind=if ($key -eq 'ollama') {'Ollama'} else {'DevSpace'}
         $row=$script:popup.Rows[$key]
@@ -647,6 +669,8 @@ function Open-LaoModelCombo {
 }
 
 $timer.Add_Tick({
+    Update-LaoLocalStarts
+    if ($script:popup -and $script:pollSnapshot) { Update-LaoDependencyRowActions $script:pollSnapshot }
     $script:uiHeartbeatTicks++
     if ($script:modelListTask -and $script:modelListTask.IsCompleted) {
         $task=$script:modelListTask
@@ -751,6 +775,11 @@ $openItem.Add_Click({
     Open-LaoDashboard
 })
 if ($script:popup) {
+    foreach ($key in @('service','mcp','ollama')) {
+        $button=$script:popup.Rows[$key].Start
+        $button.Tag=switch($key){service{'LAO'};mcp{'DevSpace'};ollama{'Ollama'}}
+        $button.Add_Click({ Invoke-LaoComponentAction ([string]$this.Tag) })
+    }
     foreach ($field in @('Title','Value')) {
         $script:popup.Rows.model[$field].Add_Click({ Open-LaoModelCombo })
     }
@@ -794,6 +823,10 @@ if ($script:popup) {
         Open-LaoDashboard
     })
     $script:popup.Actions.context.Add_Click({
+        if ($script:pollSnapshot.status -eq 'offline') {
+            Invoke-LaoLocalStart LAO
+            return
+        }
         if ($script:popup.Actions.context.Text -match 'Reiniciar LAO') {
             if (-not $script:popup.Actions.context.Enabled -or
                 -not $script:dashboardToken -or $script:restartTask) { return }
@@ -826,10 +859,7 @@ if ($script:popup) {
         $script:popup.Form.Hide()
         Open-LaoSettings
     })
-    $script:popup.Settings.Add_Click({
-        $script:popup.Form.Hide()
-        Open-LaoSettings
-    })
+    $script:popup.StartAll.Add_Click({ Invoke-LaoStartAllComponents })
 }
 $copyItem.Add_Click({
     $stamp = if ($null -eq $script:lastCheck) { 'never' } else {

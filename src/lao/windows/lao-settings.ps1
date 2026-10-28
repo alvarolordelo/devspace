@@ -1,5 +1,6 @@
 ﻿# Ancillary settings dialog, separate from the visually approved 420 DIP popup.
-# Restart dependencies only by an explicitly configured Windows SCM identity.
+# Shared start actions work without requiring Windows service installation.
+. (Join-Path $PSScriptRoot 'lao-start.ps1')
 function Get-LaoManagedService([string]$Kind) {
     $variable=switch ($Kind) {
         'Ollama' {'LAO_MANAGED_OLLAMA_SERVICE'}
@@ -9,6 +10,155 @@ function Get-LaoManagedService([string]$Kind) {
     $name=[Environment]::GetEnvironmentVariable($variable,'Process')
     if (!$name -or $name -cnotmatch '^[a-zA-Z][a-zA-Z0-9_-]{0,79}$') { return $null }
     return Get-Service -Name $name -ErrorAction SilentlyContinue
+}
+
+function Get-LaoVerifiedLocalListener([string]$Kind,$Snapshot) {
+    if ($Kind -notin @('Ollama','DevSpace')) { return $null }
+    $port=Get-LaoLocalStartPort $Kind
+    try {
+        $connection=Get-NetTCPConnection -State Listen -LocalPort $port -ErrorAction Stop |
+            Select-Object -First 1
+        if (-not $connection) { return $null }
+        $process=Get-Process -Id ([int]$connection.OwningProcess) -ErrorAction Stop
+        $actual=[IO.Path]::GetFullPath([string]$process.Path)
+        if ($Kind -eq 'Ollama') {
+            $expected=Join-Path $env:LOCALAPPDATA 'Programs\Ollama\ollama.exe'
+            if (-not [IO.File]::Exists($expected)) {
+                $command=Get-Command ollama.exe -ErrorAction SilentlyContinue
+                if (-not $command) { return $null }
+                $expected=$command.Source
+            }
+            if ($actual -ine [IO.Path]::GetFullPath($expected)) { return $null }
+        } else {
+            $node=(Get-Command node.exe -ErrorAction SilentlyContinue)
+            if (-not $node -or $actual -ine [IO.Path]::GetFullPath($node.Source)) { return $null }
+            # Port + node.exe alone is not enough to kill a process. Require
+            # the authenticated LAO probe to have verified this endpoint as
+            # the configured DevSpace MCP before offering a local restart.
+            $reasons=@($Snapshot.reasons)
+            if (-not $Snapshot -or -not $Snapshot.statusAuthenticated -or
+                $reasons -contains 'devspace_unavailable' -or
+                $reasons -contains 'devspace_unverified') { return $null }
+        }
+        return [pscustomobject]@{
+            Kind=$Kind; Port=$port; ProcessId=[int]$process.Id
+            ProcessPath=$actual
+        }
+    } catch { return $null }
+}
+
+function Get-LaoSettingsComponentAction([string]$Kind,$Snapshot) {
+    if ($Kind -notin @('Ollama','DevSpace') -or $script:localStarts.ContainsKey($Kind)) {
+        return $null
+    }
+    if ($Snapshot -and $Snapshot.tasksAuthenticated -and
+        $null -ne $Snapshot.activeTasks -and [int]$Snapshot.activeTasks -gt 0) {
+        return $null
+    }
+    $service=Get-LaoManagedService $Kind
+    if ($service) {
+        $status=[string]$service.Status
+        if ($status -notin @('Running','Stopped')) { return $null }
+        return [pscustomobject]@{
+            Kind=$Kind; Mode='Service'; ServiceName=[string]$service.Name
+            Operation=$(if($status -eq 'Stopped'){'Start'}else{'Restart'})
+        }
+    }
+    $listener=Get-LaoVerifiedLocalListener $Kind $Snapshot
+    if ($listener) {
+        return [pscustomobject]@{
+            Kind=$Kind; Mode='LocalProcess'; Operation='Restart'
+            ProcessId=$listener.ProcessId; ProcessPath=$listener.ProcessPath
+            Port=$listener.Port
+        }
+    }
+    $port=Get-LaoLocalStartPort $Kind
+    if (Test-LaoLocalPort $port) { return $null }
+    return [pscustomobject]@{
+        Kind=$Kind; Mode='LocalProcess'; Operation='Start'; Port=$port
+    }
+}
+
+function Wait-LaoLocalPort([int]$Port,[bool]$Listening,[int]$Seconds=25) {
+    $deadline=(Get-Date).AddSeconds($Seconds)
+    do {
+        if ((Test-LaoLocalPort $Port) -eq $Listening) { return $true }
+        [Windows.Forms.Application]::DoEvents()
+        Start-Sleep -Milliseconds 250
+    } while ((Get-Date) -lt $deadline)
+    return $false
+}
+
+function Invoke-LaoLocalProcessRecoveryOperation($Action) {
+    $kind=[string]$Action.Kind
+    $port=[int]$Action.Port
+    $operation=[string]$Action.Operation
+    $identity=if($operation -eq 'Restart'){'pid:'+[string]$Action.ProcessId}else{'local'}
+    $result='failed'
+    $verified=$false
+    try {
+        if ($operation -eq 'Restart') {
+            $process=Get-Process -Id ([int]$Action.ProcessId) -ErrorAction Stop
+            if ([IO.Path]::GetFullPath([string]$process.Path) -ine
+                [IO.Path]::GetFullPath([string]$Action.ProcessPath)) {
+                throw 'O processo mudou antes do reinício; ação cancelada.'
+            }
+            Stop-Process -Id ([int]$Action.ProcessId) -ErrorAction Stop
+            if (-not (Wait-LaoLocalPort $port $false 15)) {
+                throw 'A porta não foi liberada após encerrar o processo validado.'
+            }
+        }
+        Invoke-LaoLocalStart $kind
+        if (Wait-LaoLocalPort $port $true 45) {
+            [void](Update-LaoComponentVersion $kind)
+            $result='verified'; $verified=$true
+        } else {
+            $result='running_unverified'
+        }
+    } catch {
+        $result='failed'
+    }
+    $recorded=Write-LaoRecoveryHistory $kind $identity $operation $result
+    return $verified -and $recorded
+}
+
+function Invoke-LaoSettingsComponentAction([string]$Kind,$Snapshot) {
+    if ($script:dependencyRecoveryInProgress) { return $false }
+    $candidate=Get-LaoSettingsComponentAction $Kind $Snapshot
+    if (-not $candidate) { return $false }
+    $verb=if($candidate.Operation -eq 'Start'){'Iniciar'}else{'Reiniciar'}
+    $question="$verb $Kind agora? A conexão desse componente poderá ser interrompida temporariamente."
+    $confirmed=[Windows.Forms.MessageBox]::Show(
+        $question, "$verb $Kind",
+        [Windows.Forms.MessageBoxButtons]::YesNo,
+        [Windows.Forms.MessageBoxIcon]::Warning)
+    if ($confirmed -ne [Windows.Forms.DialogResult]::Yes) { return $false }
+    $script:dependencyRecoveryInProgress=$true
+    try {
+        $freshSnapshot=Get-LaoDependencyFreshSnapshot
+        if (-not $freshSnapshot) { $freshSnapshot=$Snapshot }
+        $fresh=Get-LaoSettingsComponentAction $Kind $freshSnapshot
+        if (-not $fresh -or $fresh.Mode -ne $candidate.Mode -or
+            $fresh.Operation -ne $candidate.Operation) { return $false }
+        if ($candidate.Mode -eq 'Service') {
+            if ($fresh.ServiceName -cne $candidate.ServiceName) { return $false }
+            $verified=Invoke-LaoDependencyRecoveryOperation $fresh
+        } else {
+            if ($candidate.Operation -eq 'Restart' -and
+                ([int]$fresh.ProcessId -ne [int]$candidate.ProcessId -or
+                 [string]$fresh.ProcessPath -ine [string]$candidate.ProcessPath)) { return $false }
+            $verified=Invoke-LaoLocalProcessRecoveryOperation $fresh
+        }
+        if (-not $verified) {
+            [Windows.Forms.MessageBox]::Show(
+                'Não foi possível confirmar a ação. Consulte os logs e o histórico de recuperação.',
+                'LAO DevSpace') | Out-Null
+        }
+        $script:nextPollAt=[DateTime]::MinValue
+        return $verified
+    } finally {
+        $script:dependencyRecoveryInProgress=$false
+    }
 }
 
 # Only a demonstrated service failure permits a recovery action. In
@@ -215,7 +365,7 @@ function New-LaoSettingsForm($Assets,$SnapshotProvider) {
             $_.Graphics.FillEllipse($knob,$(if($this.Checked){126}else{102}),11,17,17)
         }finally{$track.Dispose();$knob.Dispose()}
     })
-    $services=AddText 'Reiniciar serviços gerenciados' 20 153 350 30
+    $services=AddText 'Gerenciar componentes' 20 153 350 30
     $services.Font=[Drawing.Font]::new('Segoe UI',13,[Drawing.FontStyle]::Bold)
     $notice=AddText 'Reinicializações exigem confirmação. Serviços externos não são encerrados por PID.' 20 187 352 40
     $notice.ForeColor=[Drawing.Color]::DimGray
@@ -226,9 +376,9 @@ function New-LaoSettingsForm($Assets,$SnapshotProvider) {
         $button.Size=[Drawing.Size]::new(170,43)
         $button.Tag=$kind
         $snapshot=if($SnapshotProvider){& $SnapshotProvider}else{$null}
-        $recovery=Get-LaoDependencyRecoveryAction $kind $snapshot
-        $button.Enabled=$null -ne $recovery
-        $button.Text=$kind
+        $action=Get-LaoSettingsComponentAction $kind $snapshot
+        $button.Enabled=$null -ne $action
+        $button.Text=$(if($action){$(if([string]$action.Operation -eq 'Restart'){'Reiniciar '}else{'Iniciar '})+$kind}else{$kind})
         $button.FlatStyle=[Windows.Forms.FlatStyle]::Flat
         $button.FlatAppearance.BorderColor=[Drawing.ColorTranslator]::FromHtml('#CBD5E1')
         if ($Assets -and $Assets['reiniciar']) {
@@ -237,32 +387,50 @@ function New-LaoSettingsForm($Assets,$SnapshotProvider) {
             $button.TextImageRelation=[Windows.Forms.TextImageRelation]::ImageBeforeText
         }
         $button.AccessibleDescription=$(if($button.Enabled){
-            'Recuperar somente a dependência com falha, mediante confirmação'
-        }else{'Sem ação: dependência saudável, não verificada ou não gerenciada'})
+            'Iniciar ou reiniciar somente este componente, mediante confirmação'
+        }else{'Sem ação segura disponível neste momento'})
         $button.Tag=[pscustomobject]@{Kind=$kind;SnapshotProvider=$SnapshotProvider}
         $button.Add_Click({
             $target=[string]$this.Tag.Kind
             $snapshot=if($this.Tag.SnapshotProvider){& $this.Tag.SnapshotProvider}else{$null}
-            if (-not (Get-LaoDependencyRecoveryAction $target $snapshot)) { return }
             $this.Enabled=$false
             try {
-                [void](Invoke-LaoDependencyRecovery $target $snapshot)
+                [void](Invoke-LaoSettingsComponentAction $target $snapshot)
             } finally {
                 $next=if($this.Tag.SnapshotProvider){& $this.Tag.SnapshotProvider}else{$null}
-                $this.Enabled=$null -ne (Get-LaoDependencyRecoveryAction $target $next)
+                $this.Enabled=$null -ne (Get-LaoSettingsComponentAction $target $next)
             }
         })
         $form.Controls.Add($button)
         $controls[$kind]=$button
-        $status=AddText $(if($button.Enabled){'Falha: recuperação possível'}else{'Sem ação disponível'}) `
+        $status=AddText $(if($action){$(if($action.Operation -eq 'Restart'){'Ativo: reinício disponível'}else{'Parado: clique para iniciar'})}else{'Sem ação segura disponível'}) `
             $(if($kind -eq 'Ollama'){20}else{202}) 288 170 29
+        $button.Tag | Add-Member -NotePropertyName StatusLabel -NotePropertyValue $status
         $status.ForeColor=$(if($button.Enabled){
             [Drawing.ColorTranslator]::FromHtml('#12794A')
         }else{[Drawing.Color]::DimGray})
     }
     $foot=AddText 'Inicialização apenas na conta atual; DevSpace/Ollama independentes.' 20 332 353 34
     $foot.ForeColor=[Drawing.Color]::DimGray
+    $refresh=[Windows.Forms.Timer]::new()
+    $refresh.Interval=750
+    $refresh.Tag=[pscustomobject]@{Controls=$controls;Provider=$SnapshotProvider}
+    $refresh.Add_Tick({
+        $snapshot=if($this.Tag.Provider){& $this.Tag.Provider}else{$null}
+        foreach($kind in @('Ollama','DevSpace')) {
+            $button=$this.Tag.Controls[$kind]
+            $starting=$script:localStarts.ContainsKey($kind)
+            $action=Get-LaoSettingsComponentAction $kind $snapshot
+            $button.Enabled=-not $starting -and $null -ne $action
+            $button.Text=$(if($starting){'Iniciando…'}elseif($action -and $action.Operation -eq 'Restart'){'Reiniciar '+$kind}elseif($action){'Iniciar '+$kind}else{$kind})
+            $button.Tag.StatusLabel.Text=$(if($starting){'Aguardando resposta'}elseif($snapshot -and $snapshot.tasksAuthenticated -and $snapshot.activeTasks -gt 0){'Tarefa ativa: reinício bloqueado'}elseif($action -and $action.Operation -eq 'Restart'){'Ativo: reinício disponível'}elseif($action){'Parado: clique para iniciar'}elseif(-not $snapshot -or -not $snapshot.statusAuthenticated -or ($kind -eq 'DevSpace' -and @($snapshot.reasons) -contains 'devspace_unverified')){'Conexão não verificada'}else{'Sem ação segura disponível'})
+        }
+    })
+    $form.Tag=$refresh
+    $refresh.Start()
     $form.Add_FormClosed({
+        $this.Tag.Stop(); $this.Tag.Dispose()
+
         foreach($button in $this.Controls) {
             if($button -is [Windows.Forms.Button] -and $button.Image) { $button.Image.Dispose() }
         }

@@ -15,9 +15,9 @@ const token = "lao-test-local-monitor-access-token-12345";
 
 test("LAO native action icons are supplied as approved vector-origin image assets", () => {
   const assetRoot = fileURLToPath(new URL("../../docs/lao-devspace/assets/icons/", import.meta.url));
-  const sources = ["abrir-painel", "logs", "reiniciar", "configuracoes",
+  const sources = ["abrir-painel", "logs", "reiniciar", "iniciar", "configuracoes",
     "revisao", "chevron-direita", "documento"];
-  const outputs = ["abrir-painel", "logs", "reiniciar", "configuracoes",
+  const outputs = ["abrir-painel", "logs", "reiniciar", "iniciar", "configuracoes",
     "revisao", "chevron-direita", "documento-verde", "documento-amarelo",
     "documento-vermelho"];
   for (const icon of sources) {
@@ -38,7 +38,8 @@ test("LAO native action icons are supplied as approved vector-origin image asset
   const popup = readFileSync(fileURLToPath(new URL("./windows/lao-popup.ps1", import.meta.url)), "utf8");
   assert.match(popup, /\[IO\.File\]::ReadAllBytes\(\$assetPath\)/);
   assert.match(popup, /\[Drawing\.Bitmap\]::new\(\$sourceImage\)/);
-  assert.match(popup, /\$settings\.Tag=\$assets\['configuracoes'\]/);
+  assert.match(popup, /\$startAll\.Tag=\$assets\['iniciar'\]/);
+  assert.match(popup, /@\('settings','Configurações','configuracoes'\)/);
   assert.match(popup, /\$cardIcon\.Image=\$assets\['documento-verde'\]/);
   assert.doesNotMatch(popup, /Text\s*=\s*'⚙'|DrawText\(\$_\.Graphics,'›'/,
     "Do not regress to OS-dependent font glyphs for approved icons");
@@ -59,14 +60,44 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.match(settings, /Write-LaoRecoveryHistory/);
   assert.match(settings, /function Get-LaoDependencyRecoveryAction/);
   assert.match(settings, /devspace_unavailable/);
-  assert.doesNotMatch(settings, /reasons\s*-contains\s*'devspace_unverified'/,
-    "DevSpace not verified is not an outage and must not allow a restart");
+  const recoveryStart = settings.indexOf("function Get-LaoDependencyRecoveryAction");
+  const recoveryEnd = settings.indexOf("function Get-LaoDependencyFreshSnapshot");
+  const failureRecovery = settings.slice(recoveryStart, recoveryEnd);
+  assert.doesNotMatch(failureRecovery, /devspace_unverified/,
+    "DevSpace not verified is not an outage and must not be treated as failure recovery");
+  assert.match(settings, /\$reasons -contains 'devspace_unverified'\) \{ return \$null \}/,
+    "Unverified local Node listener must not be eligible for process restart");
   assert.match(trayText, /\$control\.Add_Click\(\{ Invoke-LaoDependencyRowClick/);
   assert.doesNotMatch(trayText, /Rows\[\$key\]\.Title\.Add_Click\(\{ Open-LaoSettings \}\)/);
   assert.match(trayText, /function Update-LaoDependencyRowActions/);
+  assert.match(trayText, /\$script:popup\.StartAll\.Add_Click\(\{ Invoke-LaoStartAllComponents \}\)/);
+  const start = readFileSync(fileURLToPath(new URL("./windows/lao-start.ps1", import.meta.url)), "utf8");
+  assert.match(start, /function Invoke-LaoStartAllComponents/);
+  assert.match(start, /@\('LAO','DevSpace','Ollama'\)/);
+  assert.match(start, /Test-LaoLocalPort \$port/);
+  assert.match(start, /function Get-LaoComponentVersion/);
+  assert.match(start, /function Update-LaoComponentVersion/);
+  assert.match(start, /function Format-LaoComponentStatus/);
+  assert.match(start, /devspace-upstream-test/);
+  assert.match(start, /ollama\.exe/);
+  assert.match(start, /--version/);
+  assert.match(popup, /function Set-LaoComponentRow/);
+  assert.match(popup, /TextRenderer\]::MeasureText/);
+  assert.match(popup, /\$devspaceOk=.*devspace_unavailable/s);
+  assert.match(popup, /\$ollamaOk=.*ollama_unavailable/s);
+  assert.match(popup, /elseif\(\$devspaceOk -and \$ollamaOk\)\{/);
+  assert.match(start, /GetActiveTcpListeners\(\)/);
+  assert.doesNotMatch(start, /BeginConnect\(|WaitOne\(200\)/,
+    "Play port detection must not depend on a short loopback connection timeout");
   assert.match(settings, /MessageBoxButtons\]::YesNo/);
   assert.match(settings, /LAO_MANAGED_OLLAMA_SERVICE/);
   assert.match(settings, /LAO_MANAGED_DEVSPACE_SERVICE/);
+  assert.match(settings, /function Get-LaoSettingsComponentAction/);
+  assert.match(settings, /function Get-LaoVerifiedLocalListener/);
+  assert.match(settings, /Get-NetTCPConnection/);
+  assert.match(settings, /function Invoke-LaoLocalProcessRecoveryOperation/);
+  assert.match(settings, /Stop-Process -Id/);
+  assert.match(settings, /Reiniciar '\+\$kind/);
   assert.match(trayText, /Pressao confirmada de recursos/);
   assert.match(trayText, /Uma tarefa foi concluida/);
   assert.match(trayText, /Uma tarefa falhou/);
@@ -95,6 +126,24 @@ test("LAO Windows tray uses approved icons and parses without opening a GUI",
     // The operator must still explicitly start the monitor in an interactive session.
 });
 
+test("LAO top Play starts only offline components and prevents repeat launches",
+  { skip: process.platform !== "win32" }, () => {
+    const mockScript = fileURLToPath(new URL("../../test/lao-start-all.ps1", import.meta.url));
+    const stdout = execFileSync("powershell.exe", [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", mockScript,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.match(stdout, /LAO start-all click safety check passed/);
+});
+
+test("LAO Settings can safely restart verified local DevSpace and Ollama processes",
+  { skip: process.platform !== "win32" }, () => {
+    const mockScript = fileURLToPath(new URL("../../test/lao-settings-local-restart.ps1", import.meta.url));
+    const stdout = execFileSync("powershell.exe", [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", mockScript,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.match(stdout, /LAO settings local restart safety check passed/);
+  });
+
 test("managed dependency recovery verifies stop, start and audit with mocked SCM",
   { skip: process.platform !== "win32" }, () => {
     const script = fileURLToPath(new URL("../../test/lao-recovery-safety.ps1", import.meta.url));
@@ -121,7 +170,7 @@ test("native LAO popup matches the approved 420 DIP structure without opening a 
     assert.equal(layout.keyboardEscape, true);
     assert.equal(layout.fontFamily, "Segoe UI");
     const labels = JSON.parse(Buffer.from(layout.uiTextBase64, "base64").toString("utf8"));
-    assert.equal(labels.settings, "Configurações");
+    assert.equal(labels.startAll, "Iniciar LAO, DevSpace e Ollama");
     assert.equal(labels.model, "Modelo padrão");
     assert.equal(labels.last, "Última execução");
     assert.equal(labels.statusDot, "●");

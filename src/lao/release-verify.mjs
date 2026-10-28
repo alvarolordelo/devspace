@@ -18,6 +18,7 @@ const portable = standalone || manifest.kind === "lao-devspace-portable-candidat
 if (manifest.schemaVersion !== 1 ||
     !["lao-devspace-release-candidate", "lao-devspace-portable-candidate",
       "lao-devspace-standalone-candidate"].includes(manifest.kind) ||
+    manifest.laoVersion !== "1.1.0-beta.4" ||
     manifest.stableDevspaceVersion !== "1.0.8" ||
     manifest.installed !== false || manifest.serviceInstalled !== false ||
     manifest.autostartEnabled !== false || manifest.nodeModulesIncluded !== portable ||
@@ -120,7 +121,8 @@ for (const item of manifest.files) {
   verifiedBytes += content.length;
 }
 console.log(JSON.stringify({
-  verified: true, kind: manifest.kind, stableDevspaceVersion: "1.0.8",
+  verified: true, kind: manifest.kind, laoVersion: manifest.laoVersion,
+  stableDevspaceVersion: "1.0.8",
   files: seen.size, bytes: verifiedBytes, installed: false,
   ...(portable ? { runtime: manifest.runtime } : {}),
 }));

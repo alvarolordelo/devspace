@@ -19,6 +19,7 @@ $icons = @(
     @('abrir-painel','abrir-painel',''),
     @('logs','logs',''),
     @('reiniciar','reiniciar',''),
+    @('iniciar','iniciar',''),
     @('configuracoes','configuracoes',''),
     @('revisao','revisao',''),
     @('chevron-direita','chevron-direita',''),
