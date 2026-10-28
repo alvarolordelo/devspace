@@ -30,12 +30,13 @@ test("dashboard remains disabled unless operator supplies a strong local token",
     })).status, 404);
   } finally { await server.close(); }
 });
-test("dashboard API is local-only, token protected, read-only and sanitizes task records", async () => {
+test("dashboard API is local-only, authenticated and displays operator task requests safely", async () => {
   const dir = mkdtempSync(join(tmpdir(), "lao-dashboard-"));
   const store = new LaoTaskStore(dir);
   try {
     const task = store.create({
       workspaceId: "ws", goal: "<script>alert('unsafe')</script>",
+      requestedBy: "gemini",
       model: "granite4.2-8b:gpu", acceptanceCriteria: ["safe"],
       permissions: { read: true, write: "none", shell: "none" },
       limits: { maxRevisions: 0, maxToolCalls: 1, maxWallSeconds: 10 },
@@ -86,6 +87,7 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
       const api = url + "/dashboard/api/tasks";
       assert.equal((await fetch(api)).status, 401);
       assert.equal((await fetch(url + "/dashboard/api/metrics")).status, 401);
+      assert.equal((await fetch(url + "/dashboard/api/handoff-providers")).status, 401);
       assert.equal((await fetch(api, { headers: {
         Authorization: "Bearer wrong",
       } })).status, 401);
@@ -111,7 +113,8 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
       assert.equal(payload.tasks.length, 1);
       assert.equal(payload.tasks[0]?.id, task.id);
       assert.equal(payload.tasks[0]?.status, "created");
-      assert.equal(payload.tasks[0]?.goal, undefined);
+      assert.equal(payload.tasks[0]?.goalPreview, "<script>alert('unsafe')</script>");
+      assert.equal(payload.tasks[0]?.requestedBy, "gemini");
       assert.equal(payload.tasks[0]?.acceptanceCriteria, undefined);
       assert.equal(payload.tasks[0]?.permissions, undefined);
       assert.equal(payload.tasks[0]?.traceId, undefined);
@@ -130,9 +133,14 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
       const detailPayload = await details.json() as Record<string, any>;
       assert.equal(detailPayload.task.id, task.id);
       assert.deepEqual(detailPayload.runs, []);
-      assert.equal(detailPayload.task.goal, undefined);
+      assert.equal(detailPayload.task.goal, "<script>alert('unsafe')</script>");
+      assert.equal(detailPayload.task.requestedBy, "gemini");
+      assert.deepEqual(detailPayload.task.acceptanceCriteria, ["safe"]);
+      assert.equal(detailPayload.task.workspaceId, "ws");
       assert.equal(detailPayload.task.traceId, undefined);
       assert.equal(detailPayload.task.permissions, undefined);
+      assert.equal(details.headers.get("cache-control"), "no-store",
+        "private user-authored requests must never be cached");
       assert.equal(detailPayload.review, null);
       assert.equal(detailPayload.promotion, null);
       assert.equal((await fetch(api + "/00000000-0000-4000-8000-000000000001", {
@@ -160,6 +168,16 @@ test("dashboard API is local-only, token protected, read-only and sanitizes task
         "the first sample cannot trigger resource alerts");
       assert.equal(metrics.token, undefined);
       assert.equal(metrics.goal, undefined);
+      const providerResponse = await fetch(url + "/dashboard/api/handoff-providers", {
+        headers: { Authorization: "Bearer " + token },
+      });
+      assert.equal(providerResponse.status, 200);
+      const providers = await providerResponse.json() as { providers: Array<{
+        id: string; name: string; url: string }> };
+      assert.ok(providers.providers.some(item => item.id === "chatgpt"));
+      assert.ok(providers.providers.some(item => item.id === "gemini"));
+      assert.ok(providers.providers.every(item => item.url.startsWith("https://")));
+      assert.equal(providerResponse.headers.get("cache-control"), "no-store");
       assert.equal((await fetch(url + "/dashboard/api/metrics?token=" + token, {
         headers: { Authorization: "Bearer " + token },
       })).status, 403);
@@ -289,7 +307,7 @@ test("LAO restart requires authenticated same-origin confirmation, rejects activ
   } finally { await server.close(); }
 });
 
-test("task detail redacts goals, review notes, raw patches and model output", async () => {
+test("task detail exposes requests and model response only on protected API, not raw evidence", async () => {
   const dir = mkdtempSync(join(tmpdir(), "lao-detail-"));
   const store = new LaoTaskStore(dir);
   try {
@@ -301,10 +319,20 @@ test("task detail redacts goals, review notes, raw patches and model output", as
       requireReview: true,
     });
     const { summarizeLaoTaskDetails } = await import("./dashboard.js");
+    store.transition(task.id, "queued");
+    store.transition(task.id, "preparing");
+    store.transition(task.id, "running");
+    const run = store.startRun(task.id);
+    store.completeRun(run.id, { status: "completed",
+      summary: "The user-requested task is complete. <img src=x onerror=alert(1)>", toolCalls: 0 });
     const snapshot = summarizeLaoTaskDetails(store, task.id);
     assert.ok(snapshot);
     const raw = JSON.stringify(snapshot);
-    assert.doesNotMatch(raw, /123secret|private check|workspaceId|traceId/);
+    assert.match(raw, /123secret|private check|workspaceId/);
+    assert.match(raw, /The user-requested task is complete/);
+    assert.doesNotMatch(raw, /traceId|allowedWritePaths|sourceManifest|patchSha256/);
+    assert.equal(snapshot?.runs[0]?.summary,
+      "The user-requested task is complete. <img src=x onerror=alert(1)>");
     assert.match(raw, /granite4.2-8b/);
     assert.equal(summarizeLaoTaskDetails(store, "00000000-0000-4000-8000-000000000001"), null);
   } finally { store.close(); rmSync(dir, { recursive: true, force: true }); }
@@ -323,6 +351,20 @@ test("dashboard markup has a parseable offline script and does not expose tokens
   assert.match(html, /id="detail-panel"/);
   assert.match(html, /renderTasks/);
   assert.match(html, /showDetails/);
+  assert.match(html, /O que foi solicitado/);
+  assert.match(html, /Critérios de aceitação/);
+  assert.match(html, /Resposta do modelo/);
+  assert.match(html, /renderTaskDetail/);
+  assert.match(html, /handoffInstruction/);
+  assert.match(html, /lao_resume/);
+  assert.match(html, /Solicitado por/);
+  assert.match(html, /Revisar \/ Continuar/);
+  assert.match(html, /task\.goal\|\|UI\.notProvided/);
+  assert.match(html, /file\.path/);
+  assert.match(html, /file\.previousPath/);
+  assert.match(html, /fileAdded/);
+  assert.doesNotMatch(html, /String\(name\)/);
+  assert.doesNotMatch(html, /innerHTML\s*=|JSON\.stringify\(data,null,2\)/);
   assert.match(html, /id="cpu"/);
   assert.match(html, /id="ram"/);
   assert.match(html, /id="gpu"/);
@@ -350,6 +392,8 @@ test("dashboard markup has a parseable offline script and does not expose tokens
   assert.match(english, /Status dashboard/);
   assert.match(english, /System resources/);
   assert.match(english, /Settings and diagnostics/);
+  assert.match(english, /What was requested/);
+  assert.match(english, /Model response/);
   assert.match(english, /No confirmed resource alerts/);
   assert.match(english, /Configured model · load state not verified/);
   assert.doesNotMatch(english, />Configurações</);

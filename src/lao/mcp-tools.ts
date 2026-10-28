@@ -34,6 +34,17 @@ function asToolResult(data: object) {
     structuredContent: { ...data },
   };
 }
+function requestingAgent(explicit: string | undefined, meta: unknown): string {
+  // ChatGPT provides an OpenAI-specific MCP session metadata key. Other
+  // clients can declare a provider label; core task storage never depends
+  // on a vendor-specific session or URL. Do not persist session IDs.
+  if (explicit) return explicit;
+  if (meta && typeof meta === "object" && !Array.isArray(meta) &&
+      typeof (meta as Record<string, unknown>)["openai/session"] === "string") {
+    return "chatgpt";
+  }
+  return "unknown";
+}
 function toolFailure(error: unknown) {
   // Do not pretend a persisted task can be reviewed if its DevSpace worktree
   // identity was lost (for example after a config/state-dir switch). Fail
@@ -94,6 +105,72 @@ export function registerLaoMcpTools(
   // workspace registry. Standalone discovery-only callers cannot delegate.
   if (!context) return;
 
+  server.registerTool("lao_pending", {
+    title: "List LAO tasks awaiting attention",
+    description: "Resume work across sessions and MCP clients: list the latest tasks awaiting review or revision with task IDs, requesting agent and short descriptions. Read-only; does not approve, retry or change files.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true },
+  }, async () => {
+    try {
+      return await withStore(context.stateDir, async store => {
+        const pending = store.list().filter(task =>
+          ["awaiting_review", "needs_revision", "interrupted"].includes(task.status));
+        const visible: Array<{ task_id: string; workspace_id: string;
+          requested_by: string; status: string; goal_preview: string; updated_at: string }> = [];
+        for (const task of pending) {
+          if (visible.length >= 100) break;
+          try { await context.workspaces.getWorkspace(task.workspaceId); }
+          catch { continue; } // stale or unauthorized workspace never leaks prompts
+          visible.push({
+            task_id: task.id, workspace_id: task.workspaceId,
+            requested_by: task.requestedBy ?? "unknown", status: task.status,
+            goal_preview: task.goal.slice(0, 240), updated_at: task.updatedAt,
+          });
+        }
+        return asToolResult({ tasks: visible });
+      });
+    } catch (error) { return toolFailure(error); }
+  });
+
+  server.registerTool("lao_resume", {
+    title: "Recover LAO task for review or continuation",
+    description: "Use an ID from lao_pending or the LAO dashboard. Recovers original request, requester, results, tests, review and isolated change summary from durable storage. Works across supported MCP clients, but never approves or modifies code.",
+    inputSchema: { task_id: z.string().uuid() },
+    annotations: { readOnlyHint: true },
+  }, async ({ task_id }) => {
+    try {
+      return await withStore(context.stateDir, async store => {
+        const task = store.get(task_id);
+        if (!task) return toolFailure(new Error("Task not found"));
+        await context.workspaces.getWorkspace(task.workspaceId);
+        return asToolResult({
+          task: { id: task.id, workspace_id: task.workspaceId,
+            requested_by: task.requestedBy ?? "unknown",
+            goal: task.goal, acceptance_criteria: task.acceptanceCriteria,
+            model: task.model, status: task.status, created_at: task.createdAt,
+            updated_at: task.updatedAt, write_mode: task.permissions.write },
+          runs: store.getRuns(task_id).map(run => ({
+            id: run.id, model: run.model, status: run.status,
+            summary: run.summary, error_code: run.errorCode,
+            source_files: run.sourceManifest.map(source => source.path),
+          })),
+          changed_files: store.getWriteEvidence(task_id).flatMap(item =>
+            item.applied.files.map(file => ({
+              path: file.path, operation: file.operation,
+              ...(file.previousPath ? { previous_path: file.previousPath } : {}),
+            }))),
+          tests: store.getTestEvidence(task_id).map(item => ({
+            passed: item.passed, executed: item.executed,
+            test_files: item.testFiles, failure_code: item.failureCode,
+          })),
+          review: store.getReview(task_id),
+          promotion: store.getWritePromotion(task_id)?.state ?? null,
+          requires_human_review: task.status === "awaiting_review",
+        });
+      });
+    } catch (error) { return toolFailure(error); }
+  });
+
   server.registerTool("lao_delegate", {
     title: "Delegate read-only task to local model",
     description: "Create a bounded read-only task with optionally supplied source file snapshots from the authorized workspace. No shell or model tools; always requires supervisor review.",
@@ -104,9 +181,10 @@ export function registerLaoMcpTools(
       model: z.string().trim().min(1).max(200).optional(),
       max_wall_seconds: z.number().int().min(1).max(180).optional(),
       source_files: z.array(z.string().min(1).max(240)).max(3).optional(),
+      requested_by: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/).optional(),
     },
     annotations: { readOnlyHint: false, openWorldHint: false },
-  }, async ({ workspace_id, goal, acceptance_criteria, model, max_wall_seconds, source_files }, extra) => {
+  }, async ({ workspace_id, goal, acceptance_criteria, model, max_wall_seconds, source_files, requested_by }, extra) => {
     let taskId: string | undefined;
     try {
       const workspace = await context.workspaces.getWorkspace(workspace_id);
@@ -122,6 +200,7 @@ export function registerLaoMcpTools(
           config.fallbackModel);
         const task = runner.createTask({
           workspaceId: workspace_id, model: model ?? readLaoPreferredModel(config.defaultModel), goal,
+          requestedBy: requestingAgent(requested_by, extra?._meta),
           acceptanceCriteria: acceptance_criteria,
           permissions: { read: true, write: "none", shell: "none" },
           limits: { maxRevisions: 2, maxToolCalls: 1, maxWallSeconds: max_wall_seconds ?? 90 },
@@ -209,10 +288,11 @@ export function registerLaoMcpTools(
         allowed_write_paths: z.array(z.string().min(1).max(240)).min(1).max(5),
         model: z.string().trim().min(1).max(200).optional(),
         max_wall_seconds: z.number().int().min(1).max(180).optional(),
+        requested_by: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/).optional(),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
     }, async ({ source_workspace_id, goal, acceptance_criteria,
-      allowed_write_paths, model, max_wall_seconds }) => {
+      allowed_write_paths, model, max_wall_seconds, requested_by }, extra) => {
       try {
         const source = await context.workspaces.getWorkspace(source_workspace_id);
         if (source.mode !== "checkout" || !source.canonicalRoot) {
@@ -236,6 +316,7 @@ export function registerLaoMcpTools(
           new LaoIsolatedWriteRunner(store, context.ollama ?? new LaoOllamaClient(config),
             context.worktreeRoot!, config.fallbackModel).createTask({
             workspaceId: managed.id, model: model ?? readLaoPreferredModel(config.defaultModel),
+            requestedBy: requestingAgent(requested_by, extra?._meta),
             goal, acceptanceCriteria: acceptance_criteria,
             permissions: { read: true, write: "isolated_worktree",
               shell: "none", allowedWritePaths: normalized },

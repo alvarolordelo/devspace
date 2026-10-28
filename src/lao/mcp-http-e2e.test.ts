@@ -192,7 +192,7 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   assert.equal(typeof workspaceId,"string");
   const delegated = await rpc("tools/call",{ name:"lao_delegate", arguments:{
     workspace_id: workspaceId, goal:"Explain the feature safely",
-    acceptance_criteria:["Provide one sentence"],
+    acceptance_criteria:["Provide one sentence"], requested_by:"gemini",
   }});
   assert.equal(delegated.status,200);
   const data = delegated.data.result?.structuredContent;
@@ -211,6 +211,22 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   }});
   assert.equal(result.data.result?.structuredContent?.task?.status,"awaiting_review");
   assert.equal(result.data.result?.structuredContent?.runs?.[0]?.status,"completed");
+  assert.equal(result.data.result?.structuredContent?.task?.requestedBy,"gemini");
+  const pending = await rpc("tools/call",{name:"lao_pending",arguments:{}});
+  assert.equal(pending.status,200);
+  assert.equal(pending.data.result?.structuredContent?.tasks?.some(
+    (task:{task_id:string;requested_by:string}) =>
+      task.task_id===taskId && task.requested_by==="gemini"),true);
+  const resumed = await rpc("tools/call",{name:"lao_resume",arguments:{task_id:taskId}});
+  assert.equal(resumed.status,200);
+  assert.equal(resumed.data.result?.structuredContent?.task?.requested_by,"gemini");
+  assert.equal(resumed.data.result?.structuredContent?.task?.goal,"Explain the feature safely");
+  assert.equal(resumed.data.result?.structuredContent?.runs?.[0]?.status,"completed");
+  assert.equal(resumed.data.result?.structuredContent?.requires_human_review,true);
+  const missingResume = await rpc("tools/call",{name:"lao_resume",arguments:{
+    task_id:"00000000-0000-4000-8000-000000000099",
+  }});
+  assert.equal(missingResume.data.result?.isError,true);
   if (!live) {
     const longRun = await rpc("tools/call",{name:"lao_delegate",arguments:{
       workspace_id:workspaceId,goal:"long-running LAO transport test",

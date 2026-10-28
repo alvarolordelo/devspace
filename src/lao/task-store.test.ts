@@ -42,6 +42,18 @@ test("new task is persisted with status-only audit trail, safely reloadable", ()
     again.close();
   });
 });
+test("requesting agent is provider-neutral, durable, and optional for legacy tasks", () => {
+  withStore((store, dir) => {
+    const requested = store.create({ ...makeInput(), requestedBy: "claude" });
+    const legacy = store.create(makeInput());
+    assert.equal(store.get(requested.id)?.requestedBy, "claude");
+    assert.equal(store.get(legacy.id)?.requestedBy, undefined);
+    assert.throws(() => store.create({ ...makeInput(), requestedBy: "https://evil.example/abc" }));
+    const again = new LaoTaskStore(dir);
+    assert.equal(again.get(requested.id)?.requestedBy, "claude");
+    again.close();
+  });
+});
 test("approval requires an explicit human/supervisor review and verified criteria", () => {
   withStore((store) => {
     const task = store.create(makeInput());

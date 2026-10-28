@@ -11,6 +11,8 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import type { LaoDevspaceStatus } from "./devspace-probe.js";
 import type { LaoDashboardLanguage } from "./dashboard-designed.js";
+import { LAOgetVersion } from "./version.js";
+import { LAO_HANDOFF_PROVIDERS } from "./handoff-providers.js";
 
 const readResourceMetrics = createLaoResourceMonitor();
 
@@ -94,19 +96,27 @@ export function createLaoDashboardSessions(): LaoDashboardSessions {
   };
 }
 
-/** Never return goals, prompts, patch bodies, test logs, review notes or secrets. */
+/** Authenticated operator-only detail. Never include raw patches, test logs or credentials.
+ * The user-authored task request and model answer belong in the task detail view,
+ * so a human can inspect what was asked and what was delivered before review.
+ */
 export function summarizeLaoTaskDetails(store: LaoTaskStore, id: string) {
   const task = store.get(id);
   if (!task) return null;
   const review = store.getReview(id);
   return {
     task: { id: task.id, status: task.status, model: task.model,
+      requestedBy: task.requestedBy ?? "unknown",
+      goal: task.goal, acceptanceCriteria: task.acceptanceCriteria,
+      workspaceId: task.workspaceId,
       revisionCount: task.revisionCount, updatedAt: task.updatedAt,
       createdAt: task.createdAt, writeMode: task.permissions.write },
     runs: store.getRuns(id).map(run => ({
       id: run.id, status: run.status, model: run.model,
       startedAt: run.startedAt, finishedAt: run.finishedAt,
       toolCalls: run.toolCalls, errorCode: run.errorCode,
+      summary: run.summary,
+      sourceFiles: run.sourceManifest.map(source => source.path),
     })),
     events: store.events(id).map(event => ({
       from: event.from, to: event.to, at: event.at,
@@ -119,6 +129,7 @@ export function summarizeLaoTaskDetails(store: LaoTaskStore, id: string) {
     })),
     changes: store.getWriteEvidence(id).map(item => ({
       runId: item.runId, files: item.applied.files,
+      additions: item.applied.additions, removals: item.applied.removals,
       fingerprint: item.evidence.contentFingerprint,
       diffSummary: item.evidence.diffSummary,
     })),
@@ -335,7 +346,8 @@ export async function handleLaoDashboard(
   }
   const detailMatch = /^\/dashboard\/api\/tasks\/([a-f0-9-]{36})$/.exec(path);
   if (path !== "/dashboard/api/status" && path !== "/dashboard/api/tasks" &&
-      path !== "/dashboard/api/metrics" && !detailMatch) {
+      path !== "/dashboard/api/metrics" &&
+      path !== "/dashboard/api/handoff-providers" && !detailMatch) {
     json(res, 404, { error: "not_found" }); return true;
   }
   if (!authorized(req, options)) {
@@ -343,6 +355,9 @@ export async function handleLaoDashboard(
   }
   if (path === "/dashboard/api/metrics") {
     json(res, 200, await (options.readResourceMetrics ?? readResourceMetrics)()); return true;
+  }
+  if (path === "/dashboard/api/handoff-providers") {
+    json(res, 200, { providers: LAO_HANDOFF_PROVIDERS }); return true;
   }
   if (detailMatch) {
     const id = detailMatch[1];
@@ -355,7 +370,10 @@ export async function handleLaoDashboard(
   if (path === "/dashboard/api/tasks") {
     const tasks = options.listTasks().slice(0, 200).map(task => ({
       id: task.id, status: task.status, model: task.model,
+      requestedBy: task.requestedBy ?? "unknown",
+      goalPreview: task.goal.slice(0, 240),
       revisionCount: task.revisionCount, updatedAt: task.updatedAt,
+      createdAt: task.createdAt, writeMode: task.permissions.write,
     }));
     json(res, 200, { tasks }); return true;
   }
@@ -366,6 +384,7 @@ export async function handleLaoDashboard(
   });
   json(res, 200, {
     ...status, modelConfigured: config.defaultModel,
+    laoVersion: LAOgetVersion(),
     restartAvailable: Boolean(options.restartLao),
     activeTasks: options.listTasks().filter(task =>
       ["preparing", "running", "validating"].includes(task.status)).length,

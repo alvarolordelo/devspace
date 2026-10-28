@@ -25,8 +25,12 @@ fechar a aba. O token e enviado somente no cabecalho Authorization.
 
 - Status de prontidao real (Ollama/modelo + confirmacao DevSpace).
 - Numero de tarefas, pendencias de revisao e tarefas em andamento.
-- Lista das 200 tarefas mais recentes, com identificador, status,
-  modelo, revisoes e ultima atualizacao.
+- Lista das 200 tarefas mais recentes, com descricao do pedido (resumo de
+  240 caracteres), status, modelo, tipo de tarefa e ultima atualizacao.
+- Ao clicar em `Ver`, painel legivel com o pedido integral, criterios de
+  aceite, resposta do modelo, tentativas anteriores, arquivos consultados
+  ou alterados, testes, revisao e historico de estados. IDs tecnicos ficam
+  recolhidos; nenhum JSON bruto e apresentado na interface.
 - Atualizacao automatica a cada 10 segundos.
 - Card "Recursos locais" com CPU, RAM, uso GPU NVIDIA e VRAM, mais
   memoria RSS do daemon. Os valores sao amostrados em cada atualizacao,
@@ -52,8 +56,13 @@ fechar a aba. O token e enviado somente no cabecalho Authorization.
   Origin cross-site, POST/PUT, query string e URL com credenciais.
 - Respostas incluem CSP com nonce, no-store, frame denial e nosniff.
 - Conteudo dos registros e exibido por textContent (sem innerHTML).
-- Dados sensiveis como goal, acceptanceCriteria, traceId e permissions
-  nao sao retornados pela API de lista.
+- Apenas no endpoint autenticado de lista retorna `goalPreview` limitado
+  a 240 caracteres; `acceptanceCriteria`, `traceId` e `permissions` nao
+  sao retornados. O endpoint autenticado de detalhe retorna pedido integral,
+  criterios e resposta da execucao porque o operador precisa inspecionar
+  a tarefa antes da revisao. Respostas sao `no-store`, nunca entram em
+  HTML estatico, logs, URL ou historico publico. Textos nao confiaveis sao
+  inseridos com `textContent`, nunca executados como HTML.
 - Sem assets externos, CDN ou requests a servidores remotos.
 - O painel nao substitui autenticacao do protocolo MCP.
 - Uma GPU indisponivel, NVML nao inicializada, multipla GPU nao suportada

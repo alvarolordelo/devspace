@@ -160,16 +160,91 @@ try {
         active?.dataset.section === name &&
         document.documentElement.scrollWidth <= innerWidth + 1;
     }
-    const newTask = Array.from(document.querySelectorAll('button.action'))
-      .find(button => button.textContent.includes('Nova tarefa'));
+    const newTask = document.querySelector('button.action.primary');
     result.disabledControls = newTask?.disabled === true &&
       document.getElementById('restart-lao') instanceof HTMLButtonElement;
     document.querySelector('.nav [data-section="status"]').click();
     return result;
   })())`));
   if (Object.values(interactions).some(value => value !== true)) {
-    throw new Error("Dashboard navigation, disabled controls or layout interaction failed");
+    throw new Error("Dashboard navigation, disabled controls or layout interaction failed: " +
+      JSON.stringify(interactions));
   }
+  // On a daemon with persisted jobs, exercise the real operator-facing task
+  // details instead of accepting a raw JSON dump or opaque UUIDs as a UI.
+  await evaluate("document.querySelector('.nav [data-section=\"tarefas\"]').click()");
+  const hasTasks = await evaluate("document.querySelectorAll('#tasks .task-title').length>0");
+  let taskDetailChecked = false;
+  if (hasTasks) {
+    const readable = await evaluate("Boolean(document.querySelector('#tasks .task-title').textContent.trim())");
+    if (!readable) throw new Error("Task list did not display the user request");
+    await evaluate("document.querySelector('#tasks .task-title').click()");
+    await until(async () => await evaluate(
+      "Boolean(!document.getElementById('detail-panel').classList.contains('hidden') && " +
+      "document.querySelectorAll('#detail .task-detail-card').length>=4)"));
+    const detailView = JSON.parse(await evaluate("JSON.stringify({" +
+      "request:document.querySelector('#detail .task-prose')?.textContent?.length>0," +
+      "technical:!!document.querySelector('#detail .task-technical summary')," +
+      "noRawJson:!document.querySelector('#detail pre')," +
+      "noHtmlInjection:!document.querySelector('#detail script,#detail img,#detail iframe')})"));
+    if (Object.values(detailView).some(value => value !== true)) {
+      throw new Error("Human-readable task details failed the visual smoke");
+    }
+    taskDetailChecked = true;
+  }
+  // Validate real persisted AppliedPatchFile objects, not a fabricated string
+  // fixture. A previous UI mistakenly rendered these as '[object Object]'.
+  let changeDetailsChecked = false;
+  const taskResponse = await fetch(url.origin + "/dashboard/api/tasks", {
+    headers: { Authorization: "Bearer " + secret }, cache: "no-store",
+  });
+  if (!taskResponse.ok) throw new Error("Task API is unavailable for file display QA");
+  const taskRows = (await taskResponse.json()).tasks ?? [];
+  let multiAgentHandoffChecked = false;
+  const awaiting = taskRows.find(task =>
+    ["awaiting_review", "needs_revision", "interrupted"].includes(task.status));
+  if (awaiting) {
+    await evaluate("document.querySelector('.nav [data-section=\"tarefas\"]').click()");
+    await evaluate("Array.from(document.querySelectorAll('#tasks .detail-button'))" +
+      ".find(b=>b.getAttribute('aria-label')?.endsWith(" +
+      JSON.stringify(awaiting.id) + "))?.click()");
+    await until(async () => await evaluate(
+      "Boolean(document.querySelector('#detail .handoff-bar select') && " +
+      "document.querySelector('#detail .handoff-bar button'))"));
+    const state = JSON.parse(await evaluate("JSON.stringify({" +
+      "requestedBy:document.getElementById('detail').textContent.includes(" +
+      JSON.stringify(awaiting.requestedBy ?? "unknown") + ")," +
+      "instruction:document.querySelector('script')?.textContent.includes('lao_resume')," +
+      "otherClient:Array.from(document.querySelectorAll('#detail .handoff-bar option'))" +
+      ".some(x=>x.value==='copy')})"));
+    if (Object.values(state).some(value => value !== true)) {
+      throw new Error("Provider-neutral Resume Work handoff failed the visual smoke");
+    }
+    multiAgentHandoffChecked = true;
+  }
+  for (const task of taskRows) {
+    if (task.writeMode !== "isolated_worktree") continue;
+    const response = await fetch(url.origin + "/dashboard/api/tasks/" + task.id, {
+      headers: { Authorization: "Bearer " + secret }, cache: "no-store",
+    });
+    if (!response.ok) continue;
+    const details = await response.json();
+    const file = details.changes?.flatMap(change => change.files ?? [])
+      .find(file => file && typeof file.path === "string");
+    if (!file) continue;
+    await evaluate("document.querySelector('.nav [data-section=\"tarefas\"]').click()");
+    await evaluate("Array.from(document.querySelectorAll('#tasks .detail-button'))" +
+      ".find(b=>b.getAttribute('aria-label')?.endsWith(" +
+      JSON.stringify(task.id) + "))?.click()");
+    await until(async () => await evaluate(
+      "Boolean(document.querySelector('#detail .task-detail-card') && " +
+      "document.getElementById('detail').textContent.includes(" + JSON.stringify(file.path) + "))"));
+    const valid = await evaluate("!document.getElementById('detail').textContent.includes('[object Object]')");
+    if (!valid) throw new Error("Changed file rendered as [object Object]");
+    changeDetailsChecked = true;
+    break;
+  }
+  await evaluate("document.querySelector('.nav [data-section=\"status\"]').click()");
   await evaluate("document.getElementById('model-name').click()");
   await until(async () => await evaluate(
     "Boolean(!document.getElementById('model-select').classList.contains('hidden') && " +
@@ -232,6 +307,9 @@ try {
     logoutClearsSession: true, operatorTokenNotStored: true, nativeLaunchAutoLogin: true,
     iconAssetsLoaded: iconContract.totalIcons,
     modelComboOptionsLoaded: modelsCount,
+    taskDetailChecked,
+    changeDetailsChecked,
+    multiAgentHandoffChecked,
     noTokenInOutput: true, noSoftwareInstalled: true,
   }));
 } finally {

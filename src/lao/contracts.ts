@@ -24,6 +24,9 @@ export const laoPermissionsSchema = z.object({
 
 export const laoTaskInputSchema = z.object({
   workspaceId: z.string().trim().min(1).max(200),
+  // Provider-neutral origin of the *requesting assistant*, not the model
+  // executing the task. Optional for tasks created before this capability.
+  requestedBy: z.string().trim().regex(/^[a-z][a-z0-9_-]{0,39}$/).optional(),
   model: z.string().trim().min(1).max(200),
   goal: z.string().trim().min(1).max(8000),
   acceptanceCriteria: z.array(z.string().trim().min(1).max(1000)).min(1).max(30),
