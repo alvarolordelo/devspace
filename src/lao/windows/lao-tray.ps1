@@ -103,12 +103,18 @@ if ($CheckOnly) {
     return
 }
 if ($UiCheckOnly) {
+    # Keep the visual regression fixture deterministic regardless of the
+    # Windows display language. This does not persist a user preference.
+    $script:uiLanguage='pt-BR'
     $logoPath = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\docs\lao-devspace\assets\icons\png\lao-logo-64.png'))
     $ui = New-LaoPopup -LogoPath $logoPath
     $settingsUi = New-LaoSettingsForm $ui.Assets
     try {
-        if ($settingsUi.Switch.AccessibleName -ne 'Iniciar LAO e Monitor com Windows' -or
+        if ($settingsUi.Switch.AccessibleName -ne (Get-LaoUiText 'StartWithWindows') -or
             $settingsUi.Services.Count -ne 2 -or
+            $settingsUi.Language.Items.Count -ne 2 -or
+            -not $settingsUi.Language.Items.Contains('English') -or
+            -not $settingsUi.Language.Items.Contains('Português') -or
             $settingsUi.Services.Ollama.Text -notmatch 'Ollama' -or
             $settingsUi.Services.DevSpace.Text -notmatch 'DevSpace') {
             throw 'Switch and controlled dependency restart settings missing'
@@ -236,7 +242,7 @@ if ($UiCheckOnly) {
         Update-LaoPopup $ui $restartSnapshot
         if (-not $ui.Actions.context.Enabled -or
             $ui.Actions.context.Tag -ne $ui.Assets['reiniciar'] -or
-            $ui.Actions.context.Text -notmatch 'Reiniciar LAO') {
+            $ui.Actions.context.Text -ne (Get-LaoUiText 'RestartLao')) {
             throw 'Available LAO-only restart must be enabled on native monitor'
         }
         $ui.Form.ClientSize=[Drawing.Size]::new(340,580)
@@ -323,13 +329,13 @@ if (-not $AsyncProbeOnly) {
     $script:popup = New-LaoPopup -LogoPath $logoPath
 }
 $menu = [Windows.Forms.ContextMenuStrip]::new()
-$openItem = $menu.Items.Add('Abrir painel LAO')
-$stateItem = $menu.Items.Add('Status: offline')
+$openItem = $menu.Items.Add((Get-LaoUiText 'TrayOpen'))
+$stateItem = $menu.Items.Add((Get-LaoUiText 'TrayStatus')+': offline')
 $stateItem.Enabled = $false
-$tasksItem = $menu.Items.Add('Tarefas: aguardando consulta')
+$tasksItem = $menu.Items.Add((Get-LaoUiText 'TrayTasks')+': '+(Get-LaoUiText 'WaitingQuery'))
 $tasksItem.Enabled = $false
-$copyItem = $menu.Items.Add('Copiar diagnostico')
-$quitItem = $menu.Items.Add('Sair do monitor')
+$copyItem = $menu.Items.Add((Get-LaoUiText 'TrayCopy'))
+$quitItem = $menu.Items.Add((Get-LaoUiText 'TrayExit'))
 $notify.ContextMenuStrip = $menu
 $context = [Windows.Forms.ApplicationContext]::new()
 $timer = [Windows.Forms.Timer]::new()
@@ -514,12 +520,12 @@ function Update-LaoTray($snapshot) {
         if ($script:popup) { Update-LaoDependencyRowActions $snapshot }
         $script:lastCheck = Get-Date
         $notify.Icon = $icons[$displayStatus]
-        $stateItem.Text = "Status: $displayLabel"
+        $stateItem.Text = (Get-LaoUiText 'TrayStatus')+": $displayLabel"
         $notify.Text = "LAO DevSpace - $displayLabel"
         if ($snapshot.tasksAuthenticated) {
-            $tasksItem.Text = "Tarefas: $($snapshot.activeTasks) executando; $($snapshot.pendingReviews) em revisao"
+            $tasksItem.Text = (Get-LaoUiText 'TrayTasks')+": $($snapshot.activeTasks) $(Get-LaoUiText 'Running'); $($snapshot.pendingReviews) $(Get-LaoUiText 'ReviewShort')"
         } else {
-            $tasksItem.Text = 'Tarefas: consulta nao autenticada'
+            $tasksItem.Text = (Get-LaoUiText 'TrayTasks')+': '+(Get-LaoUiText 'TrayUnauth')
         }
         if ($EnableNotifications -and -not $AsyncProbeOnly -and $script:initialized) {
             $newReviews = if ($null -eq $snapshot.pendingReviews) { 0 } else { [int]$snapshot.pendingReviews }
@@ -577,6 +583,19 @@ function Update-LaoTray($snapshot) {
         $script:previousFailedTaskIds = @($snapshot.failedTaskIds)
 }
 
+function Update-LaoTrayLanguage {
+    $openItem.Text=Get-LaoUiText 'TrayOpen'
+    $copyItem.Text=Get-LaoUiText 'TrayCopy'
+    $quitItem.Text=Get-LaoUiText 'TrayExit'
+    if($script:popup){Apply-LaoPopupLanguage $script:popup}
+    if($script:pollSnapshot){
+        Update-LaoTray $script:pollSnapshot
+    }else{
+        $stateItem.Text=(Get-LaoUiText 'TrayStatus')+': offline'
+        $tasksItem.Text=(Get-LaoUiText 'TrayTasks')+': '+(Get-LaoUiText 'WaitingQuery')
+    }
+}
+
 function Open-LaoDashboard([string]$section = '') {
     $destination = $script:baseUrl + '/dashboard' + $section
     if (-not $script:dashboardToken) {
@@ -613,14 +632,14 @@ function Update-LaoDependencyRowActions($snapshot) {
         $starting=$script:localStarts.ContainsKey($kind)
         $recovery=if($kind -ne 'LAO'){Get-LaoDependencyRecoveryAction $kind $snapshot}else{$null}
         $row.Start.Visible=$starting -or (Test-LaoLocalStartAvailable $kind $snapshot) -or $null -ne $recovery
-        $row.Start.AccessibleName=$(if($recovery -and $recovery.Operation -eq 'Restart'){'Reiniciar '+$kind}else{'Iniciar '+$kind})
+        $row.Start.AccessibleName=$(if($recovery -and $recovery.Operation -eq 'Restart'){(Get-LaoUiText 'Restart')+' '+$kind}else{(Get-LaoUiText 'Start')+' '+$kind})
         $row.Start.Enabled=-not $starting
-        if ($starting) { $row.Value.Text='Iniciando…' }
+        if ($starting) { $row.Value.Text=Get-LaoUiText 'Starting' }
     }
     Resize-LaoPopupContents $script:popup $script:popup.Form.ClientSize.Width
     if ($snapshot.status -eq 'offline') {
         $script:popup.Actions.context.Enabled=-not $script:localStarts.ContainsKey('LAO')
-        $script:popup.Actions.context.Text=$(if($script:localStarts.ContainsKey('LAO')){'Iniciando LAO…'}else{'Iniciar LAO'})
+        $script:popup.Actions.context.Text=$(if($script:localStarts.ContainsKey('LAO')){Get-LaoUiText 'StartingLao'}else{(Get-LaoUiText 'Start')+' LAO'})
     }
     foreach ($key in @('ollama','mcp')) {
         $kind=if ($key -eq 'ollama') {'Ollama'} else {'DevSpace'}
@@ -630,8 +649,8 @@ function Update-LaoDependencyRowActions($snapshot) {
         foreach ($part in @($row.Title,$row.Value,$row.Dot)) {
             $part.Cursor=$cursor
             $part.AccessibleDescription=$(if ($action) {
-                'Serviço com falha. Clique para confirmar recuperação do '+$kind
-            } else { 'Somente status. Nenhuma ação disponível.' })
+                (Get-LaoUiText 'ServiceFaultDesc') -f $kind
+            } else { Get-LaoUiText 'StatusOnlyDesc' })
         }
         # Only error states gain a recovery affordance. Healthy/unverified
         # rows retain the exact typography and text of the approved design.
@@ -830,27 +849,32 @@ if ($script:popup) {
             Invoke-LaoLocalStart LAO
             return
         }
-        if ($script:popup.Actions.context.Text -match 'Reiniciar LAO') {
+        $reviews=if($null -eq $script:pollSnapshot.pendingReviews){0}else{[int]$script:pollSnapshot.pendingReviews}
+        $active=if($null -eq $script:pollSnapshot.activeTasks){0}else{[int]$script:pollSnapshot.activeTasks}
+        $canRestart=($reviews -eq 0 -and $active -eq 0 -and
+            $script:pollSnapshot.statusAuthenticated -and
+            $script:pollSnapshot.restartAvailable -eq $true)
+        if ($canRestart) {
             if (-not $script:popup.Actions.context.Enabled -or
                 -not $script:dashboardToken -or $script:restartTask) { return }
             $choice=[Windows.Forms.MessageBox]::Show(
-                'Reiniciar somente o LAO DevSpace? DevSpace MCP e Ollama continuarão funcionando.',
-                'Confirmar reinício LAO',
+                (Get-LaoUiText 'ConfirmRestartLao'),
+                (Get-LaoUiText 'ConfirmRestartLaoTitle'),
                 [Windows.Forms.MessageBoxButtons]::YesNo,
                 [Windows.Forms.MessageBoxIcon]::Question)
             if ($choice -ne [Windows.Forms.DialogResult]::Yes) { return }
             $script:popup.Actions.context.Enabled=$false
-            $script:popup.Actions.context.Text='Reiniciando LAO…'
+            $script:popup.Actions.context.Text=Get-LaoUiText 'RestartingLao'
             try {
                 $script:restartTask=$privateClient.PostAsync(
                     $script:baseUrl + '/dashboard/api/restart', [Net.Http.HttpContent]$null)
             } catch {
-                $script:popup.CardDetails.Text='Falha ao solicitar reinício do LAO.'
+                $script:popup.CardDetails.Text=Get-LaoUiText 'RestartLaoFailed'
             }
             return
         }
         $script:popup.Form.Hide()
-        if ($script:popup.Actions.context.Text -match 'Ver revisão') {
+        if ($reviews -gt 0) {
             Open-LaoDashboard '#tarefas'
         }
     })

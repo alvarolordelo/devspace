@@ -1,6 +1,122 @@
 ﻿# Local user-session starts. No installation, elevation, process killing or autostart.
 $script:localStarts=@{}
 $script:componentVersions=@{}
+$script:uiLanguage=$null
+function Get-LaoUiPreferencesPath {
+    $directory=Join-Path $env:LOCALAPPDATA 'LAODevSpace'
+    [IO.Directory]::CreateDirectory($directory) | Out-Null
+    return Join-Path $directory 'ui-preferences.json'
+}
+function Get-LaoUiLanguage {
+    if ($script:uiLanguage -in @('pt-BR','en-US')) { return $script:uiLanguage }
+    $systemLanguage=[Globalization.CultureInfo]::CurrentUICulture.Name
+    $script:uiLanguage=$(if($systemLanguage -like 'pt-*'){'pt-BR'}else{'en-US'})
+    try {
+        $path=Get-LaoUiPreferencesPath
+        if ([IO.File]::Exists($path)) {
+            $saved=[IO.File]::ReadAllText($path,[Text.Encoding]::UTF8) | ConvertFrom-Json
+            if ([string]$saved.language -in @('pt-BR','en-US')) {
+                $script:uiLanguage=[string]$saved.language
+            }
+        }
+    } catch {
+        $script:uiLanguage=$(if($systemLanguage -like 'pt-*'){'pt-BR'}else{'en-US'})
+    }
+    return $script:uiLanguage
+}
+function Set-LaoUiLanguage([ValidateSet('pt-BR','en-US')][string]$Language) {
+    $path=Get-LaoUiPreferencesPath
+    $temp=$path+'.tmp-'+[guid]::NewGuid().ToString('N')
+    try {
+        $json=[ordered]@{schemaVersion=1;language=$Language} | ConvertTo-Json -Compress
+        [IO.File]::WriteAllText($temp,$json+"`n",(New-Object Text.UTF8Encoding($false)))
+        Move-Item -LiteralPath $temp -Destination $path -Force
+        $script:uiLanguage=$Language
+    } finally {
+        if ([IO.File]::Exists($temp)) { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
+    }
+}
+function Get-LaoUiText([string]$Key) {
+    $language=Get-LaoUiLanguage
+    $pt=@{
+        SettingsTitle='LAO DevSpace · Configurações'; AutoStartTitle='Inicialização automática';
+        AutoStartDesc='Iniciar LAO e Monitor ao entrar nesta conta do Windows.'; On='LIGADO'; Off='DESLIGADO';
+        StartWithWindows='Iniciar LAO e Monitor com Windows'; ManageComponents='Gerenciar componentes';
+        RestartNotice='Reinicializações exigem confirmação. Serviços externos são validados antes da ação.';
+        Restart='Reiniciar'; Start='Iniciar'; Starting='Iniciando…'; ActiveRestart='Ativo: reinício disponível';
+        StoppedStart='Parado: clique para iniciar'; NoSafeAction='Sem ação segura disponível';
+        AwaitingResponse='Aguardando resposta'; ActiveTaskBlocked='Tarefa ativa: reinício bloqueado';
+        ConnectionUnverified='Conexão não verificada'; SettingsFoot='Inicialização apenas na conta atual; DevSpace/Ollama independentes.';
+        Language='Idioma'; Portuguese='Português'; English='English';
+        WaitingSignal='Aguardando sinal'; StartAll='Iniciar LAO, DevSpace e Ollama';
+        StartAllDesc='Verifica os três serviços e inicia apenas os que estiverem parados'; DefaultModel='Modelo padrão';
+        Queue='Fila'; LastRun='Última execução'; ChooseModel='Clique para escolher um modelo local do Ollama';
+        CurrentSituation='Situação atual'; VerifyingLao='Verificando o LAO'; AwaitingLocalData='Aguardando dados locais';
+        OpenDashboard='Abrir painel'; ViewLogs='Ver logs'; ViewReview='Ver revisão'; Settings='Configurações';
+        FreshWaiting='Aguardando coleta · — = não verificado'; ServiceUnavailable='Serviço indisponível';
+        AwaitingReview='Aguardando revisão'; RunningTasks='Executando tarefas'; Active='Ativo';
+        Partial='Atenção · parcialmente disponível'; Responding='Respondendo'; NoResponse='Sem resposta';
+        NotVerified='Não verificado'; Connected='Conectado'; Running='em execução'; Pending='Pendências';
+        ActionRequired='Ação necessária'; ReviewCount='{0} revisão(ões)'; ReviewDetails='Há {0} tarefa(s) aguardando aprovação.';
+        CurrentTask='Tarefa atual'; RestartLaoActive='Reiniciar LAO (tarefa ativa)'; RunInProgress='Execução em andamento';
+        Preparing='Preparando'; Executing='Executando'; Validating='Validando'; NotReported='Não informada';
+        NotInformed='Não informado'; Executor='Executor'; Phase='Fase'; TimeUnavailable='não disponível';
+        RestartLao='Reiniciar LAO'; RestartLaoUnavailable='Reiniciar LAO (indisponível)';
+        StartLaoUnavailable='Iniciar LAO (indisponível)'; MonitorRunning='Monitor em funcionamento';
+        OrchestratorUnavailable='Orquestrador indisponível'; NoActiveTask='Nenhuma tarefa ativa confirmada.';
+        DaemonNotResponding='O daemon não está respondendo.'; LastCheck='Última verificação';
+        Unavailable='indisponível'; NoConfirmedCheck='Sem coleta confirmada';
+        TrayOpen='Abrir painel LAO'; TrayStatus='Status'; TrayTasks='Tarefas'; TrayCopy='Copiar diagnóstico'; TrayExit='Sair do monitor';
+        TrayUnauth='consulta não autenticada'; ReviewShort='em revisão'; WaitingQuery='aguardando consulta';
+        StartingLao='Iniciando LAO…'; RestartingLao='Reiniciando LAO…';
+        ConfirmRestartLao='Reiniciar somente o LAO DevSpace? DevSpace MCP e Ollama continuarão funcionando.';
+        ConfirmRestartLaoTitle='Confirmar reinício LAO'; RestartLaoFailed='Falha ao solicitar reinício do LAO.';
+        ServiceFaultDesc='Serviço com falha. Clique para confirmar recuperação do {0}'; StatusOnlyDesc='Somente status. Nenhuma ação disponível.'
+        ComponentActionQuestion='{0} {1} agora? A conexão desse componente poderá ser interrompida temporariamente.';
+        ComponentActionFailed='Não foi possível confirmar a ação. Consulte os logs e o histórico de recuperação.'
+    }
+    $en=@{
+        SettingsTitle='LAO DevSpace · Settings'; AutoStartTitle='Automatic startup';
+        AutoStartDesc='Start LAO and Monitor when signing in to this Windows account.'; On='ON'; Off='OFF';
+        StartWithWindows='Start LAO and Monitor with Windows'; ManageComponents='Manage components';
+        RestartNotice='Restarts require confirmation. External services are validated before the action.';
+        Restart='Restart'; Start='Start'; Starting='Starting…'; ActiveRestart='Active: restart available';
+        StoppedStart='Stopped: click to start'; NoSafeAction='No safe action available';
+        AwaitingResponse='Waiting for response'; ActiveTaskBlocked='Active task: restart blocked';
+        ConnectionUnverified='Connection not verified'; SettingsFoot='Startup only for the current account; DevSpace/Ollama remain independent.';
+        Language='Language'; Portuguese='Português'; English='English';
+        WaitingSignal='Waiting for signal'; StartAll='Start LAO, DevSpace and Ollama';
+        StartAllDesc='Checks all three services and starts only those that are stopped'; DefaultModel='Default model';
+        Queue='Queue'; LastRun='Last run'; ChooseModel='Click to choose a local Ollama model';
+        CurrentSituation='Current status'; VerifyingLao='Checking LAO'; AwaitingLocalData='Waiting for local data';
+        OpenDashboard='Open dashboard'; ViewLogs='View logs'; ViewReview='View review'; Settings='Settings';
+        FreshWaiting='Waiting for check · — = unavailable'; ServiceUnavailable='Service unavailable';
+        AwaitingReview='Awaiting review'; RunningTasks='Running tasks'; Active='Active';
+        Partial='Attention · partially available'; Responding='Responding'; NoResponse='No response';
+        NotVerified='Not verified'; Connected='Connected'; Running='running'; Pending='Pending';
+        ActionRequired='Action required'; ReviewCount='{0} review(s)'; ReviewDetails='{0} task(s) awaiting approval.';
+        CurrentTask='Current task'; RestartLaoActive='Restart LAO (active task)'; RunInProgress='Run in progress';
+        Preparing='Preparing'; Executing='Running'; Validating='Validating'; NotReported='Not reported';
+        NotInformed='Not provided'; Executor='Executor'; Phase='Phase'; TimeUnavailable='unavailable';
+        RestartLao='Restart LAO'; RestartLaoUnavailable='Restart LAO (unavailable)';
+        StartLaoUnavailable='Start LAO (unavailable)'; MonitorRunning='Monitor running';
+        OrchestratorUnavailable='Orchestrator unavailable'; NoActiveTask='No active task confirmed.';
+        DaemonNotResponding='The daemon is not responding.'; LastCheck='Last check';
+        Unavailable='unavailable'; NoConfirmedCheck='No confirmed check';
+        TrayOpen='Open LAO dashboard'; TrayStatus='Status'; TrayTasks='Tasks'; TrayCopy='Copy diagnostics'; TrayExit='Exit monitor';
+        TrayUnauth='unauthenticated query'; ReviewShort='in review'; WaitingQuery='waiting for check';
+        StartingLao='Starting LAO…'; RestartingLao='Restarting LAO…';
+        ConfirmRestartLao='Restart only LAO DevSpace? DevSpace MCP and Ollama will keep running.';
+        ConfirmRestartLaoTitle='Confirm LAO restart'; RestartLaoFailed='Failed to request LAO restart.';
+        ServiceFaultDesc='Service failure. Click to confirm recovery of {0}'; StatusOnlyDesc='Status only. No action available.'
+        ComponentActionQuestion='{0} {1} now? This component connection may be temporarily interrupted.';
+        ComponentActionFailed='The action could not be confirmed. Check logs and recovery history.'
+    }
+    $table=if($language -eq 'en-US'){$en}else{$pt}
+    $value=$table[$Key]
+    if($null -eq $value){return $Key}
+    return [string]$value
+}
 function Get-LaoComponentVersion([string]$Kind) {
     $root=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
     switch ($Kind) {

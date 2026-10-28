@@ -39,7 +39,7 @@ test("LAO native action icons are supplied as approved vector-origin image asset
   assert.match(popup, /\[IO\.File\]::ReadAllBytes\(\$assetPath\)/);
   assert.match(popup, /\[Drawing\.Bitmap\]::new\(\$sourceImage\)/);
   assert.match(popup, /\$startAll\.Tag=\$assets\['iniciar'\]/);
-  assert.match(popup, /@\('settings','Configurações','configuracoes'\)/);
+  assert.match(popup, /Get-LaoUiText 'Settings'/);
   assert.match(popup, /\$cardIcon\.Image=\$assets\['documento-verde'\]/);
   assert.doesNotMatch(popup, /Text\s*=\s*'⚙'|DrawText\(\$_\.Graphics,'›'/,
     "Do not regress to OS-dependent font glyphs for approved icons");
@@ -52,7 +52,9 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.match(popup, /\$modelCombo\.DropDownStyle=\[Windows\.Forms\.ComboBoxStyle\]::DropDownList/);
   assert.match(trayText, /dashboard\/api\/models\/select/);
   assert.match(trayText, /function Open-LaoSettings/);
-  assert.match(settings, /Iniciar LAO e Monitor com Windows/);
+  assert.match(settings, /Get-LaoUiText 'StartWithWindows'/);
+  assert.match(settings, /\$languageCombo\.Items\.Add\('English'\)/);
+  assert.match(settings, /\$languageCombo\.Items\.Add\('Português'\)/);
   assert.match(settings, /Stop-Service -Name \$service -ErrorAction Stop/);
   assert.match(settings, /Start-Service -Name \$service -ErrorAction Stop/);
   assert.match(settings, /WaitForStatus\(/);
@@ -100,7 +102,7 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.match(settings, /Get-NetTCPConnection/);
   assert.match(settings, /function Invoke-LaoLocalProcessRecoveryOperation/);
   assert.match(settings, /Stop-Process -Id/);
-  assert.match(settings, /Reiniciar '\+\$kind/);
+  assert.match(settings, /Get-LaoUiText 'Restart'/);
   assert.match(trayText, /Pressao confirmada de recursos/);
   assert.match(trayText, /Uma tarefa foi concluida/);
   assert.match(trayText, /Uma tarefa falhou/);
@@ -145,6 +147,15 @@ test("LAO Settings can safely restart verified local DevSpace and Ollama process
       "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", mockScript,
     ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
     assert.match(stdout, /LAO settings local restart safety check passed/);
+  });
+
+test("LAO language defaults to English except on Portuguese Windows and persists user choice",
+  { skip: process.platform !== "win32" }, () => {
+    const script = fileURLToPath(new URL("../../test/lao-language.ps1", import.meta.url));
+    const stdout = execFileSync("powershell.exe", [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.match(stdout, /LAO language preference check passed/);
   });
 
 test("managed dependency recovery verifies stop, start and audit with mocked SCM",

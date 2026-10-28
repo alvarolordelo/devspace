@@ -107,13 +107,13 @@ function New-LaoPopup {
     })
     $dot.ForeColor = $colors.gray
     $header.Controls.Add($dot)
-    $heading = LaoLabel 'Aguardando sinal' 133 55 218 27 13 $false
+    $heading = LaoLabel (Get-LaoUiText 'WaitingSignal') 133 55 218 27 13 $false
     $heading.ForeColor = $colors.gray
     $header.Controls.Add($heading)
     $startAll = [Windows.Forms.Button]::new()
     $startAll.Text = ''
-    $startAll.AccessibleName = 'Iniciar LAO, DevSpace e Ollama'
-    $startAll.AccessibleDescription = 'Verifica os três serviços e inicia apenas os que estiverem parados'
+    $startAll.AccessibleName = Get-LaoUiText 'StartAll'
+    $startAll.AccessibleDescription = Get-LaoUiText 'StartAllDesc'
     $startAll.Tag=$assets['iniciar']
     $startAll.FlatStyle = [Windows.Forms.FlatStyle]::Flat
     $startAll.FlatAppearance.BorderSize = 0
@@ -131,8 +131,8 @@ function New-LaoPopup {
     $rows = @{}
     $fields = @(
        @('service','LAO Service'),@('mcp','DevSpace MCP'),@('ollama','Ollama'),
-       @('model','Modelo padrão'),@('gpu','GPU'),@('vram','VRAM'),
-       @('queue','Fila'),@('last','Última execução')
+       @('model',(Get-LaoUiText 'DefaultModel')),@('gpu','GPU'),@('vram','VRAM'),
+       @('queue',(Get-LaoUiText 'Queue')),@('last',(Get-LaoUiText 'LastRun'))
     )
     $y=1
     foreach($entry in $fields) {
@@ -186,7 +186,7 @@ function New-LaoPopup {
     $modelCombo.BringToFront()
     $rows.model.Value.Cursor=[Windows.Forms.Cursors]::Hand
     $rows.model.Title.Cursor=[Windows.Forms.Cursors]::Hand
-    $rows.model.Value.AccessibleDescription='Clique para escolher um modelo local do Ollama'
+    $rows.model.Value.AccessibleDescription=Get-LaoUiText 'ChooseModel'
     $card=[Windows.Forms.Panel]::new()
     $card.Location=[Drawing.Point]::new(19,$y+11)
     $card.Size=[Drawing.Size]::new(382,153)
@@ -222,19 +222,19 @@ function New-LaoPopup {
     $cardIcon.SizeMode=[Windows.Forms.PictureBoxSizeMode]::Zoom
     $cardIcon.Image=$assets['documento-verde']
     $iconBox.Controls.Add($cardIcon)
-    $cardCaption=LaoLabel 'Situação atual' 85 16 277 24 10.6 $false
+    $cardCaption=LaoLabel (Get-LaoUiText 'CurrentSituation') 85 16 277 24 10.6 $false
     $cardCaption.ForeColor=$colors.muted
     $card.Controls.Add($cardCaption)
-    $cardTitle=LaoLabel 'Verificando o LAO' 85 44 277 31 12.7 $true
+    $cardTitle=LaoLabel (Get-LaoUiText 'VerifyingLao') 85 44 277 31 12.7 $true
     $card.Controls.Add($cardTitle)
-    $cardDetails=LaoLabel 'Aguardando dados locais' 85 79 277 64 11.2 $false
+    $cardDetails=LaoLabel (Get-LaoUiText 'AwaitingLocalData') 85 79 277 64 11.2 $false
     $cardDetails.ForeColor=$colors.muted
     $card.Controls.Add($cardDetails)
     $actions=@{}
-    $items=@(@('dashboard','Abrir painel','abrir-painel'),
-             @('logs','Ver logs','logs'),
-             @('context','Ver revisão','reiniciar'),
-             @('settings','Configurações','configuracoes'))
+    $items=@(@('dashboard',(Get-LaoUiText 'OpenDashboard'),'abrir-painel'),
+             @('logs',(Get-LaoUiText 'ViewLogs'),'logs'),
+             @('context',(Get-LaoUiText 'ViewReview'),'reiniciar'),
+             @('settings',(Get-LaoUiText 'Settings'),'configuracoes'))
     $pos=$y+172
     foreach($item in $items) {
         $button=[Windows.Forms.Button]::new()
@@ -262,7 +262,7 @@ function New-LaoPopup {
         $pos+=40
     }
     $scroll.Tag=$assets['chevron-direita']
-    $freshness=LaoLabel 'Aguardando coleta · — = não verificado' 20 ($pos+2) 365 14 8 $false
+    $freshness=LaoLabel (Get-LaoUiText 'FreshWaiting') 20 ($pos+2) 365 14 8 $false
     $freshness.ForeColor=$colors.muted
     $scroll.Controls.Add($freshness)
     $form.Add_KeyDown({if($_.KeyCode -eq [Windows.Forms.Keys]::Escape){$this.Hide();$_.Handled=$true}})
@@ -275,6 +275,25 @@ function New-LaoPopup {
         Actions=$actions;StartAll=$startAll;IconBox=$iconBox;Freshness=$freshness;
       ModelCombo=$modelCombo;
       Assets=$assets}
+}
+
+function Apply-LaoPopupLanguage($popup) {
+    if(-not $popup){return}
+    $popup.StartAll.AccessibleName=Get-LaoUiText 'StartAll'
+    $popup.StartAll.AccessibleDescription=Get-LaoUiText 'StartAllDesc'
+    $popup.Rows.model.Title.Text=Get-LaoUiText 'DefaultModel'
+    $popup.Rows.queue.Title.Text=Get-LaoUiText 'Queue'
+    $popup.Rows.last.Title.Text=Get-LaoUiText 'LastRun'
+    $popup.Rows.model.Value.AccessibleDescription=Get-LaoUiText 'ChooseModel'
+    $popup.Actions.dashboard.Text=Get-LaoUiText 'OpenDashboard'
+    $popup.Actions.dashboard.AccessibleName=$popup.Actions.dashboard.Text
+    $popup.Actions.logs.Text=Get-LaoUiText 'ViewLogs'
+    $popup.Actions.logs.AccessibleName=$popup.Actions.logs.Text
+    $popup.Actions.settings.Text=Get-LaoUiText 'Settings'
+    $popup.Actions.settings.AccessibleName=$popup.Actions.settings.Text
+    if(-not $popup.Form.Visible -and -not $popup.HeaderText.Text){
+        $popup.HeaderText.Text=Get-LaoUiText 'WaitingSignal'
+    }
 }
 
 function Set-LaoPopupRow($popup,[string]$name,[string]$text,[string]$kind) {
@@ -329,7 +348,7 @@ function Set-LaoComponentRow($popup,[string]$name,[string]$kind,[string]$status,
 
 function Get-LaoAggregateUiState($snapshot) {
     if (-not $snapshot) {
-        return [pscustomobject]@{Status='offline';Label='Serviço indisponível'}
+        return [pscustomobject]@{Status='offline';Label=(Get-LaoUiText 'ServiceUnavailable')}
     }
     $reasons=@($snapshot.reasons)
     $laoLive=([string]$snapshot.status -ne 'offline')
@@ -339,18 +358,18 @@ function Get-LaoAggregateUiState($snapshot) {
     $ollamaOk=$snapshot.statusAuthenticated -and
         $reasons -notcontains 'ollama_unavailable'
     if (-not $laoLive) {
-        return [pscustomobject]@{Status='offline';Label='Serviço indisponível'}
+        return [pscustomobject]@{Status='offline';Label=(Get-LaoUiText 'ServiceUnavailable')}
     }
     if ($null -ne $snapshot.pendingReviews -and [int]$snapshot.pendingReviews -gt 0) {
-        return [pscustomobject]@{Status='review';Label='Aguardando revisão'}
+        return [pscustomobject]@{Status='review';Label=(Get-LaoUiText 'AwaitingReview')}
     }
     if ($devspaceOk -and $ollamaOk) {
         $label=if($null -ne $snapshot.activeTasks -and [int]$snapshot.activeTasks -gt 0){
-            'Executando tarefas'
-        }else{'Ativo'}
+            Get-LaoUiText 'RunningTasks'
+        }else{Get-LaoUiText 'Active'}
         return [pscustomobject]@{Status='active';Label=$label}
     }
-    return [pscustomobject]@{Status='idle';Label='Atenção · parcialmente disponível'}
+    return [pscustomobject]@{Status='idle';Label=(Get-LaoUiText 'Partial')}
 }
 
 function Update-LaoPopup($popup,$snapshot) {
@@ -369,72 +388,72 @@ function Update-LaoPopup($popup,$snapshot) {
     $popup.HeaderText.Text=[string]$aggregate.Label
     $popup.HeaderText.ForeColor=$color
     $live=$state -ne 'offline'
-    Set-LaoComponentRow $popup service 'LAO' $(if($laoLive){'Respondendo'}else{'Sem resposta'}) $(if($laoLive){'good'}else{'bad'})
+    Set-LaoComponentRow $popup service 'LAO' $(if($laoLive){Get-LaoUiText 'Responding'}else{Get-LaoUiText 'NoResponse'}) $(if($laoLive){'good'}else{'bad'})
     $observed=[DateTimeOffset]::MinValue
     if([DateTimeOffset]::TryParse([string]$snapshot.checkedAt,[ref]$observed)){
-        $popup.Freshness.Text='Última verificação: '+$observed.ToLocalTime().ToString('HH:mm:ss')+' · — = indisponível'
+        $popup.Freshness.Text=(Get-LaoUiText 'LastCheck')+': '+$observed.ToLocalTime().ToString('HH:mm:ss')+' · — = '+(Get-LaoUiText 'Unavailable')
     }else{
-        $popup.Freshness.Text='Sem coleta confirmada · — = indisponível'
+        $popup.Freshness.Text=(Get-LaoUiText 'NoConfirmedCheck')+' · — = '+(Get-LaoUiText 'Unavailable')
     }
     if(!$snapshot.statusAuthenticated){
-        Set-LaoComponentRow $popup mcp 'DevSpace' 'Não verificado' unknown
-        Set-LaoComponentRow $popup ollama 'Ollama' 'Não verificado' unknown
+        Set-LaoComponentRow $popup mcp 'DevSpace' (Get-LaoUiText 'NotVerified') unknown
+        Set-LaoComponentRow $popup ollama 'Ollama' (Get-LaoUiText 'NotVerified') unknown
     }else{
         $mcpNotReady=$reasons -contains 'devspace_unverified'
         $mcpOffline=$reasons -contains 'devspace_unavailable'
-        Set-LaoComponentRow $popup mcp 'DevSpace' $(if($mcpOffline){'Offline'}elseif($mcpNotReady){'Não verificado'}else{'Conectado'}) $(if($mcpOffline){'bad'}elseif($mcpNotReady){'unknown'}else{'good'})
+        Set-LaoComponentRow $popup mcp 'DevSpace' $(if($mcpOffline){'Offline'}elseif($mcpNotReady){Get-LaoUiText 'NotVerified'}else{Get-LaoUiText 'Connected'}) $(if($mcpOffline){'bad'}elseif($mcpNotReady){'unknown'}else{'good'})
         $ollamaDown=$reasons -contains 'ollama_unavailable'
-        Set-LaoComponentRow $popup ollama 'Ollama' $(if($ollamaDown){'Offline'}else{'Respondendo'}) $(if($ollamaDown){'bad'}else{'good'})
+        Set-LaoComponentRow $popup ollama 'Ollama' $(if($ollamaDown){'Offline'}else{Get-LaoUiText 'Responding'}) $(if($ollamaDown){'bad'}else{'good'})
     }
     Set-LaoPopupRow $popup model $(if($snapshot.modelConfigured){[string]$snapshot.modelConfigured}else{'—'}) unknown
     Set-LaoPopupRow $popup gpu $(if($null -ne $snapshot.gpuPercent){"$($snapshot.gpuPercent)%"}else{'—'}) unknown
     Set-LaoPopupRow $popup vram $(if($null -ne $snapshot.vramUsedMiB -and $null -ne $snapshot.vramTotalMiB){
         "$($snapshot.vramUsedMiB) / $($snapshot.vramTotalMiB) MiB"
     }else{'—'}) unknown
-    Set-LaoPopupRow $popup queue $(if($snapshot.tasksAuthenticated){"$($snapshot.activeTasks) em execução"}else{'Não verificada'}) unknown
+    Set-LaoPopupRow $popup queue $(if($snapshot.tasksAuthenticated){"$($snapshot.activeTasks) $(Get-LaoUiText 'Running')"}else{Get-LaoUiText 'NotVerified'}) unknown
     if($null -ne $snapshot.pendingReviews -and $snapshot.pendingReviews -gt 0){
         $popup.Actions.context.Enabled=$true
-        $popup.Actions.context.Text='Ver revisão'
+        $popup.Actions.context.Text=Get-LaoUiText 'ViewReview'
         $popup.Actions.context.Tag=$popup.Assets['revisao']
-        $popup.Rows.last.Title.Text='Pendências'
-        Set-LaoPopupRow $popup last "$($snapshot.pendingReviews) revisão(ões)" review
+        $popup.Rows.last.Title.Text=Get-LaoUiText 'Pending'
+        Set-LaoPopupRow $popup last ((Get-LaoUiText 'ReviewCount') -f $snapshot.pendingReviews) review
         $popup.CardIcon.Image=$popup.Assets['documento-amarelo']
         $popup.IconBox.BackColor=[Drawing.ColorTranslator]::FromHtml('#FFF3D2')
-        $popup.CardCaption.Text='Ação necessária'
-        $popup.CardTitle.Text='Aguardando revisão'
-        $popup.CardDetails.Text="Há $($snapshot.pendingReviews) tarefa(s) aguardando aprovação."
+        $popup.CardCaption.Text=Get-LaoUiText 'ActionRequired'
+        $popup.CardTitle.Text=Get-LaoUiText 'AwaitingReview'
+        $popup.CardDetails.Text=(Get-LaoUiText 'ReviewDetails') -f $snapshot.pendingReviews
         $popup.Card.BackColor=[Drawing.ColorTranslator]::FromHtml('#FFF8E7')
     }elseif($null -ne $snapshot.activeTasks -and $snapshot.activeTasks -gt 0){
         $popup.Actions.context.Enabled=$false
-        $popup.Actions.context.Text='Reiniciar LAO (tarefa ativa)'
+        $popup.Actions.context.Text=Get-LaoUiText 'RestartLaoActive'
         $popup.Actions.context.Tag=$popup.Assets['reiniciar']
-        $popup.Rows.last.Title.Text='Última execução'
-        Set-LaoPopupRow $popup last 'Execução em andamento' good
+        $popup.Rows.last.Title.Text=Get-LaoUiText 'LastRun'
+        Set-LaoPopupRow $popup last (Get-LaoUiText 'RunInProgress') good
         $popup.CardIcon.Image=$popup.Assets['documento-verde']
         $popup.IconBox.BackColor=[Drawing.ColorTranslator]::FromHtml('#E9F8EE')
-        $popup.CardCaption.Text='Tarefa atual'
+        $popup.CardCaption.Text=Get-LaoUiText 'CurrentTask'
         $popup.CardTitle.Text=$(if($snapshot.lastTaskId){
             'Tarefa ' + ([string]$snapshot.lastTaskId).Substring(0,[Math]::Min(8,([string]$snapshot.lastTaskId).Length))
-        }else{'Execução local em andamento'})
+        }else{Get-LaoUiText 'RunInProgress'})
         $phase=switch([string]$snapshot.lastTaskPhase){
-            preparing {'Preparando'}
-            running {'Executando'}
-            validating {'Validando'}
-            default {'Não informada'}
+            preparing {Get-LaoUiText 'Preparing'}
+            running {Get-LaoUiText 'Executing'}
+            validating {Get-LaoUiText 'Validating'}
+            default {Get-LaoUiText 'NotReported'}
         }
-        $executor=if($snapshot.lastTaskModel){[string]$snapshot.lastTaskModel}else{'Não informado'}
-        $popup.CardDetails.Text="Executor: $executor`r`nFase: $phase`r`nTempo: não disponível"
+        $executor=if($snapshot.lastTaskModel){[string]$snapshot.lastTaskModel}else{Get-LaoUiText 'NotInformed'}
+        $popup.CardDetails.Text=(Get-LaoUiText 'Executor')+": $executor`r`n"+(Get-LaoUiText 'Phase')+": $phase`r`nTempo: "+(Get-LaoUiText 'TimeUnavailable')
         $popup.Card.BackColor=[Drawing.ColorTranslator]::FromHtml('#F3FAF5')
     }else{
         $canRestart=$live -and $snapshot.statusAuthenticated -and ($snapshot.restartAvailable -eq $true)
         $popup.Actions.context.Enabled=$canRestart
         $popup.Actions.context.Tag=$popup.Assets['reiniciar']
         $popup.Actions.context.Text=$(if($canRestart){
-            'Reiniciar LAO'
+            Get-LaoUiText 'RestartLao'
         }elseif($live){
-            'Reiniciar LAO (indisponível)'
-        }else{'Iniciar LAO (indisponível)'})
-        $popup.Rows.last.Title.Text='Última execução'
+            Get-LaoUiText 'RestartLaoUnavailable'
+        }else{Get-LaoUiText 'StartLaoUnavailable'})
+        $popup.Rows.last.Title.Text=Get-LaoUiText 'LastRun'
         Set-LaoPopupRow $popup last '—' unknown
         $popup.CardIcon.Image=$(if($live){
             $popup.Assets['documento-verde']
@@ -444,9 +463,9 @@ function Update-LaoPopup($popup,$snapshot) {
         $popup.IconBox.BackColor=$(if($live){
             [Drawing.ColorTranslator]::FromHtml('#E9F8EE')
         }else{[Drawing.ColorTranslator]::FromHtml('#FFE6E8')})
-        $popup.CardCaption.Text='Situação atual'
-        $popup.CardTitle.Text=$(if($live){'Monitor em funcionamento'}else{'Orquestrador indisponível'})
-        $popup.CardDetails.Text=$(if($live){'Nenhuma tarefa ativa confirmada.'}else{'O daemon não está respondendo.'})
+        $popup.CardCaption.Text=Get-LaoUiText 'CurrentSituation'
+        $popup.CardTitle.Text=$(if($live){Get-LaoUiText 'MonitorRunning'}else{Get-LaoUiText 'OrchestratorUnavailable'})
+        $popup.CardDetails.Text=$(if($live){Get-LaoUiText 'NoActiveTask'}else{Get-LaoUiText 'DaemonNotResponding'})
         $popup.Card.BackColor=$(if($live){[Drawing.ColorTranslator]::FromHtml('#F8FAFC')}else{[Drawing.ColorTranslator]::FromHtml('#FFF0F0')})
     }
     $popup.CardIcon.Invalidate()

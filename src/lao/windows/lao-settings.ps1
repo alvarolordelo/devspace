@@ -126,8 +126,8 @@ function Invoke-LaoSettingsComponentAction([string]$Kind,$Snapshot) {
     if ($script:dependencyRecoveryInProgress) { return $false }
     $candidate=Get-LaoSettingsComponentAction $Kind $Snapshot
     if (-not $candidate) { return $false }
-    $verb=if($candidate.Operation -eq 'Start'){'Iniciar'}else{'Reiniciar'}
-    $question="$verb $Kind agora? A conexão desse componente poderá ser interrompida temporariamente."
+    $verb=if($candidate.Operation -eq 'Start'){Get-LaoUiText 'Start'}else{Get-LaoUiText 'Restart'}
+    $question=(Get-LaoUiText 'ComponentActionQuestion') -f $verb,$Kind
     $confirmed=[Windows.Forms.MessageBox]::Show(
         $question, "$verb $Kind",
         [Windows.Forms.MessageBoxButtons]::YesNo,
@@ -151,7 +151,7 @@ function Invoke-LaoSettingsComponentAction([string]$Kind,$Snapshot) {
         }
         if (-not $verified) {
             [Windows.Forms.MessageBox]::Show(
-                'Não foi possível confirmar a ação. Consulte os logs e o histórico de recuperação.',
+                (Get-LaoUiText 'ComponentActionFailed'),
                 'LAO DevSpace') | Out-Null
         }
         $script:nextPollAt=[DateTime]::MinValue
@@ -308,8 +308,8 @@ function Invoke-LaoDependencyRecovery([string]$Kind,$Snapshot) {
 
 function New-LaoSettingsForm($Assets,$SnapshotProvider) {
     $form=[Windows.Forms.Form]::new()
-    $form.Text='LAO DevSpace · Configurações'
-    $form.ClientSize=[Drawing.Size]::new(395,375)
+    $form.Text=Get-LaoUiText 'SettingsTitle'
+    $form.ClientSize=[Drawing.Size]::new(395,455)
     $form.FormBorderStyle=[Windows.Forms.FormBorderStyle]::FixedDialog
     $form.MaximizeBox=$false
     $form.MinimizeBox=$false
@@ -324,9 +324,9 @@ function New-LaoSettingsForm($Assets,$SnapshotProvider) {
         $form.Controls.Add($control)
         return $control
     }
-    $title=AddText 'Inicialização automática' 20 18 350 32
+    $title=AddText (Get-LaoUiText 'AutoStartTitle') 20 18 350 32
     $title.Font=[Drawing.Font]::new('Segoe UI',13,[Drawing.FontStyle]::Bold)
-    $description=AddText 'Iniciar LAO e Monitor ao entrar nesta conta do Windows.' 20 54 352 43
+    $description=AddText (Get-LaoUiText 'AutoStartDesc') 20 54 352 43
     $description.ForeColor=[Drawing.Color]::DimGray
     $toggle=[Windows.Forms.CheckBox]::new()
     $toggle.Appearance=[Windows.Forms.Appearance]::Button
@@ -336,20 +336,20 @@ function New-LaoSettingsForm($Assets,$SnapshotProvider) {
     $toggle.Location=[Drawing.Point]::new(226,91)
     $toggle.Size=[Drawing.Size]::new(149,38)
     $toggle.TextAlign=[Drawing.ContentAlignment]::MiddleCenter
-    $toggle.AccessibleName='Iniciar LAO e Monitor com Windows'
+    $toggle.AccessibleName=Get-LaoUiText 'StartWithWindows'
     $toggle.Checked=[bool](Get-LaoTrayAutostart)
     $form.Controls.Add($toggle)
     $toggle.Add_CheckedChanged({
         try {
             Set-LaoTrayAutostart ([bool]$this.Checked)
-            $this.Text=$(if($this.Checked){'LIGADO'}else{'DESLIGADO'})
+            $this.Text=$(if($this.Checked){Get-LaoUiText 'On'}else{Get-LaoUiText 'Off'})
             $this.Invalidate()
         } catch {
             $this.Checked=Get-LaoTrayAutostart
             [Windows.Forms.MessageBox]::Show($_.Exception.Message,'LAO DevSpace') | Out-Null
         }
     })
-    $toggle.Text=$(if($toggle.Checked){'LIGADO'}else{'DESLIGADO'})
+    $toggle.Text=$(if($toggle.Checked){Get-LaoUiText 'On'}else{Get-LaoUiText 'Off'})
     $toggle.TextAlign=[Drawing.ContentAlignment]::MiddleLeft
     $toggle.BackColor=[Drawing.Color]::White
     $toggle.Add_Paint({
@@ -365,9 +365,9 @@ function New-LaoSettingsForm($Assets,$SnapshotProvider) {
             $_.Graphics.FillEllipse($knob,$(if($this.Checked){126}else{102}),11,17,17)
         }finally{$track.Dispose();$knob.Dispose()}
     })
-    $services=AddText 'Gerenciar componentes' 20 153 350 30
+    $services=AddText (Get-LaoUiText 'ManageComponents') 20 153 350 30
     $services.Font=[Drawing.Font]::new('Segoe UI',13,[Drawing.FontStyle]::Bold)
-    $notice=AddText 'Reinicializações exigem confirmação. Serviços externos não são encerrados por PID.' 20 187 352 40
+    $notice=AddText (Get-LaoUiText 'RestartNotice') 20 187 352 40
     $notice.ForeColor=[Drawing.Color]::DimGray
     $controls=@{}
     foreach($kind in @('Ollama','DevSpace')) {
@@ -378,7 +378,7 @@ function New-LaoSettingsForm($Assets,$SnapshotProvider) {
         $snapshot=if($SnapshotProvider){& $SnapshotProvider}else{$null}
         $action=Get-LaoSettingsComponentAction $kind $snapshot
         $button.Enabled=$null -ne $action
-        $button.Text=$(if($action){$(if([string]$action.Operation -eq 'Restart'){'Reiniciar '}else{'Iniciar '})+$kind}else{$kind})
+        $button.Text=$(if($action){$(if([string]$action.Operation -eq 'Restart'){(Get-LaoUiText 'Restart')+' '}else{(Get-LaoUiText 'Start')+' '})+$kind}else{$kind})
         $button.FlatStyle=[Windows.Forms.FlatStyle]::Flat
         $button.FlatAppearance.BorderColor=[Drawing.ColorTranslator]::FromHtml('#CBD5E1')
         if ($Assets -and $Assets['reiniciar']) {
@@ -387,8 +387,8 @@ function New-LaoSettingsForm($Assets,$SnapshotProvider) {
             $button.TextImageRelation=[Windows.Forms.TextImageRelation]::ImageBeforeText
         }
         $button.AccessibleDescription=$(if($button.Enabled){
-            'Iniciar ou reiniciar somente este componente, mediante confirmação'
-        }else{'Sem ação segura disponível neste momento'})
+            (Get-LaoUiText 'Start')+' / '+(Get-LaoUiText 'Restart')+' '+$kind
+        }else{Get-LaoUiText 'NoSafeAction'})
         $button.Tag=[pscustomobject]@{Kind=$kind;SnapshotProvider=$SnapshotProvider}
         $button.Add_Click({
             $target=[string]$this.Tag.Kind
@@ -403,15 +403,40 @@ function New-LaoSettingsForm($Assets,$SnapshotProvider) {
         })
         $form.Controls.Add($button)
         $controls[$kind]=$button
-        $status=AddText $(if($action){$(if($action.Operation -eq 'Restart'){'Ativo: reinício disponível'}else{'Parado: clique para iniciar'})}else{'Sem ação segura disponível'}) `
+        $status=AddText $(if($action){$(if($action.Operation -eq 'Restart'){Get-LaoUiText 'ActiveRestart'}else{Get-LaoUiText 'StoppedStart'})}else{Get-LaoUiText 'NoSafeAction'}) `
             $(if($kind -eq 'Ollama'){20}else{202}) 288 170 29
         $button.Tag | Add-Member -NotePropertyName StatusLabel -NotePropertyValue $status
         $status.ForeColor=$(if($button.Enabled){
             [Drawing.ColorTranslator]::FromHtml('#12794A')
         }else{[Drawing.Color]::DimGray})
     }
-    $foot=AddText 'Inicialização apenas na conta atual; DevSpace/Ollama independentes.' 20 332 353 34
+    $languageTitle=AddText (Get-LaoUiText 'Language') 20 326 170 28
+    $languageTitle.Font=[Drawing.Font]::new('Segoe UI',13,[Drawing.FontStyle]::Bold)
+    $languageCombo=[Windows.Forms.ComboBox]::new()
+    $languageCombo.DropDownStyle=[Windows.Forms.ComboBoxStyle]::DropDownList
+    $languageCombo.Location=[Drawing.Point]::new(202,324)
+    $languageCombo.Size=[Drawing.Size]::new(170,34)
+    [void]$languageCombo.Items.Add('English')
+    [void]$languageCombo.Items.Add('Português')
+    $languageCombo.SelectedIndex=$(if((Get-LaoUiLanguage) -eq 'pt-BR'){1}else{0})
+    $form.Controls.Add($languageCombo)
+    $foot=AddText (Get-LaoUiText 'SettingsFoot') 20 378 353 46
     $foot.ForeColor=[Drawing.Color]::DimGray
+    $languageCombo.Add_SelectedIndexChanged({
+        $selected=if($this.SelectedIndex -eq 1){'pt-BR'}else{'en-US'}
+        if($selected -eq (Get-LaoUiLanguage)){return}
+        Set-LaoUiLanguage $selected
+        $form.Text=Get-LaoUiText 'SettingsTitle'
+        $title.Text=Get-LaoUiText 'AutoStartTitle'
+        $description.Text=Get-LaoUiText 'AutoStartDesc'
+        $toggle.AccessibleName=Get-LaoUiText 'StartWithWindows'
+        $toggle.Text=$(if($toggle.Checked){Get-LaoUiText 'On'}else{Get-LaoUiText 'Off'})
+        $services.Text=Get-LaoUiText 'ManageComponents'
+        $notice.Text=Get-LaoUiText 'RestartNotice'
+        $languageTitle.Text=Get-LaoUiText 'Language'
+        $foot.Text=Get-LaoUiText 'SettingsFoot'
+        if(Get-Command Update-LaoTrayLanguage -ErrorAction SilentlyContinue){Update-LaoTrayLanguage}
+    })
     $refresh=[Windows.Forms.Timer]::new()
     $refresh.Interval=750
     $refresh.Tag=[pscustomobject]@{Controls=$controls;Provider=$SnapshotProvider}
@@ -422,8 +447,8 @@ function New-LaoSettingsForm($Assets,$SnapshotProvider) {
             $starting=$script:localStarts.ContainsKey($kind)
             $action=Get-LaoSettingsComponentAction $kind $snapshot
             $button.Enabled=-not $starting -and $null -ne $action
-            $button.Text=$(if($starting){'Iniciando…'}elseif($action -and $action.Operation -eq 'Restart'){'Reiniciar '+$kind}elseif($action){'Iniciar '+$kind}else{$kind})
-            $button.Tag.StatusLabel.Text=$(if($starting){'Aguardando resposta'}elseif($snapshot -and $snapshot.tasksAuthenticated -and $snapshot.activeTasks -gt 0){'Tarefa ativa: reinício bloqueado'}elseif($action -and $action.Operation -eq 'Restart'){'Ativo: reinício disponível'}elseif($action){'Parado: clique para iniciar'}elseif(-not $snapshot -or -not $snapshot.statusAuthenticated -or ($kind -eq 'DevSpace' -and @($snapshot.reasons) -contains 'devspace_unverified')){'Conexão não verificada'}else{'Sem ação segura disponível'})
+            $button.Text=$(if($starting){Get-LaoUiText 'Starting'}elseif($action -and $action.Operation -eq 'Restart'){(Get-LaoUiText 'Restart')+' '+$kind}elseif($action){(Get-LaoUiText 'Start')+' '+$kind}else{$kind})
+            $button.Tag.StatusLabel.Text=$(if($starting){Get-LaoUiText 'AwaitingResponse'}elseif($snapshot -and $snapshot.tasksAuthenticated -and $snapshot.activeTasks -gt 0){Get-LaoUiText 'ActiveTaskBlocked'}elseif($action -and $action.Operation -eq 'Restart'){Get-LaoUiText 'ActiveRestart'}elseif($action){Get-LaoUiText 'StoppedStart'}elseif(-not $snapshot -or -not $snapshot.statusAuthenticated -or ($kind -eq 'DevSpace' -and @($snapshot.reasons) -contains 'devspace_unverified')){Get-LaoUiText 'ConnectionUnverified'}else{Get-LaoUiText 'NoSafeAction'})
         }
     })
     $form.Tag=$refresh
@@ -435,5 +460,5 @@ function New-LaoSettingsForm($Assets,$SnapshotProvider) {
             if($button -is [Windows.Forms.Button] -and $button.Image) { $button.Image.Dispose() }
         }
     })
-    return @{Form=$form;Switch=$toggle;Services=$controls}
+    return @{Form=$form;Switch=$toggle;Services=$controls;Language=$languageCombo}
 }
