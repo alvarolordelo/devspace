@@ -295,18 +295,34 @@ function Set-LaoComponentRow($popup,[string]$name,[string]$kind,[string]$status,
     $row=$popup.Rows[$name]
     if(!$row){return}
     $version=$script:componentVersions[$kind]
-    $row.Value.Font=[Drawing.Font]::new('Segoe UI',$(if($version){10.2}else{12.4}),[Drawing.FontStyle]::Regular)
     $full=if($version){$status+' · v'+$version}else{$status}
+    $chosenSize=if($version){10.2}else{12.4}
+    $measured=0
+    $sizes=if($version){@(10.2,9.8,9.4,9.0,8.6)}else{@(12.4)}
+    foreach($candidate in $sizes) {
+        $probeFont=[Drawing.Font]::new('Segoe UI',[single]$candidate,[Drawing.FontStyle]::Regular)
+        try {
+            $candidateWidth=[Windows.Forms.TextRenderer]::MeasureText($full,$probeFont).Width
+            $chosenSize=$candidate
+            $measured=$candidateWidth
+            if($candidateWidth -le $row.Value.ClientSize.Width) { break }
+        } finally { $probeFont.Dispose() }
+    }
+    if([Math]::Abs($row.Value.Font.Size-[single]$chosenSize) -gt 0.05) {
+        $oldFont=$row.Value.Font
+        $row.Value.Font=[Drawing.Font]::new('Segoe UI',[single]$chosenSize,[Drawing.FontStyle]::Regular)
+        if($oldFont){$oldFont.Dispose()}
+    }
     Set-LaoPopupRow $popup $name $full $state
 
-    # Never let a version hide the operational status. If the measured text
-    # still overflows, keep the status visible and expose the complete version
-    # through accessibility/tooltip text instead of rendering ellipsis.
-    $measured=[Windows.Forms.TextRenderer]::MeasureText($row.Value.Text,$row.Value.Font).Width
+    # Preserve the complete installed version whenever possible. Long beta/RC
+    # labels get progressively smaller before we ever fall back to status-only.
+    # If even the minimum readable size cannot fit, operational status wins.
     if($measured -gt $row.Value.ClientSize.Width) {
         $row.Value.Text=$status
         $row.Value.AccessibleDescription=if($version){$status+'; versão '+$version}else{$status}
     } else {
+        $row.Value.Text=$full
         $row.Value.AccessibleDescription=$full
     }
 }

@@ -86,6 +86,7 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.match(start, /--version/);
   assert.match(popup, /function Set-LaoComponentRow/);
   assert.match(popup, /TextRenderer\]::MeasureText/);
+  assert.match(popup, /@\(10\.2,9\.8,9\.4,9\.0,8\.6\)/);
   assert.match(popup, /\$devspaceOk=.*devspace_unavailable/s);
   assert.match(popup, /\$ollamaOk=.*ollama_unavailable/s);
   assert.match(start, /GetActiveTcpListeners\(\)/);
