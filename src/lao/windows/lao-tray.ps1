@@ -220,10 +220,10 @@ if ($UiCheckOnly) {
             }
             if ($state -eq 'review' -and
                 (-not $ui.Actions.context.Enabled -or
-                 $ui.CardTitle.Text -ne ('Aguardando revis'+[char]0xE3+'o') -or
+                 $ui.CardTitle.Text -ne (Get-LaoUiText 'AwaitingReview') -or
                  $ui.Actions.context.Tag -ne $ui.Assets['revisao'] -or
                  $ui.CardIcon.Image -ne $ui.Assets['documento-amarelo'] -or
-                 $ui.Rows.last.Title.Text -ne ('Pend'+[char]0xEA+'ncias'))) {
+                 $ui.Rows.last.Title.Text -ne (Get-LaoUiText 'Pending'))) {
                 throw 'Review popup did not expose its approval context'
             }
             if ($state -eq 'offline' -and

@@ -83,7 +83,10 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.match(start, /function Get-LaoComponentVersion/);
   assert.match(start, /function Update-LaoComponentVersion/);
   assert.match(start, /function Format-LaoComponentStatus/);
-  assert.match(start, /devspace-upstream-test/);
+  assert.match(start, /DEVSPACE_VERSION_PIN\.json/);
+  assert.match(start, /DEVSPACE_LAO_ENABLED=\"true\"/);
+  assert.match(start, /DEVSPACE_LAO_STATE_DIR/);
+  assert.doesNotMatch(start, /DEVSPACE_LAO_ENABLED=\"false\"/);
   assert.match(start, /ollama\.exe/);
   assert.match(start, /--version/);
   assert.match(popup, /function Set-LaoComponentRow/);

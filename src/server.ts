@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { access, realpath } from "node:fs/promises";
 import type { Server as HttpServer } from "node:http";
+import { isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
@@ -86,6 +87,15 @@ function mcpServerInfo() {
     description:
       "Coding tools for project workspaces. Open each project or worktree once, then reuse its workspace_id.",
   };
+}
+
+function laoMcpStateDir(config: ServerConfig): string {
+  const configured = process.env.DEVSPACE_LAO_STATE_DIR?.trim();
+  if (!configured) return config.stateDir;
+  if (!isAbsolute(configured)) {
+    throw new Error("DEVSPACE_LAO_STATE_DIR must be an absolute path");
+  }
+  return resolve(configured);
 }
 
 interface RunningServer {
@@ -819,7 +829,11 @@ function registerMcpSurface(
     processSessions,
   });
 
-  registerLaoMcpTools(registrationTarget, loadLaoConfig(), { stateDir: config.stateDir, workspaces, worktreeRoot: config.worktreeRoot });
+  registerLaoMcpTools(registrationTarget, loadLaoConfig(), {
+    stateDir: laoMcpStateDir(config),
+    workspaces,
+    worktreeRoot: config.worktreeRoot,
+  });
 
   registerAppTool(
     registrationTarget,

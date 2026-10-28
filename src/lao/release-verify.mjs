@@ -18,7 +18,7 @@ const portable = standalone || manifest.kind === "lao-devspace-portable-candidat
 if (manifest.schemaVersion !== 1 ||
     !["lao-devspace-release-candidate", "lao-devspace-portable-candidate",
       "lao-devspace-standalone-candidate"].includes(manifest.kind) ||
-    manifest.laoVersion !== "1.1.0-beta.9" ||
+    manifest.laoVersion !== "1.1.0-beta.10" ||
     manifest.stableDevspaceVersion !== "1.0.8" ||
     manifest.installed !== false || manifest.serviceInstalled !== false ||
     manifest.autostartEnabled !== false || manifest.nodeModulesIncluded !== portable ||

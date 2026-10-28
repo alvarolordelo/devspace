@@ -233,19 +233,24 @@ function Get-LaoLocalStartCommand([string]$Kind) {
             return '$env:OLLAMA_HOST="127.0.0.1:11434"; & '+(ConvertTo-LaoPsLiteral $exe)+' serve'
         }
         'DevSpace' {
-            # Reuse the existing pinned checkout and its persisted configuration.
-            # Never start the LAO feature checkout as a second MCP server.
-            $stable=Join-Path ([IO.Path]::GetDirectoryName($root)) 'devspace-upstream-test'
-            $entry=Join-Path $stable 'bin\devspace.js'
-            $package=Join-Path $stable 'package.json'
+            # Run exactly one MCP server: DevSpace core remains pinned at 1.0.8,
+            # while this LAO build adds the opt-in LAO tool surface on top.
+            $entry=Join-Path $root 'bin\devspace.js'
+            $package=Join-Path $root 'package.json'
+            $pinFile=Join-Path $root 'docs\lao-devspace\DEVSPACE_VERSION_PIN.json'
             if (-not [IO.File]::Exists($entry) -or -not [IO.File]::Exists($package)) {
-                throw 'Instalação DevSpace esperada em devspace-upstream-test não encontrada.'
+                throw 'Build integrado do LAO/DevSpace não encontrado.'
             }
             $version=([IO.File]::ReadAllText($package) | ConvertFrom-Json).version
             if ($version -ne '1.0.8') { throw 'O DevSpace precisa corresponder à versão fixa 1.0.8.' }
+            if (-not [IO.File]::Exists($pinFile)) { throw 'Pin de versão do DevSpace não encontrado.' }
+            $pin=[IO.File]::ReadAllText($pinFile) | ConvertFrom-Json
+            if ($pin.version -ne '1.0.8') { throw 'Pin do DevSpace precisa permanecer em 1.0.8.' }
             $node=(Get-Command node.exe -ErrorAction Stop).Source
-            return '$env:DEVSPACE_LAO_ENABLED="false"; Set-Location -LiteralPath '+
-                (ConvertTo-LaoPsLiteral $stable)+'; & '+(ConvertTo-LaoPsLiteral $node)+' '+
+            $stateDir=Join-Path $env:LOCALAPPDATA 'LAODevSpace\state'
+            return '$env:DEVSPACE_LAO_ENABLED="true"; '+
+                '$env:DEVSPACE_LAO_STATE_DIR='+(ConvertTo-LaoPsLiteral ([IO.Path]::GetFullPath($stateDir)))+'; '+
+                'Set-Location -LiteralPath '+(ConvertTo-LaoPsLiteral $root)+'; & '+(ConvertTo-LaoPsLiteral $node)+' '+
                 (ConvertTo-LaoPsLiteral $entry)+' serve'
         }
     }
