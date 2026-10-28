@@ -113,6 +113,42 @@ if ($UiCheckOnly) {
             $settingsUi.Services.DevSpace.Text -notmatch 'DevSpace') {
             throw 'Switch and controlled dependency restart settings missing'
         }
+        $mockService=[pscustomobject]@{Name='LAO-MOCK-SERVICE';Status='Running'}
+        $safeSnapshot=[pscustomobject]@{
+            statusAuthenticated=$true;tasksAuthenticated=$true;activeTasks=0;reasons=@()
+        }
+        $unverifiedSnapshot=[pscustomobject]@{
+            statusAuthenticated=$true;tasksAuthenticated=$true;activeTasks=0
+            reasons=@('devspace_unverified')
+        }
+        $failedSnapshot=[pscustomobject]@{
+            statusAuthenticated=$true;tasksAuthenticated=$true;activeTasks=0
+            reasons=@('ollama_unavailable')
+        }
+        if ((Get-LaoDependencyRecoveryAction Ollama $safeSnapshot $mockService) -or
+            (Get-LaoDependencyRecoveryAction DevSpace $unverifiedSnapshot $mockService) -or
+            (Get-LaoDependencyRecoveryAction Ollama $failedSnapshot $null) -or
+            (Get-LaoDependencyRecoveryAction DevSpace $failedSnapshot $mockService)) {
+            throw 'Healthy, unverified, or unmanaged dependency must have no click action'
+        }
+        $recovery=Get-LaoDependencyRecoveryAction Ollama $failedSnapshot $mockService
+        if (-not $recovery -or $recovery.Operation -ne 'Restart') {
+            throw 'Confirmed Ollama outage must permit supervised recovery'
+        }
+        $stopped=[pscustomobject]@{Name='LAO-MOCK-SERVICE';Status='Stopped'}
+        $recovery=Get-LaoDependencyRecoveryAction DevSpace $unverifiedSnapshot $stopped
+        if (-not $recovery -or $recovery.Operation -ne 'Start') {
+            throw 'Explicitly stopped managed DevSpace service must permit start'
+        }
+        $failedSnapshot.activeTasks=1
+        if (Get-LaoDependencyRecoveryAction Ollama $failedSnapshot $mockService) {
+            throw 'Recovery must be blocked during active LAO tasks'
+        }
+        $failedSnapshot.activeTasks=0
+        $failedSnapshot.tasksAuthenticated=$false
+        if (Get-LaoDependencyRecoveryAction Ollama $failedSnapshot $mockService) {
+            throw 'Recovery must be blocked without verified LAO task safety'
+        }
         if ($ui.Form.ClientSize.Width -ne 420 -or $ui.Rows.Count -ne 8 -or
             $ui.Actions.Count -ne 4) {
             throw 'LAO native popup layout contract failed'
@@ -446,6 +482,7 @@ function Advance-LaoAsyncPoll {
 function Update-LaoTray($snapshot) {
         $script:trayStatus = $snapshot.status
         if ($script:popup) { Update-LaoPopup $script:popup $snapshot }
+        if ($script:popup) { Update-LaoDependencyRowActions $snapshot }
         $script:lastCheck = Get-Date
         $notify.Icon = $icons[$snapshot.status]
         $stateItem.Text = "Status: $($snapshot.label)"
@@ -497,9 +534,43 @@ function Open-LaoSettings {
         $script:settingsWindow.Form.Activate()
         return
     }
-    $script:settingsWindow=New-LaoSettingsForm $script:popup.Assets
+    $script:settingsWindow=New-LaoSettingsForm $script:popup.Assets { $script:pollSnapshot }
     $script:settingsWindow.Form.Add_FormClosed({$this.Dispose()})
     $script:settingsWindow.Form.Show()
+}
+
+function Update-LaoDependencyRowActions($snapshot) {
+    if (-not $script:popup) { return }
+    foreach ($key in @('ollama','mcp')) {
+        $kind=if ($key -eq 'ollama') {'Ollama'} else {'DevSpace'}
+        $row=$script:popup.Rows[$key]
+        $action=Get-LaoDependencyRecoveryAction $kind $snapshot
+        $cursor=if ($action) {[Windows.Forms.Cursors]::Hand}else{[Windows.Forms.Cursors]::Default}
+        foreach ($part in @($row.Title,$row.Value,$row.Dot)) {
+            $part.Cursor=$cursor
+            $part.AccessibleDescription=$(if ($action) {
+                'Serviço com falha. Clique para confirmar recuperação do '+$kind
+            } else { 'Somente status. Nenhuma ação disponível.' })
+        }
+        # Only error states gain a recovery affordance. Healthy/unverified
+        # rows retain the exact typography and text of the approved design.
+        if ($action) {
+            $row.Value.Text=$(if ($action.Operation -eq 'Start') {
+                'Parado · Iniciar'
+            } else {
+                'Offline · Reiniciar'
+            })
+            $row.Value.ForeColor=$script:popup.Colors.red
+        }
+    }
+}
+
+function Invoke-LaoDependencyRowClick([string]$Kind) {
+    if (-not $script:pollSnapshot) { return }
+    # No side effect at all on healthy, unverified or unmanaged lines.
+    if (-not (Get-LaoDependencyRecoveryAction $Kind $script:pollSnapshot)) { return }
+    [void](Invoke-LaoDependencyRecovery $Kind $script:pollSnapshot)
+    $script:nextPollAt=[DateTime]::MinValue
 }
 
 function Open-LaoModelCombo {
@@ -649,10 +720,13 @@ if ($script:popup) {
         }
     })
     foreach ($key in @('mcp','ollama')) {
-        $script:popup.Rows[$key].Title.Cursor=[Windows.Forms.Cursors]::Hand
-        $script:popup.Rows[$key].Value.Cursor=[Windows.Forms.Cursors]::Hand
-        $script:popup.Rows[$key].Title.Add_Click({ Open-LaoSettings })
-        $script:popup.Rows[$key].Value.Add_Click({ Open-LaoSettings })
+        $kind=if($key -eq 'ollama'){'Ollama'}else{'DevSpace'}
+        foreach ($field in @('Title','Value','Dot')) {
+            $control=$script:popup.Rows[$key][$field]
+            $control.Tag=$kind
+            $control.Cursor=[Windows.Forms.Cursors]::Default
+            $control.Add_Click({ Invoke-LaoDependencyRowClick ([string]$this.Tag) })
+        }
     }
     $notify.Add_MouseClick({
         if ($_.Button -eq [Windows.Forms.MouseButtons]::Left) {

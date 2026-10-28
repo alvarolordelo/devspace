@@ -44,7 +44,7 @@ test("LAO native action icons are supplied as approved vector-origin image asset
     "Do not regress to OS-dependent font glyphs for approved icons");
 });
 
-test("Windows tray preserves the approved popup and adds model/service interactions", () => {
+test("Windows tray preserves approved popup and never opens settings from dependency status rows", () => {
   const popup = readFileSync(fileURLToPath(new URL("./windows/lao-popup.ps1", import.meta.url)), "utf8");
   const trayText = readFileSync(tray, "utf8");
   const settings = readFileSync(fileURLToPath(new URL("./windows/lao-settings.ps1", import.meta.url)), "utf8");
@@ -52,7 +52,15 @@ test("Windows tray preserves the approved popup and adds model/service interacti
   assert.match(trayText, /dashboard\/api\/models\/select/);
   assert.match(trayText, /function Open-LaoSettings/);
   assert.match(settings, /Iniciar LAO e Monitor com Windows/);
-  assert.match(settings, /Restart-Service -Name \$service\.Name/);
+  assert.match(settings, /Restart-Service -Name \$fresh\.ServiceName/);
+  assert.match(settings, /Start-Service -Name \$fresh\.ServiceName/);
+  assert.match(settings, /function Get-LaoDependencyRecoveryAction/);
+  assert.match(settings, /devspace_unavailable/);
+  assert.doesNotMatch(settings, /reasons\s*-contains\s*'devspace_unverified'/,
+    "DevSpace not verified is not an outage and must not allow a restart");
+  assert.match(trayText, /\$control\.Add_Click\(\{ Invoke-LaoDependencyRowClick/);
+  assert.doesNotMatch(trayText, /Rows\[\$key\]\.Title\.Add_Click\(\{ Open-LaoSettings \}\)/);
+  assert.match(trayText, /function Update-LaoDependencyRowActions/);
   assert.match(settings, /MessageBoxButtons\]::YesNo/);
   assert.match(settings, /LAO_MANAGED_OLLAMA_SERVICE/);
   assert.match(settings, /LAO_MANAGED_DEVSPACE_SERVICE/);

@@ -11,7 +11,67 @@ function Get-LaoManagedService([string]$Kind) {
     return Get-Service -Name $name -ErrorAction SilentlyContinue
 }
 
-function New-LaoSettingsForm($Assets) {
+# Only a demonstrated service failure permits a recovery action. In
+# particular, devspace_unverified means "not authenticated/checked", NOT
+# "DevSpace is down" and must never trigger a restart.
+function Get-LaoDependencyRecoveryAction([string]$Kind,$Snapshot,$Service=$null) {
+    if (-not $Snapshot -or $Kind -notin @('Ollama','DevSpace')) { return $null }
+    if (-not $Snapshot.tasksAuthenticated -or
+        $null -eq $Snapshot.activeTasks -or [int]$Snapshot.activeTasks -gt 0) {
+        return $null
+    }
+    if (-not $PSBoundParameters.ContainsKey('Service')) {
+        $Service=Get-LaoManagedService $Kind
+    }
+    if (-not $Service) { return $null }
+    $status=[string]$Service.Status
+    if ($status -notin @('Running','Stopped')) { return $null }
+    $reasons=@($Snapshot.reasons)
+    $reason=$(if ($Kind -eq 'Ollama'){'ollama_unavailable'}else{'devspace_unavailable'})
+    $confirmedFault=$Snapshot.statusAuthenticated -and $reasons -contains $reason
+    # An explicitly configured/known Windows service being stopped is itself
+    # evidence of a problem, even if its HTTP state has not been checked.
+    if ($status -ne 'Stopped' -and -not $confirmedFault) { return $null }
+    return [pscustomobject]@{
+        Kind=$Kind
+        ServiceName=[string]$Service.Name
+        Operation=$(if($status -eq 'Stopped'){'Start'}else{'Restart'})
+    }
+}
+
+function Invoke-LaoDependencyRecovery([string]$Kind,$Snapshot) {
+    $candidate=Get-LaoDependencyRecoveryAction $Kind $Snapshot
+    if (-not $candidate) { return $false }
+    $verb=if($candidate.Operation -eq 'Start'){'Iniciar'}else{'Reiniciar'}
+    $question="$verb somente o serviço Windows $Kind ($($candidate.ServiceName))? A conexão poderá ser interrompida."
+    $confirmed=[Windows.Forms.MessageBox]::Show(
+        $question, "Confirmar ação: $Kind",
+        [Windows.Forms.MessageBoxButtons]::YesNo,
+        [Windows.Forms.MessageBoxIcon]::Warning)
+    if ($confirmed -ne [Windows.Forms.DialogResult]::Yes) { return $false }
+    # Re-evaluate after confirmation: a recovery request must never turn into
+    # an unconditional restart of a service that became healthy meanwhile.
+    $fresh=Get-LaoDependencyRecoveryAction $Kind $Snapshot
+    if (-not $fresh -or $fresh.ServiceName -cne $candidate.ServiceName -or
+        $fresh.Operation -ne $candidate.Operation) {
+        return $false
+    }
+    try {
+        if ($fresh.Operation -eq 'Start') {
+            Start-Service -Name $fresh.ServiceName -ErrorAction Stop
+        } else {
+            Restart-Service -Name $fresh.ServiceName -ErrorAction Stop
+        }
+        return $true
+    } catch {
+        [Windows.Forms.MessageBox]::Show(
+            'O Windows recusou a ação: '+$_.Exception.Message,
+            'LAO DevSpace') | Out-Null
+        return $false
+    }
+}
+
+function New-LaoSettingsForm($Assets,$SnapshotProvider) {
     $form=[Windows.Forms.Form]::new()
     $form.Text='LAO DevSpace · Configurações'
     $form.ClientSize=[Drawing.Size]::new(395,375)
@@ -80,8 +140,9 @@ function New-LaoSettingsForm($Assets) {
         $button.Location=[Drawing.Point]::new($(if($kind -eq 'Ollama'){20}else{202}),240)
         $button.Size=[Drawing.Size]::new(170,43)
         $button.Tag=$kind
-        $service=Get-LaoManagedService $kind
-        $button.Enabled=($null -ne $service -and $service.Status -eq 'Running')
+        $snapshot=if($SnapshotProvider){& $SnapshotProvider}else{$null}
+        $recovery=Get-LaoDependencyRecoveryAction $kind $snapshot
+        $button.Enabled=$null -ne $recovery
         $button.Text=$kind
         $button.FlatStyle=[Windows.Forms.FlatStyle]::Flat
         $button.FlatAppearance.BorderColor=[Drawing.ColorTranslator]::FromHtml('#CBD5E1')
@@ -91,31 +152,24 @@ function New-LaoSettingsForm($Assets) {
             $button.TextImageRelation=[Windows.Forms.TextImageRelation]::ImageBeforeText
         }
         $button.AccessibleDescription=$(if($button.Enabled){
-            'Reiniciar serviço Windows gerenciado com confirmação'
-        }else{'Indisponível: serviço Windows não gerenciado ou parado'})
+            'Recuperar somente a dependência com falha, mediante confirmação'
+        }else{'Sem ação: dependência saudável, não verificada ou não gerenciada'})
+        $button.Tag=[pscustomobject]@{Kind=$kind;SnapshotProvider=$SnapshotProvider}
         $button.Add_Click({
-            $kind=[string]$this.Tag
-            $service=Get-LaoManagedService $kind
-            if (!$service -or $service.Status -ne 'Running') { return }
-            $confirmed=[Windows.Forms.MessageBox]::Show(
-                'Reiniciar o serviço Windows '+$kind+' ('+$service.Name+')? Tarefas e conexões externas poderão ser interrompidas.',
-                'Confirmar reinício do '+$kind,
-                [Windows.Forms.MessageBoxButtons]::YesNo,
-                [Windows.Forms.MessageBoxIcon]::Warning)
-            if ($confirmed -ne [Windows.Forms.DialogResult]::Yes) { return }
+            $target=[string]$this.Tag.Kind
+            $snapshot=if($this.Tag.SnapshotProvider){& $this.Tag.SnapshotProvider}else{$null}
+            if (-not (Get-LaoDependencyRecoveryAction $target $snapshot)) { return }
             $this.Enabled=$false
             try {
-                Restart-Service -Name $service.Name -ErrorAction Stop
-                [Windows.Forms.MessageBox]::Show('Reinício de '+$kind+' solicitado ao Windows.','LAO DevSpace') | Out-Null
-            } catch {
-                [Windows.Forms.MessageBox]::Show('Reinício recusado: '+$_.Exception.Message,'LAO DevSpace') | Out-Null
+                [void](Invoke-LaoDependencyRecovery $target $snapshot)
             } finally {
-                $this.Enabled=[bool]((Get-LaoManagedService $kind).Status -eq 'Running')
+                $next=if($this.Tag.SnapshotProvider){& $this.Tag.SnapshotProvider}else{$null}
+                $this.Enabled=$null -ne (Get-LaoDependencyRecoveryAction $target $next)
             }
         })
         $form.Controls.Add($button)
         $controls[$kind]=$button
-        $status=AddText $(if($button.Enabled){'Serviço Windows ativo'}else{'Não gerenciado neste PC'}) `
+        $status=AddText $(if($button.Enabled){'Falha: recuperação possível'}else{'Sem ação disponível'}) `
             $(if($kind -eq 'Ollama'){20}else{202}) 288 170 29
         $status.ForeColor=$(if($button.Enabled){
             [Drawing.ColorTranslator]::FromHtml('#12794A')

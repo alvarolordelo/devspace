@@ -17,14 +17,18 @@ Clique na linha **Modelo padrão** do Monitor, ou no valor do mesmo card no Dash
 
 ## Reiniciar Ollama e DevSpace: somente quando gerenciados
 
-Ao clicar nas linhas **Ollama** ou **DevSpace MCP**, ou nas Configurações do Monitor, aparecem ações separadas **Reiniciar Ollama** e **Reiniciar DevSpace**.
+**Comportamento corrigido após teste do usuário:** as linhas **Ollama** e **DevSpace MCP** são **somente status** em condições normais. Clicar nelas com serviço respondendo, ou DevSpace apenas **Não verificado**, **não abre Configurações nem executa nada**. Configurações continuam disponíveis apenas pela engrenagem e pelo botão inferior aprovado.
+
+Se houver **falha comprovada**, nenhum trabalho LAO em execução, e a dependência estiver explicitamente vinculada a um serviço Windows gerenciado, o valor da linha muda temporariamente para **Offline · Reiniciar** (serviço rodando mas sem responder) ou **Parado · Iniciar** (serviço parado). Só então o cursor indica ação e o clique na própria linha solicita **confirmação específica para a dependência**, sem navegar para outra janela. A operação é revalidada após a confirmação.
+
+Os botões individuais da janela Configurações também só habilitam nesses cenários de falha. O estado **DevSpace MCP: Não verificado**, sozinho, não demonstra falha do DevSpace; ele pode estar funcionando e apenas exigir autenticação.
 
 Para evitar interromper o DevSpace que presta acesso MCP ao ChatGPT ou encerrar um Ollama utilizado por outras aplicações, esses botões **só ficam habilitados** se o operador tiver configurado explicitamente a identidade de um **Windows Service gerenciado**, em variáveis de ambiente do processo Monitor:
 
 - `LAO_MANAGED_OLLAMA_SERVICE`: nome exato do serviço Windows do Ollama.
 - `LAO_MANAGED_DEVSPACE_SERVICE`: nome exato do serviço Windows do DevSpace.
 
-O nome deve existir no SCM e o serviço deve estar rodando. Cada clique solicita confirmação nominal e o Windows controla a reinicialização com as permissões da conta atual. O fluxo não envia token ou comando arbitrário, **não mata processos por PID** e não reinicia silenciosamente o serviço original. Em caso de serviço não instalado ou não identificado, a ação fica **indisponível**, em vez de aparentar ter funcionado.
+O nome deve existir no SCM e o serviço deve estar **rodando com falha confirmada** (reiniciar), ou **parado** (iniciar). Cada clique solicita confirmação nominal e o Windows controla a operação com as permissões da conta atual. O fluxo não envia token ou comando arbitrário, **não mata processos por PID**, não executa recuperação durante tarefas LAO ativas e não reinicia silenciosamente o serviço original. Em caso de serviço não instalado ou não identificado, a ação fica **indisponível**, em vez de aparentar ter funcionado.
 
 **Diagnóstico nesta máquina:** em 27/10, não foram encontrados serviços Windows gerenciados com nomes Ollama, DevSpace ou LAO, nem variáveis de configuração desses nomes. Assim, **o reinício automático dessas duas dependências ainda não está operacional neste PC**; precisa primeiro de um ciclo de vida gerenciado e seguro, validado separadamente, antes de habilitar os botões. Nenhum serviço/processo externo foi parado ou reiniciado durante esta implementação.
 
