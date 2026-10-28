@@ -506,13 +506,16 @@ function Advance-LaoAsyncPoll {
 }
 
 function Update-LaoTray($snapshot) {
-        $script:trayStatus = $snapshot.status
+        $aggregate=Get-LaoAggregateUiState $snapshot
+        $displayStatus=[string]$aggregate.Status
+        $displayLabel=[string]$aggregate.Label
+        $script:trayStatus = $displayStatus
         if ($script:popup) { Update-LaoPopup $script:popup $snapshot }
         if ($script:popup) { Update-LaoDependencyRowActions $snapshot }
         $script:lastCheck = Get-Date
-        $notify.Icon = $icons[$snapshot.status]
-        $stateItem.Text = "Status: $($snapshot.label)"
-        $notify.Text = "LAO DevSpace - $($snapshot.label)"
+        $notify.Icon = $icons[$displayStatus]
+        $stateItem.Text = "Status: $displayLabel"
+        $notify.Text = "LAO DevSpace - $displayLabel"
         if ($snapshot.tasksAuthenticated) {
             $tasksItem.Text = "Tarefas: $($snapshot.activeTasks) executando; $($snapshot.pendingReviews) em revisao"
         } else {
@@ -520,7 +523,7 @@ function Update-LaoTray($snapshot) {
         }
         if ($EnableNotifications -and -not $AsyncProbeOnly -and $script:initialized) {
             $newReviews = if ($null -eq $snapshot.pendingReviews) { 0 } else { [int]$snapshot.pendingReviews }
-            if ($script:previousStatus -ne 'offline' -and $snapshot.status -eq 'offline') {
+            if ($script:previousStatus -ne 'offline' -and $displayStatus -eq 'offline') {
                 $notify.BalloonTipTitle = 'LAO DevSpace indisponivel'
                 $notify.BalloonTipText = 'O daemon local parou de responder.'
                 $notify.ShowBalloonTip(5000)
@@ -566,7 +569,7 @@ function Update-LaoTray($snapshot) {
             }
         }
         $script:initialized = $true
-        $script:previousStatus = $snapshot.status
+        $script:previousStatus = $displayStatus
         $script:previousReviews = if ($null -eq $snapshot.pendingReviews) { 0 } else { [int]$snapshot.pendingReviews }
         $script:previousTasksAuthenticated = $snapshot.tasksAuthenticated
         $script:previousResourceWarnings = @($snapshot.resourceWarnings)

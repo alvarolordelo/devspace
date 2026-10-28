@@ -70,6 +70,9 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.match(trayText, /\$control\.Add_Click\(\{ Invoke-LaoDependencyRowClick/);
   assert.doesNotMatch(trayText, /Rows\[\$key\]\.Title\.Add_Click\(\{ Open-LaoSettings \}\)/);
   assert.match(trayText, /function Update-LaoDependencyRowActions/);
+  assert.match(popup, /function Get-LaoAggregateUiState/);
+  assert.match(trayText, /\$aggregate=Get-LaoAggregateUiState \$snapshot/);
+  assert.match(trayText, /\$notify\.Icon = \$icons\[\$displayStatus\]/);
   assert.match(trayText, /\$script:popup\.StartAll\.Add_Click\(\{ Invoke-LaoStartAllComponents \}\)/);
   const start = readFileSync(fileURLToPath(new URL("./windows/lao-start.ps1", import.meta.url)), "utf8");
   assert.match(start, /function Invoke-LaoStartAllComponents/);
@@ -85,7 +88,6 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.match(popup, /TextRenderer\]::MeasureText/);
   assert.match(popup, /\$devspaceOk=.*devspace_unavailable/s);
   assert.match(popup, /\$ollamaOk=.*ollama_unavailable/s);
-  assert.match(popup, /elseif\(\$devspaceOk -and \$ollamaOk\)\{/);
   assert.match(start, /GetActiveTcpListeners\(\)/);
   assert.doesNotMatch(start, /BeginConnect\(|WaitOne\(200\)/,
     "Play port detection must not depend on a short loopback connection timeout");

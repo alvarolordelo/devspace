@@ -311,21 +311,38 @@ function Set-LaoComponentRow($popup,[string]$name,[string]$kind,[string]$status,
     }
 }
 
-function Update-LaoPopup($popup,$snapshot) {
-    if(!$popup -or !$snapshot){return}
+function Get-LaoAggregateUiState($snapshot) {
+    if (-not $snapshot) {
+        return [pscustomobject]@{Status='offline';Label='Serviço indisponível'}
+    }
     $reasons=@($snapshot.reasons)
     $laoLive=([string]$snapshot.status -ne 'offline')
     $devspaceOk=$snapshot.statusAuthenticated -and
         $reasons -notcontains 'devspace_unavailable' -and
         $reasons -notcontains 'devspace_unverified'
-    $ollamaOk=$snapshot.statusAuthenticated -and $reasons -notcontains 'ollama_unavailable'
-    $state=if(-not $laoLive){
-        'offline'
-    }elseif($null -ne $snapshot.pendingReviews -and $snapshot.pendingReviews -gt 0){
-        'review'
-    }elseif($devspaceOk -and $ollamaOk){
-        'active'
-    }else{'idle'}
+    $ollamaOk=$snapshot.statusAuthenticated -and
+        $reasons -notcontains 'ollama_unavailable'
+    if (-not $laoLive) {
+        return [pscustomobject]@{Status='offline';Label='Serviço indisponível'}
+    }
+    if ($null -ne $snapshot.pendingReviews -and [int]$snapshot.pendingReviews -gt 0) {
+        return [pscustomobject]@{Status='review';Label='Aguardando revisão'}
+    }
+    if ($devspaceOk -and $ollamaOk) {
+        $label=if($null -ne $snapshot.activeTasks -and [int]$snapshot.activeTasks -gt 0){
+            'Executando tarefas'
+        }else{'Ativo'}
+        return [pscustomobject]@{Status='active';Label=$label}
+    }
+    return [pscustomobject]@{Status='idle';Label='Atenção · parcialmente disponível'}
+}
+
+function Update-LaoPopup($popup,$snapshot) {
+    if(!$popup -or !$snapshot){return}
+    $reasons=@($snapshot.reasons)
+    $aggregate=Get-LaoAggregateUiState $snapshot
+    $state=[string]$aggregate.Status
+    $laoLive=([string]$snapshot.status -ne 'offline')
     $color=switch($state){
         active {$popup.Colors.green}
         review {$popup.Colors.yellow}
@@ -333,12 +350,7 @@ function Update-LaoPopup($popup,$snapshot) {
         default {$popup.Colors.gray}
     }
     $popup.HeaderDot.ForeColor=$color
-    $popup.HeaderText.Text=switch($state){
-        active {'Ativo'}
-        review {'Aguardando revisão'}
-        offline {'Serviço indisponível'}
-        default {'Atenção · parcialmente disponível'}
-    }
+    $popup.HeaderText.Text=[string]$aggregate.Label
     $popup.HeaderText.ForeColor=$color
     $live=$state -ne 'offline'
     Set-LaoComponentRow $popup service 'LAO' $(if($laoLive){'Respondendo'}else{'Sem resposta'}) $(if($laoLive){'good'}else{'bad'})
