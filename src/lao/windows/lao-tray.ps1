@@ -341,6 +341,9 @@ $context = [Windows.Forms.ApplicationContext]::new()
 $timer = [Windows.Forms.Timer]::new()
 $timer.Interval = 200
 [void](Initialize-LaoComponentVersions)
+$script:runningMonitorVersion=[string]$script:componentVersions['LAO']
+$script:versionRefreshTicks=0
+$script:selfRestartRequested=$false
 $script:initialized = $false
 $script:previousStatus = 'offline'
 $script:previousReviews = 0
@@ -402,6 +405,9 @@ function Start-LaoAsyncPoll {
         lastTaskId = $null
         lastTaskPhase = $null
         restartAvailable = $false
+        laoRunningVersion = $null
+        laoInstalledVersion = $null
+        laoUpdateAvailable = $false
         checkedAt = $null
     }
     $script:pollStage = 'live'
@@ -433,6 +439,25 @@ function Advance-LaoAsyncPoll {
             }
             $script:pollSnapshot.status = 'idle'
             $script:pollSnapshot.label = 'Dependencias indisponiveis'
+            $script:pollStage = 'version'
+            $script:pollTask = $publicClient.GetStringAsync($script:baseUrl + '/health/version')
+        }
+        'version' {
+            if ($null -ne $payload -and $payload.installedVersion -is [string] -and
+                $payload.installedVersion -match '^\d+\.\d+\.\d+') {
+                $script:pollSnapshot.laoRunningVersion=[string]$payload.runningVersion
+                $script:pollSnapshot.laoInstalledVersion=[string]$payload.installedVersion
+                $script:pollSnapshot.laoUpdateAvailable=($payload.updateAvailable -eq $true)
+                $script:componentVersions['LAO']=[string]$payload.installedVersion
+                if (-not $AsyncProbeOnly -and -not $script:selfRestartRequested -and
+                    $script:runningMonitorVersion -and
+                    [string]$payload.installedVersion -ne $script:runningMonitorVersion) {
+                    $script:selfRestartRequested=$true
+                    if ($script:popup) { Update-LaoPopup $script:popup $script:pollSnapshot }
+                    $context.ExitThread()
+                    return
+                }
+            }
             $script:pollStage = 'ready'
             $script:pollTask = $publicClient.GetStringAsync($script:baseUrl + '/health/ready')
         }
@@ -694,6 +719,11 @@ $timer.Add_Tick({
     Update-LaoLocalStarts
     if ($script:popup -and $script:pollSnapshot) { Update-LaoDependencyRowActions $script:pollSnapshot }
     $script:uiHeartbeatTicks++
+    $script:versionRefreshTicks++
+    if (($script:versionRefreshTicks % 150) -eq 0) {
+        foreach ($kind in @('DevSpace','Ollama')) { [void](Update-LaoComponentVersion $kind) }
+        if ($script:popup -and $script:pollSnapshot) { Update-LaoPopup $script:popup $script:pollSnapshot }
+    }
     if ($script:modelListTask -and $script:modelListTask.IsCompleted) {
         $task=$script:modelListTask
         $script:modelListTask=$null
@@ -706,7 +736,7 @@ $timer.Add_Tick({
             foreach ($name in $names) {
                 $script:popup.ModelCombo.Items.Add([string]$name) | Out-Null
             }
-            if ($names.Count -eq 0) { throw 'Nenhum modelo local instalado.' }
+            if ($names.Count -eq 0) { throw 'LAO_NO_LOCAL_MODELS' }
             $script:popup.ModelCombo.Enabled=$true
             if ($names -contains $models.selected) {
                 $script:popup.ModelCombo.SelectedItem=[string]$models.selected
@@ -719,9 +749,11 @@ $timer.Add_Tick({
         } catch {
             $script:popup.ModelCombo.Visible=$false
             $script:modelChanging=$false
+            $message=if ($_.Exception.Message -eq 'LAO_NO_LOCAL_MODELS') {
+                Get-LaoUiText 'NoLocalModelsFound'
+            } else { Get-LaoUiText 'LocalModelsQueryFailed' }
             [Windows.Forms.MessageBox]::Show(
-                'Não foi possível consultar os modelos do Ollama.',
-                'Modelos locais LAO') | Out-Null
+                $message,(Get-LaoUiText 'LocalModelsTitle')) | Out-Null
         }
     }
     if ($script:modelSaveTask -and $script:modelSaveTask.IsCompleted) {
@@ -925,6 +957,16 @@ try {
     if ($mutex) {
         try { $mutex.ReleaseMutex() } catch { }
         $mutex.Dispose()
+    }
+}
+if ($script:selfRestartRequested -and -not $AsyncProbeOnly) {
+    $launcher=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\scripts\launch-lao-monitor.ps1'))
+    if ([IO.File]::Exists($launcher)) {
+        try {
+            Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
+                '-NoProfile','-ExecutionPolicy','Bypass','-File',$launcher,'-Port',[string]$Port
+            ) | Out-Null
+        } catch { }
     }
 }
 if ($AsyncProbeOnly) {

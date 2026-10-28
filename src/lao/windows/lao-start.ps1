@@ -74,6 +74,8 @@ function Get-LaoUiText([string]$Key) {
         ServiceFaultDesc='Serviço com falha. Clique para confirmar recuperação do {0}'; StatusOnlyDesc='Somente status. Nenhuma ação disponível.'
         ComponentActionQuestion='{0} {1} agora? A conexão desse componente poderá ser interrompida temporariamente.';
         ComponentActionFailed='Não foi possível confirmar a ação. Consulte os logs e o histórico de recuperação.'
+        LocalModelsTitle='Modelos locais LAO'; NoLocalModelsFound='O Ollama está respondendo, mas retornou 0 modelos. Verifique se OLLAMA_MODELS aponta para a pasta dos modelos existentes e reinicie o Ollama em Configurações > Gerenciar componentes.';
+        LocalModelsQueryFailed='Não foi possível consultar a lista de modelos. Verifique a conexão com o LAO, o Ollama e a autenticação do monitor.'
     }
     $en=@{
         SettingsTitle='LAO DevSpace · Settings'; AutoStartTitle='Automatic startup';
@@ -111,6 +113,8 @@ function Get-LaoUiText([string]$Key) {
         ServiceFaultDesc='Service failure. Click to confirm recovery of {0}'; StatusOnlyDesc='Status only. No action available.'
         ComponentActionQuestion='{0} {1} now? This component connection may be temporarily interrupted.';
         ComponentActionFailed='The action could not be confirmed. Check logs and recovery history.'
+        LocalModelsTitle='LAO local models'; NoLocalModelsFound='Ollama is responding but returned 0 models. Make sure OLLAMA_MODELS points to your existing model directory, then restart Ollama under Settings > Manage components.';
+        LocalModelsQueryFailed='Could not retrieve the model list. Check the LAO and Ollama connections and the monitor authentication.'
     }
     $table=if($language -eq 'en-US'){$en}else{$pt}
     $value=$table[$Key]
@@ -207,6 +211,20 @@ function Test-LaoLocalStartAvailable([string]$Kind,$Snapshot) {
     return $Snapshot.statusAuthenticated -and @($Snapshot.reasons) -contains $reason
 }
 function ConvertTo-LaoPsLiteral([string]$Value) { return "'"+$Value.Replace("'","''")+"'" }
+function Get-LaoOllamaModelsPath {
+    # Read the persisted Windows user setting as well: a tray started at login
+    # can have an old process environment even after OLLAMA_MODELS is corrected.
+    $configured=[Environment]::GetEnvironmentVariable('OLLAMA_MODELS','User')
+    if (-not $configured) { $configured=[Environment]::GetEnvironmentVariable('OLLAMA_MODELS','Process') }
+    if (-not $configured) { $configured=[Environment]::GetEnvironmentVariable('OLLAMA_MODELS','Machine') }
+    if (-not $configured) { return $null }
+    $configured=[Environment]::ExpandEnvironmentVariables($configured)
+    if (-not [IO.Path]::IsPathRooted($configured) -or
+        -not (Test-Path -LiteralPath $configured -PathType Container)) {
+        throw 'OLLAMA_MODELS aponta para um diretório inexistente ou relativo. Corrija a configuração antes de iniciar o Ollama.'
+    }
+    return [IO.Path]::GetFullPath($configured)
+}
 function Get-LaoLocalStartCommand([string]$Kind) {
     $managed=if($Kind -ne 'LAO'){Get-LaoManagedService $Kind}else{
         Get-Service -Name LAODevSpace -ErrorAction SilentlyContinue
@@ -229,8 +247,15 @@ function Get-LaoLocalStartCommand([string]$Kind) {
                 if (-not $command) { throw 'Ollama não encontrado. Instale-o ou adicione ollama.exe ao PATH.' }
                 $exe=$command.Source
             }
-            # Match the local endpoint monitored by LAO, not an inherited remote host.
-            return '$env:OLLAMA_HOST="127.0.0.1:11434"; & '+(ConvertTo-LaoPsLiteral $exe)+' serve'
+            # Match the monitored endpoint and the persistent local model store.
+            # Otherwise Ollama silently starts with an empty default C: store
+            # even though the user's installed models live on another drive.
+            $modelsPath=Get-LaoOllamaModelsPath
+            $modelsEnv=if ($modelsPath) {
+                '$env:OLLAMA_MODELS='+(ConvertTo-LaoPsLiteral $modelsPath)+'; '
+            } else { '' }
+            return '$env:OLLAMA_HOST="127.0.0.1:11434"; '+$modelsEnv+
+                '& '+(ConvertTo-LaoPsLiteral $exe)+' serve'
         }
         'DevSpace' {
             # Run exactly one MCP server: DevSpace core remains pinned at 1.0.8,

@@ -75,6 +75,11 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.match(popup, /function Get-LaoAggregateUiState/);
   assert.match(trayText, /\$aggregate=Get-LaoAggregateUiState \$snapshot/);
   assert.match(trayText, /\$notify\.Icon = \$icons\[\$displayStatus\]/);
+  assert.match(trayText, /\/health\/version/);
+  assert.match(trayText, /laoInstalledVersion/);
+  assert.match(trayText, /laoUpdateAvailable/);
+  assert.match(trayText, /\$script:selfRestartRequested=\$true/);
+  assert.match(trayText, /scripts\\launch-lao-monitor\.ps1/);
   assert.match(trayText, /\$script:popup\.StartAll\.Add_Click\(\{ Invoke-LaoStartAllComponents \}\)/);
   const start = readFileSync(fileURLToPath(new URL("./windows/lao-start.ps1", import.meta.url)), "utf8");
   assert.match(start, /function Invoke-LaoStartAllComponents/);
@@ -89,6 +94,14 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.doesNotMatch(start, /DEVSPACE_LAO_ENABLED=\"false\"/);
   assert.match(start, /ollama\.exe/);
   assert.match(start, /--version/);
+  assert.match(start, /function Get-LaoOllamaModelsPath/);
+  assert.match(start, /GetEnvironmentVariable\('OLLAMA_MODELS','User'\)/,
+    "LAO must honor the persisted Windows model directory after a new session");
+  assert.match(start, /\$env:OLLAMA_MODELS=/,
+    "LAO must pass the model directory to the process that starts Ollama");
+  assert.match(trayText, /LAO_NO_LOCAL_MODELS/);
+  assert.match(trayText, /Get-LaoUiText 'NoLocalModelsFound'/,
+    "An empty, reachable model store must not be reported as an HTTP failure");
   assert.match(popup, /function Set-LaoComponentRow/);
   assert.match(popup, /TextRenderer\]::MeasureText/);
   assert.match(popup, /@\(10\.2,9\.8,9\.4,9\.0,8\.6\)/);

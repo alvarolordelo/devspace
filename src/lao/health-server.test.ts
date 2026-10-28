@@ -12,6 +12,14 @@ test("health server is opt-in only, and never binds a public interface", async (
     const live = await fetch(`http://127.0.0.1:${server.port}/health/live`);
     assert.equal(live.status, 200);
     assert.deepEqual(await live.json(), { live: true });
+    const version = await fetch(`http://127.0.0.1:${server.port}/health/version`);
+    assert.equal(version.status, 200);
+    const versionPayload = await version.json() as {
+      runningVersion: string; installedVersion: string; updateAvailable: boolean;
+    };
+    assert.match(versionPayload.runningVersion, /^\d+\.\d+\.\d+/);
+    assert.match(versionPayload.installedVersion, /^\d+\.\d+\.\d+/);
+    assert.equal(typeof versionPayload.updateAvailable, "boolean");
     const ready = await fetch(`http://127.0.0.1:${server.port}/health/ready`);
     assert.equal(ready.status, 503);
     assert.equal((await ready.json()).ready, false);

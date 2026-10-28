@@ -4,6 +4,7 @@ import type { LaoConfig } from "./config.js";
 import { measureLaoReadiness } from "./health.js";
 import { createLaoDashboardSessions, handleLaoDashboard, type LaoDashboardOptions } from "./dashboard.js";
 import type { LaoDevspaceStatus } from "./devspace-probe.js";
+import { LAOgetVersion } from "./version.js";
 
 /** Explicitly started, loopback-only health listener. Not installed as a service. */
 export async function startLaoHealthServer(
@@ -25,16 +26,19 @@ export async function startLaoHealthServer(
       res.end(JSON.stringify({ error: "dashboard_unavailable" }));
       return;
     }
-    if (req.method !== "GET" || (req.url !== "/health/live" && req.url !== "/health/ready")) {
+    if (req.method !== "GET" || (req.url !== "/health/live" && req.url !== "/health/ready" &&
+        req.url !== "/health/version")) {
       res.writeHead(404, { "content-type": "application/json", "cache-control": "no-store" });
       res.end(JSON.stringify({ error: "not_found" }));
       return;
     }
     const result = req.url === "/health/live"
       ? { live: true }
-      : await measureLaoReadiness(config, { devspaceStatus: options.devspaceStatus
-        ? await options.devspaceStatus()
-        : options.devspaceReady?.() ? "connected" : "unverified" });
+      : req.url === "/health/version"
+        ? LAOgetVersion()
+        : await measureLaoReadiness(config, { devspaceStatus: options.devspaceStatus
+          ? await options.devspaceStatus()
+          : options.devspaceReady?.() ? "connected" : "unverified" });
     res.writeHead(req.url === "/health/ready" && !("ready" in result && result.ready) ? 503 : 200, {
       "content-type": "application/json", "cache-control": "no-store",
     });
