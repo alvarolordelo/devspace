@@ -145,6 +145,26 @@ function rpcRequestLogFields(body: unknown): Record<string, unknown> {
 }
 
 const DEVSPACE_MCP_HANDLER_TIMEOUT_MS = 20_000;
+// The normal DevSpace RPC budget stays unchanged. A bounded LAO run can use
+// up to 180 s for a local model; the transport must outlive that deadline
+// plus a small persistence/cleanup margin. Never trust arbitrary RPC names
+// or client supplied timeout values to extend the DevSpace core budget.
+const DEVSPACE_LAO_MCP_HANDLER_TIMEOUT_MS = 210_000;
+const LONG_LAO_CALLS = new Set([
+  "lao_delegate", "lao_retry", "lao_write_run", "lao_write_retry", "lao_write_test",
+]);
+export function mcpHandlerTimeoutForRequest(body: unknown): number {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return DEVSPACE_MCP_HANDLER_TIMEOUT_MS;
+  }
+  const request = body as { method?: unknown; params?: unknown };
+  if (request.method !== "tools/call" ||
+      !request.params || typeof request.params !== "object" ||
+      Array.isArray(request.params)) return DEVSPACE_MCP_HANDLER_TIMEOUT_MS;
+  const params = request.params as { name?: unknown };
+  return typeof params.name === "string" && LONG_LAO_CALLS.has(params.name)
+    ? DEVSPACE_LAO_MCP_HANDLER_TIMEOUT_MS : DEVSPACE_MCP_HANDLER_TIMEOUT_MS;
+}
 
 function createReliableMcpNodeHandler(
   handler: ReturnType<typeof createMcpHandler>,
@@ -153,6 +173,13 @@ function createReliableMcpNodeHandler(
   return async (req: Request, res: Response, parsedBody: unknown): Promise<void> => {
     let finished = false;
     const abort = new AbortController();
+    const timeoutMs = mcpHandlerTimeoutForRequest(parsedBody);
+    let timedOut = false;
+    const deadline = setTimeout(() => {
+      timedOut = true;
+      abort.abort(new Error("MCP handler deadline exceeded"));
+    }, timeoutMs);
+    deadline.unref?.();
     const handleClose = () => {
       if (!finished) abort.abort();
     };
@@ -166,12 +193,10 @@ function createReliableMcpNodeHandler(
           ...(parsedBody !== undefined ? { parsedBody } : {}),
         }),
         new Promise<never>((_, reject) => {
-          const timer = setTimeout(() => {
-            abort.abort();
-            reject(new Error(`MCP handler timed out after ${DEVSPACE_MCP_HANDLER_TIMEOUT_MS}ms`));
-          }, DEVSPACE_MCP_HANDLER_TIMEOUT_MS);
-          timer.unref?.();
-          abort.signal.addEventListener("abort", () => clearTimeout(timer), { once: true });
+          abort.signal.addEventListener("abort", () => reject(new Error(
+            timedOut ? `MCP handler timed out after ${timeoutMs}ms`
+              : "MCP handler connection closed",
+          )), { once: true });
         }),
       ]);
       const headers: Record<string, string> = {};
@@ -185,6 +210,9 @@ function createReliableMcpNodeHandler(
       }
 
       if (isLongLivedMcpRequest(parsedBody)) {
+        // A subscription is intentionally open-ended once its handshake has
+        // completed. The RPC deadline guards setup, not the live SSE stream.
+        clearTimeout(deadline);
         res.writeHead(response.status, headers);
         for await (const chunk of response.body) {
           if (abort.signal.aborted) break;
@@ -201,6 +229,10 @@ function createReliableMcpNodeHandler(
       // gives the client an explicit Content-Length and prevents a stream
       // error from turning into a misleading HTTP 200 with a truncated body.
       const body = Buffer.from(await response.arrayBuffer());
+      if (abort.signal.aborted) {
+        throw new Error(timedOut ? `MCP handler timed out after ${timeoutMs}ms`
+          : "MCP handler connection closed");
+      }
       delete headers["transfer-encoding"];
       headers["content-length"] = String(body.byteLength);
       res.writeHead(response.status, headers);
@@ -219,6 +251,7 @@ function createReliableMcpNodeHandler(
         res.destroy(normalized);
       }
     } finally {
+      clearTimeout(deadline);
       res.off("close", handleClose);
     }
   };

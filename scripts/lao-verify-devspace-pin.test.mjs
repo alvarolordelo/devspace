@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -61,6 +62,17 @@ test("pinned DevSpace core cannot be upgraded by LAO changes", async () => {
     ).replace('  registerAppTool(\n    registrationTarget,\n    "show_changes",',
       '  registerLaoMcpTools(registrationTarget, loadLaoConfig(), { stateDir: config.stateDir, workspaces, worktreeRoot: config.worktreeRoot });\n\n' +
       '  registerAppTool(\n    registrationTarget,\n    "show_changes",'));
+    // Test the exact-overlay protection with a synthetic reviewed fixture.
+    // A core change without a deliberate digest change must always fail.
+    const reviewedServer = readFileSync(join(project, "src/server.ts"), "utf8")
+      .replace('import { getToolSurface } from "./tool-surfaces/index.js";',
+        'import { getToolSurface } from "./tool-surfaces/index.js";\n' +
+        'const timeout = mcpHandlerTimeoutForRequest(parsedBody);')
+      .replace('registerLaoMcpTools(registrationTarget, loadLaoConfig(), { stateDir: config.stateDir, workspaces, worktreeRoot: config.worktreeRoot });',
+        'registerLaoMcpTools(registrationTarget, loadLaoConfig(), { stateDir: laoMcpStateDir(config), workspaces, worktreeRoot: config.worktreeRoot });');
+    write("src/server.ts", reviewedServer);
+    pin.approvedServerDigest = createHash("sha256")
+      .update(reviewedServer.replace(/\r\n/g, "\n").trimEnd()).digest("hex");
     write("src/lao/feature.ts", "export const safe = true;\n");
     // Feature-side helpers used by the shipped LAO UI must not be confused
     // with upgrades of the fixed DevSpace engine.

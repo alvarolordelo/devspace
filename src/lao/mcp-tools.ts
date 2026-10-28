@@ -35,8 +35,13 @@ function asToolResult(data: object) {
   };
 }
 function toolFailure(error: unknown) {
-  const safeCode = error instanceof Error && error.name === "LaoOllamaError"
-    ? "ollama_error" : "lao_request_failed";
+  // Do not pretend a persisted task can be reviewed if its DevSpace worktree
+  // identity was lost (for example after a config/state-dir switch). Fail
+  // closed, with a useful code but without leaking paths or stored prompts.
+  const safeCode = error instanceof Error && error.message.startsWith("Unknown workspaceId:")
+    ? "workspace_unavailable"
+    : error instanceof Error && error.name === "LaoOllamaError"
+      ? "ollama_error" : "lao_request_failed";
   return {
     isError: true,
     content: [{ type: "text" as const, text: safeCode }],

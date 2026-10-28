@@ -1,7 +1,8 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [ValidateRange(0,30)][int]$DelaySeconds = 0,
-    [ValidateRange(1024,65535)][int]$Port = 7676
+    [ValidateRange(1024,65535)][int]$Port = 7676,
+    [switch]$VerifyOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,6 +25,43 @@ if ($package.version -ne '1.0.8' -or $pin.version -ne '1.0.8') {
 }
 
 $node = (Get-Command node.exe -ErrorAction Stop).Source
+# Changes to DevSpace's state directory or managed worktree root invalidate
+# existing LAO task-workspace IDs even if the separate LAO database survives.
+# Fail closed before stopping the active listener.
+Remove-Item Env:DEVSPACE_CONFIG_DIR -ErrorAction SilentlyContinue
+$configModule = Join-Path $root 'dist\config.js'
+if (-not [IO.File]::Exists($configModule)) { throw 'Build LAO before activating MCP.' }
+$configUri = ([Uri]([IO.Path]::GetFullPath($configModule))).AbsoluteUri
+$resolvedConfig = (& $node -e 'import(process.argv[1]).then(m=>{const c=m.loadConfig();console.log(JSON.stringify({stateDir:c.stateDir,worktreeRoot:c.worktreeRoot}))}).catch(e=>{console.error(e.message);process.exitCode=1})' $configUri | Select-Object -Last 1)
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($resolvedConfig)) {
+    throw 'Could not verify the DevSpace persistent workspace configuration.'
+}
+$resolvedPaths = $resolvedConfig | ConvertFrom-Json
+$stateMarkerDir = Join-Path $env:LOCALAPPDATA 'LAODevSpace'
+[IO.Directory]::CreateDirectory($stateMarkerDir) | Out-Null
+foreach ($entryPin in @(
+    @{ Name = 'devspace-state-dir.txt'; Path = $resolvedPaths.stateDir },
+    @{ Name = 'devspace-worktree-root.txt'; Path = $resolvedPaths.worktreeRoot }
+)) {
+    if ([string]::IsNullOrWhiteSpace($entryPin.Path)) {
+        throw 'DevSpace workspace path is missing.'
+    }
+    $targetPath = [IO.Path]::GetFullPath([string]$entryPin.Path)
+    $marker = Join-Path $stateMarkerDir $entryPin.Name
+    if ([IO.File]::Exists($marker)) {
+        $previous = [IO.File]::ReadAllText($marker).Trim()
+        if ([IO.Path]::GetFullPath($previous) -ine $targetPath) {
+            throw 'DevSpace workspace storage/worktree root has changed. Restore the previously pinned configuration before restarting.'
+        }
+    } else {
+        [IO.File]::WriteAllText($marker, $targetPath)
+    }
+}
+if ($VerifyOnly) {
+    Write-Output "DevSpace workspace state pin verified: $($resolvedPaths.stateDir)"
+    Write-Output "DevSpace managed worktree root pin verified: $($resolvedPaths.worktreeRoot)"
+    return
+}
 $listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue |
     Select-Object -First 1
 if ($listener) {
@@ -44,7 +82,6 @@ if ($listener) {
 
 $env:DEVSPACE_LAO_ENABLED = 'true'
 $env:DEVSPACE_LAO_STATE_DIR = Join-Path $env:LOCALAPPDATA 'LAODevSpace\state'
-Remove-Item Env:DEVSPACE_CONFIG_DIR -ErrorAction SilentlyContinue
 
 $logDir = Join-Path $env:LOCALAPPDATA 'LAODevSpace\logs'
 [IO.Directory]::CreateDirectory($logDir) | Out-Null

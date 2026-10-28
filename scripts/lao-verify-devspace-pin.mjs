@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
@@ -9,6 +10,11 @@ import { dirname, join, resolve } from "node:path";
 // Changing this constant is a deliberate base-upgrade event, never a side effect
 // of an LAO update, pnpm install, or fetching from upstream/main.
 export const APPROVED_DEVSPACE_COMMIT = "13c99eec5ed43eb9aba3fdc457bd912d3ce82211";
+// Exact reviewed overlay on the unchanged pinned DevSpace server. Future
+// modifications to the integration MUST deliberately update this digest,
+// review the diff and re-run the core security and regression tests.
+export const APPROVED_LAO_SERVER_SHA256 =
+  "0aaba8e6c4a1261c372900fd612857f8916cc4315d4bf5832b71dc9434e584b5";
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 function git(root, ...args) {
@@ -19,18 +25,7 @@ function git(root, ...args) {
 }
 function equalData(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
-function expectedLaoServer(source) {
-  const oldImport = 'import { getToolSurface } from "./tool-surfaces/index.js";';
-  const addedImport = oldImport +
-    '\nimport { loadLaoConfig } from "./lao/config.js";' +
-    '\nimport { registerLaoMcpTools } from "./lao/mcp-tools.js";';
-  const oldHook = '  registerAppTool(\n    registrationTarget,\n    "show_changes",';
-  const addedHook = '  registerLaoMcpTools(registrationTarget, loadLaoConfig(), { stateDir: config.stateDir, workspaces, worktreeRoot: config.worktreeRoot });\n\n' + oldHook;
-  if (!source.includes(oldImport) || !source.includes(oldHook)) {
-    throw new Error("Pinned DevSpace core has unexpected server integration anchors");
-  }
-  return source.replace(oldImport, addedImport).replace(oldHook, addedHook);
-}
+const digest = content => createHash("sha256").update(content).digest("hex");
 
 /**
  * No automatic upstream update is permitted in a feature release.
@@ -82,13 +77,20 @@ export function verifyDevspacePin({ root = repoRoot, pin } = {}) {
       throw new Error(file + " differs from pinned DevSpace; dependency upgrades are forbidden");
     }
   }
-  if (expectedLaoServer(show("src/server.ts")) !== current("src/server.ts")) {
+  const server = current("src/server.ts");
+  if (!server.includes('registerLaoMcpTools(registrationTarget, loadLaoConfig(), {') ||
+      !server.includes("stateDir: laoMcpStateDir(config)") ||
+      !server.includes("mcpHandlerTimeoutForRequest(parsedBody)")) {
+    throw new Error("Reviewed LAO MCP integration anchors are missing");
+  }
+  const approvedServerDigest = pin ? pin.approvedServerDigest : APPROVED_LAO_SERVER_SHA256;
+  if (digest(server) !== approvedServerDigest) {
     throw new Error("DevSpace server core differs from the approved LAO integration patch");
   }
   const changed = git(root, "diff", "--name-only", "--no-renames", base, "--")
     .split(/\r?\n/).filter(Boolean).map(x => x.replace(/\\/g, "/"));
   const exact = new Set([
-    "package.json", "src/server.ts", "bin/devspace-laod.js",
+    "package.json", "src/server.ts", "src/server.test.ts", "bin/devspace-laod.js",
     ".github/workflows/lao-feature-ci.yml",
     "scripts/lao-live-smoke.mjs", "scripts/lao-write-live-smoke.mjs",
     "scripts/lao-verify-devspace-pin.mjs",
@@ -97,6 +99,10 @@ export function verifyDevspacePin({ root = repoRoot, pin } = {}) {
     // unrestricted scripts/ or scripts/lao-* exception to the pinned core.
     "scripts/build-lao-action-icons.ps1",
     "scripts/authorize-lao-devspace.mjs",
+    "scripts/activate-lao-mcp-devspace.ps1",
+    "test/lao-language.ps1",
+    "test/lao-settings-local-restart.ps1",
+    "test/lao-start-all.ps1",
     "scripts/install-lao-shortcuts.ps1",
     "scripts/launch-lao-daemon.ps1",
     "scripts/launch-lao-monitor.cmd",

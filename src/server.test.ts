@@ -19,6 +19,7 @@ import {
   configureHttpServer,
   createMcpServer,
   createServer,
+  mcpHandlerTimeoutForRequest,
   DEVSPACE_HTTP_HEADERS_TIMEOUT_MS,
   DEVSPACE_HTTP_KEEP_ALIVE_TIMEOUT_MS,
 } from "./server.js";
@@ -27,6 +28,26 @@ import { WorkspaceRegistry } from "./workspaces.js";
 import { writeTestDevspaceConfig } from "./test-support/config.test.js";
 
 const execFileAsync = promisify(execFile);
+
+test("LAO has a bounded extended MCP deadline without changing normal DevSpace tools", () => {
+  assert.equal(mcpHandlerTimeoutForRequest(null), 20_000);
+  assert.equal(mcpHandlerTimeoutForRequest({ method: "tools/list" }), 20_000);
+  assert.equal(mcpHandlerTimeoutForRequest({
+    method: "tools/call", params: { name: "exec_command", max_wall_seconds: 999999 },
+  }), 20_000);
+  assert.equal(mcpHandlerTimeoutForRequest({
+    method: "tools/call", params: { name: "lao_status" },
+  }), 20_000);
+  for (const name of ["lao_delegate", "lao_retry", "lao_write_run",
+                       "lao_write_retry", "lao_write_test"]) {
+    assert.equal(mcpHandlerTimeoutForRequest({
+      method: "tools/call", params: { name },
+    }), 210_000);
+  }
+  assert.equal(mcpHandlerTimeoutForRequest({
+    method: "tools/call", params: { name: "lao_untrusted" },
+  }), 20_000);
+});
 
 test("tool modes expose the expected host-facing tool surface", async (t) => {
   const cases: Array<{
@@ -840,14 +861,24 @@ async function fixture(
   );
   const store = new SqliteWorkspaceStore(stateDir);
   const workspaces = new WorkspaceRegistry(config, store);
-  const server = createMcpServer(
-    config,
-    workspaces,
-    createReviewCheckpointManager(),
-    new ProcessSessionManager(),
-    resolveLocalAgentProviders,
-    [],
-  );
+  // This core-tool fixture must be independent of the operator's opt-in LAO
+  // environment. Dedicated LAO tests validate the separate tool surface.
+  const previousLao = process.env.DEVSPACE_LAO_ENABLED;
+  let server: ReturnType<typeof createMcpServer>;
+  try {
+    process.env.DEVSPACE_LAO_ENABLED = "false";
+    server = createMcpServer(
+      config,
+      workspaces,
+      createReviewCheckpointManager(),
+      new ProcessSessionManager(),
+      resolveLocalAgentProviders,
+      [],
+    );
+  } finally {
+    if (previousLao === undefined) delete process.env.DEVSPACE_LAO_ENABLED;
+    else process.env.DEVSPACE_LAO_ENABLED = previousLao;
+  }
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "devspace-test-client", version: "1.0.0" });
   await Promise.all([

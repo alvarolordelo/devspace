@@ -12,6 +12,8 @@ import { SqliteOAuthStore } from "../oauth-store.js";
 import { createServer } from "../server.js";
 import { writeTestDevspaceConfig } from "../test-support/config.test.js";
 import { createLaoDevspaceProbe } from "./devspace-probe.js";
+import { SqliteWorkspaceStore } from "../workspace-store.js";
+import { WorkspaceRegistry } from "../workspaces.js";
 
 test("authenticated MCP runs LAO with bounded fake or optional live Ollama", async (t) => {
   const live = process.env.LAO_MCP_LIVE === "true";
@@ -60,6 +62,11 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
       const content = firstMessage.includes("You propose a text patch only")
         ? "*** Begin Patch\n*** Add File: src/fixture.ts\n+export const fixture = true;\n*** End Patch"
         : "Bounded analysis from fake local model";
+      // An ordinary DevSpace RPC has a 20 s budget. LAO's bounded local-model
+      // calls must survive that budget without changing the core tools.
+      if (!live && firstMessage.includes("long-running LAO transport test")) {
+        await new Promise(resolve => setTimeout(resolve, 20_400));
+      }
       send({ done: true, message: { role: "assistant", content } });
       return;
     }
@@ -97,11 +104,14 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   });
   store.close();
   const tracked = ["DEVSPACE_LAO_ENABLED", "DEVSPACE_LAO_OLLAMA_URL", "DEVSPACE_LAO_MODEL",
+    "DEVSPACE_LAO_STATE_DIR",
     "LAO_WRITE_APPROVAL_ENABLED", "LAO_WRITE_PROMOTION_ENABLED"];
   const original = Object.fromEntries(tracked.map(k=>[k,process.env[k]])) as Record<string,string|undefined>;
   let running: ReturnType<typeof createServer>;
   try {
     process.env.DEVSPACE_LAO_ENABLED = "true";
+    // Never let a test inherit the operator's persisted live LAO database.
+    process.env.DEVSPACE_LAO_STATE_DIR = join(root, "lao-state");
     process.env.DEVSPACE_LAO_OLLAMA_URL = live ? "http://127.0.0.1:11434" : url;
     process.env.DEVSPACE_LAO_MODEL = live ? "granite4.2-8b:gpu" : "mock-granite:latest";
     // This isolated server is the only place where the test permits these
@@ -144,7 +154,7 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   assert.notEqual(JSON.parse(readFileSync(probeFile, "utf8")).refreshToken, probeRefreshToken,
     "OAuth refresh rotation is persisted for later checks");
   let id = 0;
-  const rpc = async (method: string, params: object, authenticated = true) => {
+  const rpc = async (method: string, params: object, authenticated = true, timeoutMs = 15_000) => {
     const response = await fetch(endpoint, {
       method: "POST", headers: {
         ...(authenticated ? { Authorization: "Bearer " + bearer } : {}),
@@ -161,7 +171,7 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
           "io.modelcontextprotocol/clientInfo": { name: "lao-http-e2e", version: "1" },
         }},
       }),
-      signal: AbortSignal.timeout(live ? 120000 : 15000),
+      signal: AbortSignal.timeout(live ? Math.max(timeoutMs,120000) : timeoutMs),
     });
     const text = await response.text();
     return { status: response.status, data: JSON.parse(text) as {
@@ -201,10 +211,20 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   }});
   assert.equal(result.data.result?.structuredContent?.task?.status,"awaiting_review");
   assert.equal(result.data.result?.structuredContent?.runs?.[0]?.status,"completed");
+  if (!live) {
+    const longRun = await rpc("tools/call",{name:"lao_delegate",arguments:{
+      workspace_id:workspaceId,goal:"long-running LAO transport test",
+      acceptance_criteria:["Return an analysis"],max_wall_seconds:45,
+    }},true,40_000);
+    assert.equal(longRun.status,200, "long LAO RPC must not hit the core 20s limit");
+    assert.equal(longRun.data.result?.structuredContent?.status,"awaiting_review");
+  }
   const denied = await rpc("tools/call",{name:"lao_result",arguments:{
     workspace_id:"fake-ws",task_id:taskId,
   }});
   assert.equal(denied.data.result?.structuredContent?.task,undefined);
+  assert.equal(denied.data.result?.isError,true,
+    "lost workspace identities must fail closed, not invent a different worktree");
   assert.equal((await rpc("tools/call",{name:"lao_result",arguments:{
     workspace_id:workspaceId,task_id:taskId,
   }},false)).status,401);
@@ -219,6 +239,16 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
     const writeTask = prepared.data.result?.structuredContent?.task_id;
     assert.equal(typeof managedId, "string");
     assert.equal(typeof writeTask, "string");
+    // Prove the identity survives a registry reconstruction (as after MCP
+    // restart), without reopening a different worktree or replacing its ID.
+    const persistedWorkspaceStore = new SqliteWorkspaceStore(config.stateDir);
+    try {
+      const recovered = await new WorkspaceRegistry(config,persistedWorkspaceStore)
+        .getWorkspace(managedId);
+      assert.equal(recovered.id,managedId);
+      assert.equal(recovered.mode,"worktree");
+      assert.equal(recovered.worktree?.managed,true);
+    } finally { persistedWorkspaceStore.close(); }
     const written = await rpc("tools/call",{name:"lao_write_run",arguments:{
       workspace_id:managedId,task_id:writeTask,
     }});
