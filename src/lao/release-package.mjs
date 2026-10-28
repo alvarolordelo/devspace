@@ -48,6 +48,7 @@ const approved = [
   "scripts/launch-lao-monitor.ps1",
   "scripts/launch-lao-monitor.cmd",
   "scripts/launch-lao-daemon.ps1",
+  "scripts/activate-lao-mcp-devspace.ps1",
   "src/lao/release-verify.mjs",
   "src/lao/release-portable.mjs",
   "src/lao/release-standalone.mjs",
