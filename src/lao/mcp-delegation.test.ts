@@ -37,15 +37,22 @@ test("opt-in MCP can delegate read-only, inspect durable run, and accept explici
         chatReadOnly: async () => "Technical read-only analysis",
       },
     });
-    assert.deepEqual(r.names(), ["lao_status", "lao_models", "lao_delegate", "lao_retry", "lao_result", "lao_review"]);
+    assert.deepEqual(r.names(), ["lao_status", "lao_models", "lao_pending", "lao_resume",
+      "lao_delegate", "lao_retry", "lao_result", "lao_review"]);
     const delegated = await r.get("lao_delegate")({
       workspace_id: "ws_authorized", goal: "Describe the component",
-      acceptance_criteria: ["Return a summary"], max_wall_seconds: 2,
+      acceptance_criteria: ["Return a summary"], requested_by: "gemini", max_wall_seconds: 2,
     });
     assert.equal(delegated.structuredContent?.status, "awaiting_review");
     assert.equal(delegated.structuredContent?.criteria_verified, false);
     const id = delegated.structuredContent?.task_id as string;
     assert.ok(id);
+    const pending = await r.get("lao_pending")({});
+    assert.ok((pending.structuredContent?.tasks as Array<{
+      task_id: string; requested_by: string;
+    }>).some(t => t.task_id === id && t.requested_by === "gemini"));
+    const resumed = await r.get("lao_resume")({ task_id: id });
+    assert.equal((resumed.structuredContent?.task as { requested_by: string })?.requested_by, "gemini");
     const result = await r.get("lao_result")({ workspace_id: "ws_authorized", task_id: id });
     const runs = result.structuredContent?.runs as Array<{ summary: string }>;
     assert.equal(runs[0]?.summary, "Technical read-only analysis");
@@ -64,6 +71,8 @@ test("opt-in MCP can delegate read-only, inspect durable run, and accept explici
     const final = await r.get("lao_result")({ workspace_id: "ws_authorized", task_id: id });
     assert.equal((final.structuredContent?.review as { decision: string })?.decision, "approved");
     assert.equal((final.structuredContent?.events as unknown[]).length, 7);
+    const remaining = await r.get("lao_pending")({});
+    assert.equal((remaining.structuredContent?.tasks as unknown[]).length, 0);
   } finally { rmSync(stateDir, { recursive: true, force: true }); }
 });
 

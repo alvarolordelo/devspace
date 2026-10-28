@@ -130,7 +130,7 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
       else process.env[key] = original[key];
     }
   }
-  const listener = running.app.listen(0,"127.0.0.1");
+  let listener = running.app.listen(0,"127.0.0.1");
   await once(listener,"listening");
   t.after(async () => {
     await running.close();
@@ -141,7 +141,7 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   });
   const a = listener.address();
   assert.ok(a && typeof a !== "string");
-  const endpoint = "http://127.0.0.1:" + a.port + "/mcp";
+  let endpoint = "http://127.0.0.1:" + a.port + "/mcp";
   const probeFile = join(root, "lao-probe-token.txt");
   writeFileSync(probeFile, JSON.stringify({
     accessToken: probeToken, refreshToken: probeRefreshToken,
@@ -154,7 +154,8 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   assert.notEqual(JSON.parse(readFileSync(probeFile, "utf8")).refreshToken, probeRefreshToken,
     "OAuth refresh rotation is persisted for later checks");
   let id = 0;
-  const rpc = async (method: string, params: object, authenticated = true, timeoutMs = 15_000) => {
+  const rpc = async (method: string, params: object, authenticated = true,
+    timeoutMs = 15_000, clientName = "lao-http-e2e") => {
     const response = await fetch(endpoint, {
       method: "POST", headers: {
         ...(authenticated ? { Authorization: "Bearer " + bearer } : {}),
@@ -168,7 +169,7 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
         params: { ...params, _meta: {
           "io.modelcontextprotocol/protocolVersion": "2026-07-28",
           "io.modelcontextprotocol/clientCapabilities": {},
-          "io.modelcontextprotocol/clientInfo": { name: "lao-http-e2e", version: "1" },
+          "io.modelcontextprotocol/clientInfo": { name: clientName, version: "1" },
         }},
       }),
       signal: AbortSignal.timeout(live ? Math.max(timeoutMs,120000) : timeoutMs),
@@ -184,6 +185,8 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   assert.equal(listed.status,200);
   assert.ok(listed.data.result?.tools?.some(x=>x.name==="lao_delegate"));
   assert.ok(listed.data.result?.tools?.some(x=>x.name==="lao_result"));
+  assert.ok(listed.data.result?.tools?.some(x=>x.name==="lao_pending"));
+  assert.ok(listed.data.result?.tools?.some(x=>x.name==="lao_resume"));
   assert.equal(listed.data.result?.tools?.some(x=>x.name==="lao_write_approve"), promotionLive);
   assert.equal(listed.data.result?.tools?.some(x=>x.name==="lao_write_promote"), promotionLive);
   const open = await rpc("tools/call",{ name:"open_workspace", arguments:{path:work} });
@@ -244,6 +247,8 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   assert.equal((await rpc("tools/call",{name:"lao_result",arguments:{
     workspace_id:workspaceId,task_id:taskId,
   }},false)).status,401);
+  let durableWriteTask: string | undefined;
+  let durableWriteWorkspace: string | undefined;
   {
     const prepared = await rpc("tools/call",{ name:"lao_write_prepare", arguments:{
       source_workspace_id: workspaceId, goal:"Create src/fixture.ts containing exactly: export const fixture = true;",
@@ -255,6 +260,8 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
     const writeTask = prepared.data.result?.structuredContent?.task_id;
     assert.equal(typeof managedId, "string");
     assert.equal(typeof writeTask, "string");
+    durableWriteTask = writeTask;
+    durableWriteWorkspace = managedId;
     // Prove the identity survives a registry reconstruction (as after MCP
     // restart), without reopening a different worktree or replacing its ID.
     const persistedWorkspaceStore = new SqliteWorkspaceStore(config.stateDir);
@@ -343,6 +350,69 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
       assert.equal(existsSync(join(work,"src","fixture.ts")),false);
       assert.equal(git("status","--porcelain"),"");
     }
+  }
+  // Exercise the real transport and durable workspace store across an actual
+  // server shutdown/recreation, not merely a second handle to an open SQLite DB.
+  // The handoff uses a different MCP client identity, with no original chat
+  // context. Neither restart nor resume may auto-approve or modify the source.
+  await running.close();
+  listener.closeAllConnections();
+  await new Promise<void>((resolve, reject) =>
+    listener.close(err => err ? reject(err) : resolve()));
+  const restartOriginal = Object.fromEntries(tracked.map(k => [k, process.env[k]])) as
+    Record<string, string | undefined>;
+  try {
+    process.env.DEVSPACE_LAO_ENABLED = "true";
+    process.env.DEVSPACE_LAO_STATE_DIR = join(root, "lao-state");
+    process.env.DEVSPACE_LAO_OLLAMA_URL = live ? "http://127.0.0.1:11434" : url;
+    process.env.DEVSPACE_LAO_MODEL = live ? "granite4.2-8b:gpu" : "mock-granite:latest";
+    // Same policy as the first instance; never widen permissions on reboot.
+    if (promotionLive) {
+      process.env.LAO_WRITE_APPROVAL_ENABLED = "true";
+      process.env.LAO_WRITE_PROMOTION_ENABLED = "true";
+    } else {
+      delete process.env.LAO_WRITE_APPROVAL_ENABLED;
+      delete process.env.LAO_WRITE_PROMOTION_ENABLED;
+    }
+    running = createServer(config);
+  } finally {
+    for (const key of tracked) {
+      if (restartOriginal[key] === undefined) delete process.env[key];
+      else process.env[key] = restartOriginal[key];
+    }
+  }
+  listener = running.app.listen(0, "127.0.0.1");
+  await once(listener, "listening");
+  const restartedAddress = listener.address();
+  assert.ok(restartedAddress && typeof restartedAddress !== "string");
+  endpoint = "http://127.0.0.1:" + restartedAddress.port + "/mcp";
+  assert.equal((await rpc("tools/list", {}, false)).status, 401);
+  const recoveredPending = await rpc("tools/call", {name:"lao_pending", arguments:{}},
+    true, 15_000, "claude");
+  assert.equal(recoveredPending.status, 200);
+  assert.equal(recoveredPending.data.result?.structuredContent?.tasks?.some(
+    (task:{task_id:string; requested_by:string; workspace_id:string}) =>
+      task.task_id === taskId && task.requested_by === "gemini" &&
+      task.workspace_id === workspaceId), true,
+    "another MCP client must see the original review after server restart");
+  const recoveredResume = await rpc("tools/call", {name:"lao_resume", arguments:{task_id:taskId}},
+    true, 15_000, "claude");
+  assert.equal(recoveredResume.status, 200);
+  assert.equal(recoveredResume.data.result?.structuredContent?.task?.requested_by, "gemini");
+  assert.equal(recoveredResume.data.result?.structuredContent?.task?.workspace_id, workspaceId);
+  assert.equal(recoveredResume.data.result?.structuredContent?.runs?.[0]?.status, "completed");
+  assert.equal(recoveredResume.data.result?.structuredContent?.review, null);
+  if (!promotionLive) {
+    assert.equal(recoveredPending.data.result?.structuredContent?.tasks?.some(
+      (task:{task_id:string; workspace_id:string}) =>
+        task.task_id === durableWriteTask && task.workspace_id === durableWriteWorkspace), true);
+    const writeRecovery = await rpc("tools/call", {name:"lao_resume",
+      arguments:{task_id:durableWriteTask}}, true, 15_000, "claude");
+    assert.equal(writeRecovery.data.result?.structuredContent?.task?.status, "awaiting_review");
+    assert.ok(writeRecovery.data.result?.structuredContent?.changed_files?.some(
+      (file:{path:string}) => file.path === "src/fixture.ts"));
+    assert.equal(existsSync(join(work,"src","fixture.ts")), false,
+      "recovering an isolated patch must not write to the source checkout");
   }
   if (live) console.log("Authenticated MCP + real Granite: task persisted and awaiting review");
 });

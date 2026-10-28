@@ -45,3 +45,28 @@ aplicativo externo, prometer uma chamada automática seria incorreto.
 Nenhuma etapa do botão executa alterações, aprova patches ou faz merge.
 O fluxo funciona após reiniciar o Windows desde que os bancos LAO e
 os registros de workspaces do DevSpace permaneçam no mesmo diretório.
+
+## Verificação de recuperação entre processos — 28/10/2026
+
+O teste `src/lao/mcp-http-e2e.test.ts` agora encerra de verdade seu servidor
+MCP OAuth descartável, cria outro processo lógico de servidor usando **os
+mesmos arquivos persistentes** e refaz chamadas HTTP autenticadas. Um cliente
+de teste identificado como `claude` consulta `lao_pending` e `lao_resume` para
+uma tarefa originalmente marcada `requested_by=gemini` e confirma a preservação
+do ID de tarefa, workspace, run e estado `awaiting_review`. O mesmo teste
+recupera o diff de uma tarefa escrita em worktree isolado e verifica que
+o checkout de origem continua intocado. Não aprova nem promove código.
+
+Além do MCP simulado, o smoke `LAO_MCP_LIVE=true` executou o fluxo com
+Granite real através de OAuth em servidor de teste e armazenamento temporário.
+Isso não constitui prova de um aplicativo Claude real nem de reinicialização
+física do Windows: esses são gates operacionais distintos.
+
+Na instalação ativa, uma chamada OAuth direta a `tools/list` confirmou que
+`lao_pending` e `lao_resume` **já estão publicados** no servidor. Uma consulta
+autenticada confirmou que ambos respondem sobre uma tarefa histórica pendente.
+Entretanto, o catálogo de ferramentas disponibilizado ao ChatGPT nesta sessão
+ainda não inclui essas duas funções. O próximo gate de integração com o host
+é atualizar/reconectar o catálogo do conector; não é preciso recriar as
+ferramentas no núcleo. Tarefas anteriores sem `requestedBy` continuam como
+`unknown`, conforme o contrato.
