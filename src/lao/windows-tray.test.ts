@@ -72,6 +72,22 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.match(trayText, /\$control\.Add_Click\(\{ Invoke-LaoDependencyRowClick/);
   assert.doesNotMatch(trayText, /Rows\[\$key\]\.Title\.Add_Click\(\{ Open-LaoSettings \}\)/);
   assert.match(trayText, /function Update-LaoDependencyRowActions/);
+  assert.match(trayText, /function Open-LaoReview/);
+  assert.match(trayText, /Show-LaoReviewDialog \$fresh\.tasks/);
+  assert.match(trayText, /\$reviewItem\.Add_Click\(\{ Open-LaoReview \}\)/);
+  assert.match(trayText, /\$script:reviewLoadTask=\$privateClient\.GetStringAsync\(/);
+  assert.doesNotMatch(trayText, /Open-LaoDashboard '#tarefas'/,
+    "Review / Continue must not redirect the operator to Dashboard");
+  const review = readFileSync(fileURLToPath(new URL("./windows/lao-review.ps1", import.meta.url)), "utf8");
+  const providers = readFileSync(fileURLToPath(new URL("./handoff-providers.ts", import.meta.url)), "utf8");
+  assert.match(review, /Get-LaoReviewCandidates/);
+  assert.match(review, /\[Windows\.Forms\.Clipboard\]::SetText\(\$message\)/);
+  assert.match(review, /Get-LaoHandoffInstruction/);
+  assert.doesNotMatch(review, /lao_review|lao_write_approve|lao_write_promote|\/dashboard\/api\/session\/arm/,
+    "The native handoff cannot approve, promote or depend on Dashboard login");
+  for (const url of ["https://chatgpt.com/", "https://claude.ai/new", "https://gemini.google.com/app", "https://grok.com/"]) {
+    assert.ok(review.includes(url) && providers.includes(url), `Native and dashboard provider URLs differ: ${url}`);
+  }
   assert.match(popup, /function Get-LaoAggregateUiState/);
   assert.match(trayText, /\$aggregate=Get-LaoAggregateUiState \$snapshot/);
   assert.match(trayText, /\$notify\.Icon = \$icons\[\$displayStatus\]/);
@@ -123,6 +139,15 @@ test("Windows tray preserves approved popup and never opens settings from depend
   assert.match(trayText, /Uma tarefa foi concluida/);
   assert.match(trayText, /Uma tarefa falhou/);
 });
+
+test("native LAO review lists persisted attention states and validates MCP handoff IDs",
+  { skip: process.platform !== "win32" }, () => {
+    const fixture = fileURLToPath(new URL("../../test/lao-review-handoff.ps1", import.meta.url));
+    const stdout = execFileSync("powershell.exe", [
+      "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File", fixture,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.match(stdout, /LAO native review handoff check passed/);
+  });
 
 test("Windows PowerShell 5.1 entrypoints keep the UTF-8 BOM when non-ASCII labels are present", () => {
   const dirs = [dirname(tray), fileURLToPath(new URL("../../scripts/", import.meta.url))];
@@ -227,6 +252,7 @@ test("LAO Windows tray polls loopback status and reads task counts only with a B
         res.end(JSON.stringify({ tasks: [
           { status: "running" }, { status: "awaiting_review" },
           { status: "completed" }, { status: "validating" },
+          { status: "interrupted" }, { status: "needs_revision" },
         ] }));
       } else { res.writeHead(404); res.end("{}"); }
     });
@@ -257,7 +283,8 @@ test("LAO Windows tray polls loopback status and reads task counts only with a B
       assert.equal(tokenUsed, true);
       assert.equal(withToken.status, "review");
       assert.equal(withToken.activeTasks, 2);
-      assert.equal(withToken.pendingReviews, 1);
+      assert.equal(withToken.pendingReviews, 3,
+        "Interrupted or revision-requested work must be visible after reboot");
       assert.equal(withToken.tasksAuthenticated, true);
 
       const unauthorized = await probe("x".repeat(40));

@@ -63,7 +63,7 @@ function Get-LaoTraySnapshot {
                         $_.status -in @('preparing','running','validating')
                     }).Count
                     $pendingReviews = @($response.tasks | Where-Object {
-                        $_.status -eq 'awaiting_review'
+                        $_.status -in @('awaiting_review','needs_revision','interrupted')
                     }).Count
                     if ($state -eq 'active' -and $pendingReviews -gt 0) {
                         $state = 'review'
@@ -97,6 +97,7 @@ foreach ($state in @('active','idle','offline','review')) {
 . (Join-Path $PSScriptRoot 'lao-popup.ps1')
 . (Join-Path $PSScriptRoot 'lao-autostart.ps1')
 . (Join-Path $PSScriptRoot 'lao-settings.ps1')
+. (Join-Path $PSScriptRoot 'lao-review.ps1')
 if ($CheckOnly) {
     foreach ($icon in $icons.Values) { $icon.Dispose() }
     Write-Output 'LAO tray check passed: Windows STA, WinForms and approved icons available.'
@@ -334,6 +335,8 @@ $stateItem = $menu.Items.Add((Get-LaoUiText 'TrayStatus')+': offline')
 $stateItem.Enabled = $false
 $tasksItem = $menu.Items.Add((Get-LaoUiText 'TrayTasks')+': '+(Get-LaoUiText 'WaitingQuery'))
 $tasksItem.Enabled = $false
+$reviewItem = $menu.Items.Add((Get-LaoUiText 'ReviewContinue'))
+$reviewItem.Enabled = $false
 $copyItem = $menu.Items.Add((Get-LaoUiText 'TrayCopy'))
 $quitItem = $menu.Items.Add((Get-LaoUiText 'TrayExit'))
 $notify.ContextMenuStrip = $menu
@@ -359,6 +362,7 @@ $script:asyncResult = $null
 $script:uiHeartbeatTicks = 0
 $script:launchTask = $null
 $script:launchTarget = $null
+$script:reviewLoadTask = $null
 $script:restartTask = $null
 $script:modelListTask = $null
 $script:modelSaveTask = $null
@@ -505,7 +509,7 @@ function Advance-LaoAsyncPoll {
                     $_.status -in @('preparing','running','validating')
                 }).Count
                 $reviews = @($payload.tasks | Where-Object {
-                    $_.status -eq 'awaiting_review'
+                    $_.status -in @('awaiting_review','needs_revision','interrupted')
                 }).Count
                 $script:pollSnapshot.activeTasks = $active
                 $script:pollSnapshot.pendingReviews = $reviews
@@ -552,6 +556,8 @@ function Update-LaoTray($snapshot) {
         } else {
             $tasksItem.Text = (Get-LaoUiText 'TrayTasks')+': '+(Get-LaoUiText 'TrayUnauth')
         }
+        $reviewItem.Enabled=($snapshot.tasksAuthenticated -and $null -ne $snapshot.pendingReviews -and
+            [int]$snapshot.pendingReviews -gt 0 -and -not $script:reviewLoadTask)
         if ($EnableNotifications -and -not $AsyncProbeOnly -and $script:initialized) {
             $newReviews = if ($null -eq $snapshot.pendingReviews) { 0 } else { [int]$snapshot.pendingReviews }
             if ($script:previousStatus -ne 'offline' -and $displayStatus -eq 'offline') {
@@ -610,6 +616,7 @@ function Update-LaoTray($snapshot) {
 
 function Update-LaoTrayLanguage {
     $openItem.Text=Get-LaoUiText 'TrayOpen'
+    $reviewItem.Text=Get-LaoUiText 'ReviewContinue'
     $copyItem.Text=Get-LaoUiText 'TrayCopy'
     $quitItem.Text=Get-LaoUiText 'TrayExit'
     if($script:popup){Apply-LaoPopupLanguage $script:popup}
@@ -637,6 +644,20 @@ function Open-LaoDashboard([string]$section = '') {
     } catch {
         $script:launchTask = $null
         Start-Process $destination | Out-Null
+    }
+}
+function Open-LaoReview {
+    if (-not $script:dashboardToken -or $script:reviewLoadTask -or
+        -not $script:pollSnapshot -or -not $script:pollSnapshot.tasksAuthenticated) { return }
+    # Never trust a 15-second-old task list at review time. Refresh with the
+    # authenticated read-only API; keep the WinForms event loop responsive.
+    $reviewItem.Enabled=$false
+    try {
+        $script:reviewLoadTask=$privateClient.GetStringAsync(
+            $script:baseUrl + '/dashboard/api/tasks')
+    } catch {
+        $script:reviewLoadTask=$null
+        [Windows.Forms.MessageBox]::Show((Get-LaoUiText 'ReviewQueryFailed'),'LAO DevSpace') | Out-Null
     }
 }
 function Open-LaoSettings {
@@ -717,6 +738,19 @@ function Open-LaoModelCombo {
 
 $timer.Add_Tick({
     Update-LaoLocalStarts
+    if ($script:reviewLoadTask -and $script:reviewLoadTask.IsCompleted) {
+        $reviewTask=$script:reviewLoadTask
+        $script:reviewLoadTask=$null
+        try {
+            $fresh=$reviewTask.GetAwaiter().GetResult() | ConvertFrom-Json -ErrorAction Stop
+            if ($null -eq $fresh.tasks -or $fresh.tasks -isnot [array]) { throw 'Invalid task list' }
+            if ($script:popup) { $script:popup.Form.Hide() }
+            Show-LaoReviewDialog $fresh.tasks
+        } catch {
+            [Windows.Forms.MessageBox]::Show((Get-LaoUiText 'ReviewQueryFailed'),'LAO DevSpace') | Out-Null
+        }
+        if ($script:pollSnapshot) { Update-LaoTray $script:pollSnapshot }
+    }
     if ($script:popup -and $script:pollSnapshot) { Update-LaoDependencyRowActions $script:pollSnapshot }
     $script:uiHeartbeatTicks++
     $script:versionRefreshTicks++
@@ -828,6 +862,7 @@ $timer.Add_Tick({
 $openItem.Add_Click({
     Open-LaoDashboard
 })
+$reviewItem.Add_Click({ Open-LaoReview })
 if ($script:popup) {
     foreach ($key in @('service','mcp','ollama')) {
         $button=$script:popup.Rows[$key].Start
@@ -907,7 +942,7 @@ if ($script:popup) {
         }
         $script:popup.Form.Hide()
         if ($reviews -gt 0) {
-            Open-LaoDashboard '#tarefas'
+            Open-LaoReview
         }
     })
     $script:popup.Actions.logs.Add_Click({

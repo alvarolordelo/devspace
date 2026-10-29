@@ -1,5 +1,17 @@
 # LAO DevSpace — Progresso verificável
 
+## Continuidade nativa no Monitor — 29/10/2026
+
+O botão de revisão existente no popup e uma nova opção no menu da
+bandeja permitem **Revisar / Continuar** sem visitar o Dashboard.
+Ao clicar, o monitor realiza nova consulta privada autenticada de tarefas
+e apresenta uma seleção WinForms para `awaiting_review`, `needs_revision`
+e `interrupted`; a escolha da IA apenas copia a instrução MCP e abre
+o cliente escolhido, sem autoaprovação, promoção ou execução de ferramentas.
+O layout de quatro ações e os recursos gráficos aprovados foram mantidos.
+O teste de diálogo simulado não substitui o clique humano no monitor instalado.
+
+
 ## Verificação MCP autenticada — 27/10/2026
 
 O daemon standalone agora consulta `tools/list` no endpoint MCP local com um token OAuth dedicado. Ele usa `LAO_DEVSPACE_MCP_TOKEN_FILE` quando definido ou, no Windows, o arquivo autorizado em `%LOCALAPPDATA%\LAODevSpace\devspace-mcp-token.txt`. Um HTTP 200 só marca **Conectado** se a resposta MCP autenticada contém as ferramentas esperadas. Falha de autenticação, token ausente, resposta inesperada ou timeout mantém **Não verificado**. Duas conexões recusadas marcam **Offline**. O Monitor e o Dashboard mostram os três estados sem alterar o layout aprovado.

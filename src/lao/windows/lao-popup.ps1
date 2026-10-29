@@ -233,7 +233,7 @@ function New-LaoPopup {
     $actions=@{}
     $items=@(@('dashboard',(Get-LaoUiText 'OpenDashboard'),'abrir-painel'),
              @('logs',(Get-LaoUiText 'ViewLogs'),'logs'),
-             @('context',(Get-LaoUiText 'ViewReview'),'reiniciar'),
+             @('context',(Get-LaoUiText 'ReviewContinue'),'reiniciar'),
              @('settings',(Get-LaoUiText 'Settings'),'configuracoes'))
     $pos=$y+172
     foreach($item in $items) {
@@ -413,7 +413,7 @@ function Update-LaoPopup($popup,$snapshot) {
     Set-LaoPopupRow $popup queue $(if($snapshot.tasksAuthenticated){"$($snapshot.activeTasks) $(Get-LaoUiText 'Running')"}else{Get-LaoUiText 'NotVerified'}) unknown
     if($null -ne $snapshot.pendingReviews -and $snapshot.pendingReviews -gt 0){
         $popup.Actions.context.Enabled=$true
-        $popup.Actions.context.Text=Get-LaoUiText 'ViewReview'
+        $popup.Actions.context.Text=Get-LaoUiText 'ReviewContinue'
         $popup.Actions.context.Tag=$popup.Assets['revisao']
         $popup.Rows.last.Title.Text=Get-LaoUiText 'Pending'
         Set-LaoPopupRow $popup last ((Get-LaoUiText 'ReviewCount') -f $snapshot.pendingReviews) review
