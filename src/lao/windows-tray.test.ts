@@ -181,6 +181,35 @@ test("LAO top Play starts only offline components and prevents repeat launches",
     assert.match(stdout, /LAO start-all click safety check passed/);
 });
 
+test("LAO startup auto-checks missing dependencies safely without modifying Windows startup",
+  { skip: process.platform !== "win32" }, () => {
+    const fixture = fileURLToPath(new URL("../../test/lao-bootstrap-dependencies.ps1", import.meta.url));
+    const stdout = execFileSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", fixture,
+    ], { encoding: "utf8", windowsHide: true, timeout: 15000 });
+    assert.match(stdout, /LAO startup dependency bootstrap safety check passed/);
+    const bootstrap = readFileSync(fileURLToPath(new URL("../../scripts/lao-ensure-dependencies.ps1", import.meta.url)), "utf8");
+    const daemonLauncher = readFileSync(fileURLToPath(new URL("../../scripts/launch-lao-daemon.ps1", import.meta.url)), "utf8");
+    const monitorLauncher = readFileSync(fileURLToPath(new URL("../../scripts/launch-lao-monitor.ps1", import.meta.url)), "utf8");
+    assert.match(daemonLauncher, /lao-ensure-dependencies\.ps1/);
+    assert.match(daemonLauncher, /-Start/);
+    assert.match(monitorLauncher, /lao-ensure-dependencies\.ps1/);
+    assert.match(monitorLauncher, /launch-lao-daemon\.ps1/);
+    assert.match(bootstrap, /activate-lao-mcp-devspace\.ps1.*-VerifyOnly/);
+    assert.match(bootstrap, /Get-LaoOllamaModelsPath|Get-LaoLocalStartCommand/);
+    assert.match(bootstrap, /Local\\LAODevSpace-Start-/);
+    assert.doesNotMatch(bootstrap, /Stop-Service|Stop-Process|Remove-Service|Set-Service|Set-LaoTrayAutostart/);
+  });
+
+test("LAO bootstrap starts a disposable worker without touching real services",
+  { skip: process.platform !== "win32" }, () => {
+    const fixture = fileURLToPath(new URL("../../test/lao-bootstrap-worker.ps1", import.meta.url));
+    const stdout = execFileSync("powershell.exe", [
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", fixture,
+    ], { encoding: "utf8", windowsHide: true, timeout: 18000 });
+    assert.match(stdout, /LAO isolated bootstrap worker check passed/);
+  });
+
 test("LAO Settings can safely restart verified local DevSpace and Ollama processes",
   { skip: process.platform !== "win32" }, () => {
     const mockScript = fileURLToPath(new URL("../../test/lao-settings-local-restart.ps1", import.meta.url));

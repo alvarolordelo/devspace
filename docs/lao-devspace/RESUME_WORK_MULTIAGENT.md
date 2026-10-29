@@ -58,6 +58,14 @@ Nenhuma etapa do botão executa alterações, aprova patches ou faz merge.
 O fluxo funciona após reiniciar o Windows desde que os bancos LAO e
 os registros de workspaces do DevSpace permaneçam no mesmo diretório.
 
+Quando o monitor ou daemon é iniciado, o bootstrap local agora verifica
+DevSpace e Ollama e tenta iniciar apenas as dependências sem listener.
+Isso é independente de qual cliente de IA havia solicitado a tarefa.
+Os registros de trabalho permanecem no SQLite, e o botão
+**Revisar / Continuar** do Monitor recupera os IDs após o reboot.
+O bootstrap não aprova, mescla, remove ou reexecuta tarefas e não liga a
+inicialização com Windows sem o switch explícito das Configurações.
+
 ### Verificações no Monitor (29/10/2026)
 
 - A tarefa real `c84f8450-5d9a-4f38-9dfb-711760cda558`, criada em

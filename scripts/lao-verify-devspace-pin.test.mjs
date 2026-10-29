@@ -80,11 +80,15 @@ test("pinned DevSpace core cannot be upgraded by LAO changes", async () => {
                         "authorize-lao-devspace.mjs",
                         "install-lao-shortcuts.ps1",
                         "launch-lao-daemon.ps1",
+                        "lao-ensure-dependencies.ps1",
                         "launch-lao-monitor.cmd",
                         "launch-lao-monitor.ps1"]) {
       write("scripts/" + name, "# LAO-only launcher test fixture\n");
     }
     write("test/lao-recovery-safety.ps1", "# LAO-only recovery test fixture\n");
+    write("test/lao-review-handoff.ps1", "# LAO-only review test fixture\n");
+    write("test/lao-bootstrap-dependencies.ps1", "# LAO-only startup test fixture\n");
+    write("test/lao-bootstrap-worker.ps1", "# LAO-only detached worker fixture\n");
     git(project, "add", ".");
     git(project, "-c", "user.name=LAO Test", "-c", "user.email=test@example.invalid",
       "commit", "-m", "LAO feature only");

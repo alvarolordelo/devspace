@@ -1,4 +1,5 @@
-# Start ONLY the foreground LAO daemon; no Windows service or DevSpace changes.
+﻿# Start the foreground LAO daemon. Missing dependencies are started on
+# startup, without restarting healthy services or modifying Windows autostart.
 # Keep the operator credential outside Git and outside the command line.
 [CmdletBinding()]
 param(
@@ -27,6 +28,31 @@ if (-not (Test-Path -LiteralPath $entry -PathType Leaf)) {
     throw 'LAO executable not found'
 }
 $node = (Get-Command node.exe -ErrorAction Stop).Source
+$mutexName='Local\LAODevSpace-Daemon-Startup-'+$Port
+$startupMutex=[Threading.Mutex]::new($false,$mutexName)
+$ownsStartupMutex=$false
+try {
+    try { $ownsStartupMutex=$startupMutex.WaitOne(0) }
+    catch [Threading.AbandonedMutexException] { $ownsStartupMutex=$true }
+    if (-not $ownsStartupMutex) {
+        Write-Output 'LAO daemon launcher is already running; no duplicate launched.'
+        return
+    }
+    # An occupied port is never a reason to terminate another process.
+    $used=[Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().
+        GetActiveTcpListeners() | Where-Object { $_.Port -eq $Port } | Select-Object -First 1
+    if ($used) {
+        Write-Output 'LAO daemon port is occupied; preserving the existing listener.'
+        return
+    }
+    $bootstrap=Join-Path $root 'scripts\lao-ensure-dependencies.ps1'
+    try {
+        & $bootstrap -Start | ForEach-Object { Write-Output $_ }
+    } catch {
+        # A damaged/unavailable dependency must not prevent LAO itself from
+        # starting and reporting which dependency is unavailable in /health.
+        Write-Warning ('LAO bootstrap: '+$_.Exception.Message)
+    }
 $env:LAO_DASHBOARD_TOKEN = $token
 $mcpTokenFile = Join-Path $env:LOCALAPPDATA 'LAODevSpace\devspace-mcp-token.txt'
 if (-not $env:LAO_DEVSPACE_MCP_TOKEN_FILE -and
@@ -60,4 +86,8 @@ try {
     if ($exitCode -ne 0) { throw "LAO daemon exited with code $exitCode" }
 } finally {
     Pop-Location
+}
+} finally {
+    if ($ownsStartupMutex) { $startupMutex.ReleaseMutex() }
+    $startupMutex.Dispose()
 }

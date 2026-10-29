@@ -1,5 +1,29 @@
 # LAO DevSpace — Progresso verificável
 
+## Bootstrap de dependências no início do LAO — 29/10/2026
+
+- Ao abrir o monitor pelo atalho normal, o launcher verifica se o daemon
+  LAO já está escutando; se não estiver, o inicia em processo independente.
+- Na inicialização do daemon e na abertura do monitor com LAO já ativo,
+  o script scripts/lao-ensure-dependencies.ps1 -Start confere DevSpace
+  (7676) e Ollama (11434), iniciando **apenas** os ausentes.
+- Uma porta ocupada nunca é substituída, encerrada ou tratada como
+  prova de que o serviço está funcional. O status definitivo continua
+  sendo avaliado pelos health checks autenticados do LAO.
+- O bootstrap valida a versão fixa 1.0.8 e os diretórios persistentes do
+  DevSpace antes de inicializá-lo, preservando os vínculos de workspace.
+  Para Ollama respeita OLLAMA_MODELS do usuário do Windows.
+- Há mutex compartilhado com o botão Play, proteção de instância única
+  do daemon e registros de erro fora do Git em %LOCALAPPDATA%/LAODevSpace/logs.
+- O comando sem -Start é apenas diagnóstico. Os testes simulados
+  cobrem ambos ativos, um ausente, dois ausentes e falha parcial.
+- **Nenhuma opção de inicialização com Windows foi ativada** nesta mudança.
+  O switch existente em Configurações continua sendo a única decisão de
+  instalar/remover os atalhos por usuário. Não foi instalado serviço,
+  agendamento, chave de registro ou alteração de política do Windows.
+- Falta validar o boot real após desligamento físico, a abertura do
+  monitor e a continuidade de uma tarefa persistida na conta do usuário.
+
 ## Continuidade nativa no Monitor — 29/10/2026
 
 O botão de revisão existente no popup e uma nova opção no menu da

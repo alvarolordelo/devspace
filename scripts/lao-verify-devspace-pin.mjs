@@ -107,7 +107,11 @@ export function verifyDevspacePin({ root = repoRoot, pin } = {}) {
     "scripts/launch-lao-daemon.ps1",
     "scripts/launch-lao-monitor.cmd",
     "scripts/launch-lao-monitor.ps1",
+    "scripts/lao-ensure-dependencies.ps1",
     "test/lao-recovery-safety.ps1",
+    "test/lao-review-handoff.ps1",
+    "test/lao-bootstrap-dependencies.ps1",
+    "test/lao-bootstrap-worker.ps1",
   ]);
   const forbidden = changed.filter(path => !exact.has(path) &&
     !path.startsWith("src/lao/") && !path.startsWith("docs/lao-devspace/"));

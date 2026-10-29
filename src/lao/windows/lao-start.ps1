@@ -40,13 +40,13 @@ function Get-LaoUiText([string]$Key) {
     $language=Get-LaoUiLanguage
     $pt=@{
         SettingsTitle='LAO DevSpace · Configurações'; AutoStartTitle='Inicialização automática';
-        AutoStartDesc='Iniciar LAO e Monitor ao entrar nesta conta do Windows.'; On='LIGADO'; Off='DESLIGADO';
-        StartWithWindows='Iniciar LAO e Monitor com Windows'; ManageComponents='Gerenciar componentes';
+        AutoStartDesc='Iniciar LAO, Monitor e dependências ausentes ao entrar no Windows.'; On='LIGADO'; Off='DESLIGADO';
+        StartWithWindows='Iniciar LAO, Monitor, DevSpace e Ollama com Windows'; ManageComponents='Gerenciar componentes';
         RestartNotice='Reinicializações exigem confirmação. Serviços externos são validados antes da ação.';
         Restart='Reiniciar'; Start='Iniciar'; Starting='Iniciando…'; ActiveRestart='Ativo: reinício disponível';
         StoppedStart='Parado: clique para iniciar'; NoSafeAction='Sem ação segura disponível';
         AwaitingResponse='Aguardando resposta'; ActiveTaskBlocked='Tarefa ativa: reinício bloqueado';
-        ConnectionUnverified='Conexão não verificada'; SettingsFoot='Inicialização apenas na conta atual; DevSpace/Ollama independentes.';
+        ConnectionUnverified='Conexão não verificada'; SettingsFoot='Só nesta conta. Serviços saudáveis não serão reiniciados.';
         Language='Idioma'; Portuguese='Português'; English='English';
         WaitingSignal='Aguardando sinal'; StartAll='Iniciar LAO, DevSpace e Ollama';
         StartAllDesc='Verifica os três serviços e inicia apenas os que estiverem parados'; DefaultModel='Modelo padrão';
@@ -87,13 +87,13 @@ function Get-LaoUiText([string]$Key) {
     }
     $en=@{
         SettingsTitle='LAO DevSpace · Settings'; AutoStartTitle='Automatic startup';
-        AutoStartDesc='Start LAO and Monitor when signing in to this Windows account.'; On='ON'; Off='OFF';
-        StartWithWindows='Start LAO and Monitor with Windows'; ManageComponents='Manage components';
+        AutoStartDesc='Start LAO, Monitor and missing dependencies when signing in.'; On='ON'; Off='OFF';
+        StartWithWindows='Start LAO, Monitor, DevSpace and Ollama with Windows'; ManageComponents='Manage components';
         RestartNotice='Restarts require confirmation. External services are validated before the action.';
         Restart='Restart'; Start='Start'; Starting='Starting…'; ActiveRestart='Active: restart available';
         StoppedStart='Stopped: click to start'; NoSafeAction='No safe action available';
         AwaitingResponse='Waiting for response'; ActiveTaskBlocked='Active task: restart blocked';
-        ConnectionUnverified='Connection not verified'; SettingsFoot='Startup only for the current account; DevSpace/Ollama remain independent.';
+        ConnectionUnverified='Connection not verified'; SettingsFoot='Current account only. Healthy services will not be restarted.';
         Language='Language'; Portuguese='Português'; English='English';
         WaitingSignal='Waiting for signal'; StartAll='Start LAO, DevSpace and Ollama';
         StartAllDesc='Checks all three services and starts only those that are stopped'; DefaultModel='Default model';
