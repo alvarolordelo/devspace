@@ -16,6 +16,12 @@ Não se armazenam URLs externas, tokens nem IDs privados de sessão em
 
 ## MCP comum, independente do provedor
 
+- **`lao_continue`**: comando direto, sem ID ou contexto de conversa.
+  Ativado pela solicitação natural `continue LAO` / `continuar o LAO`,
+  retorna até dez tarefas com pedido, origem, resultado da última
+  execução, evidências de testes e arquivos alterados, **somente leitura**.
+  Contrato e fallback: `CONTINUE_LAO.md`.
+
 - `lao_pending`: lista até 100 tarefas em revisão, com revisões solicitadas
   ou interrompidas, incluindo título resumido, ID e origem. Verifica se
   o workspace original ainda está autorizado/recuperável.

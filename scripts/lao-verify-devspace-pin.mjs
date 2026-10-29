@@ -108,6 +108,7 @@ export function verifyDevspacePin({ root = repoRoot, pin } = {}) {
     "scripts/launch-lao-monitor.cmd",
     "scripts/launch-lao-monitor.ps1",
     "scripts/lao-ensure-dependencies.ps1",
+    "scripts/lao-continue.mjs",
     "test/lao-recovery-safety.ps1",
     "test/lao-review-handoff.ps1",
     "test/lao-bootstrap-dependencies.ps1",

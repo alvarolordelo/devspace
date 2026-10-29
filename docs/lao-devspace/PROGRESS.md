@@ -1,5 +1,20 @@
 # LAO DevSpace — Progresso verificável
 
+## Comando `continue LAO` para uma nova conversa — 29/10/2026
+
+- Nova ferramenta MCP read-only `lao_continue`: nenhuma entrada além do
+  comando natural é necessária. Retorna até dez tarefas para revisão com
+  contexto salvo, origem, modelo, último resultado, testes e mudanças.
+  Exclui workspaces sem autorização e não altera status ou arquivos.
+- Fallback local `node scripts/lao-continue.mjs`: SQLite read-only,
+  executável sem memória de conversa. As duas tarefas reais pendentes
+  foram identificadas, incluindo a anterior à queda de energia.
+- Testes incluem descoberta MCP, reabertura de servidor com cliente novo,
+  acesso negado a workspace e leitura somente do banco.
+- Documentação de uso, aliases e limitações de atualização do catálogo
+  do host em `CONTINUE_LAO.md`. A validação humana em nova conversa com
+  o conector atualizado continua sendo o gate final.
+
 ## Bootstrap de dependências no início do LAO — 29/10/2026
 
 - Ao abrir o monitor pelo atalho normal, o launcher verifica se o daemon

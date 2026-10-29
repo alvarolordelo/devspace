@@ -132,6 +132,66 @@ export function registerLaoMcpTools(
     } catch (error) { return toolFailure(error); }
   });
 
+  // Single, provider-neutral entry point for the natural-language command
+  // "continue LAO" / "continuar o LAO". The host does not need to remember
+  // task IDs from an earlier chat; SQLite and the DevSpace registry do.
+  server.registerTool("lao_continue", {
+    title: "Continue LAO — recover pending tasks for review",
+    description: "CALL THIS when the user says 'continue LAO', 'continuar LAO', 'continuar o LAO', 'revisar tarefas do LAO' or 'continue lá' referring to LAO. Read-only one-call recovery after reboot/new chat: lists outstanding review/revision/interrupted tasks and their stored context, requester, run summaries, tests and changed files. Do NOT approve, retry, run a model or change files. Present pending work for human review.",
+    inputSchema: {},
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  }, async () => {
+    try {
+      return await withStore(context.stateDir, async store => {
+        const pending = store.list().filter(task =>
+          ["awaiting_review", "needs_revision", "interrupted"].includes(task.status));
+        const items: Array<{
+          task_id: string; workspace_id: string; requested_by: string;
+          status: string; updated_at: string; goal: string; model: string;
+          acceptance_criteria: string[]; write_mode: string;
+          latest_run: { status: string; model: string; summary: string | null; error_code: string | null } | null;
+          changed_files: Array<{ path: string; operation: string }>;
+          latest_test: { passed: boolean; executed: boolean; failure_code: string | null } | null;
+          latest_review: { decision: string; note: string } | null;
+        }> = [];
+        let accessible = 0;
+        for (const task of pending) {
+          try { await context.workspaces.getWorkspace(task.workspaceId); }
+          catch { continue; } // Preserve the exact authorized-workspace boundary.
+          accessible += 1;
+          if (items.length >= 10) continue;
+          const run = store.getRuns(task.id).at(-1);
+          const write = store.getWriteEvidence(task.id).at(-1);
+          const test = store.getTestEvidence(task.id).at(-1);
+          const review = store.getReview(task.id);
+          items.push({
+            task_id: task.id, workspace_id: task.workspaceId,
+            requested_by: task.requestedBy ?? "unknown",
+            status: task.status, updated_at: task.updatedAt,
+            goal: task.goal.slice(0, 1200), model: task.model,
+            acceptance_criteria: task.acceptanceCriteria.slice(0, 10),
+            write_mode: task.permissions.write,
+            latest_run: run ? { status: run.status, model: run.model,
+              summary: run.summary?.slice(0, 1800) ?? null,
+              error_code: run.errorCode } : null,
+            changed_files: write?.applied.files.slice(0, 5).map(file =>
+              ({ path: file.path, operation: file.operation })) ?? [],
+            latest_test: test ? { passed: test.passed, executed: test.executed,
+              failure_code: test.failureCode } : null,
+            latest_review: review ? { decision: review.decision,
+              note: review.note.slice(0, 500) } : null,
+          });
+        }
+        return asToolResult({
+          command: "continue_lao", tasks: items, total_pending: accessible,
+          has_more: accessible > items.length,
+          requires_human_review: true, changes_applied: false,
+          instruction: "Present pending tasks and findings. For detailed review of a selected task call lao_resume(task_id); never approve, promote, execute or retry without explicit permission.",
+        });
+      });
+    } catch (error) { return toolFailure(error); }
+  });
+
   server.registerTool("lao_resume", {
     title: "Recover LAO task for review or continuation",
     description: "Use an ID from lao_pending or the LAO dashboard. Recovers original request, requester, results, tests, review and isolated change summary from durable storage. Works across supported MCP clients, but never approves or modifies code.",

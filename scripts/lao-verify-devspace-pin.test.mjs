@@ -81,6 +81,7 @@ test("pinned DevSpace core cannot be upgraded by LAO changes", async () => {
                         "install-lao-shortcuts.ps1",
                         "launch-lao-daemon.ps1",
                         "lao-ensure-dependencies.ps1",
+                        "lao-continue.mjs",
                         "launch-lao-monitor.cmd",
                         "launch-lao-monitor.ps1"]) {
       write("scripts/" + name, "# LAO-only launcher test fixture\n");

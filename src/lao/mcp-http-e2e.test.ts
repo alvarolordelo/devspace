@@ -186,6 +186,7 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   assert.ok(listed.data.result?.tools?.some(x=>x.name==="lao_delegate"));
   assert.ok(listed.data.result?.tools?.some(x=>x.name==="lao_result"));
   assert.ok(listed.data.result?.tools?.some(x=>x.name==="lao_pending"));
+  assert.ok(listed.data.result?.tools?.some(x=>x.name==="lao_continue"));
   assert.ok(listed.data.result?.tools?.some(x=>x.name==="lao_resume"));
   assert.equal(listed.data.result?.tools?.some(x=>x.name==="lao_write_approve"), promotionLive);
   assert.equal(listed.data.result?.tools?.some(x=>x.name==="lao_write_promote"), promotionLive);
@@ -220,6 +221,12 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
   assert.equal(pending.data.result?.structuredContent?.tasks?.some(
     (task:{task_id:string;requested_by:string}) =>
       task.task_id===taskId && task.requested_by==="gemini"),true);
+  const continueLao = await rpc("tools/call",{name:"lao_continue",arguments:{}});
+  assert.equal(continueLao.data.result?.structuredContent?.command, "continue_lao");
+  assert.equal(continueLao.data.result?.structuredContent?.changes_applied, false);
+  assert.equal(continueLao.data.result?.structuredContent?.tasks?.some(
+    (task:{task_id:string;requested_by:string}) =>
+      task.task_id === taskId && task.requested_by === "gemini"), true);
   const resumed = await rpc("tools/call",{name:"lao_resume",arguments:{task_id:taskId}});
   assert.equal(resumed.status,200);
   assert.equal(resumed.data.result?.structuredContent?.task?.requested_by,"gemini");
@@ -395,6 +402,17 @@ test("authenticated MCP runs LAO with bounded fake or optional live Ollama", asy
       task.task_id === taskId && task.requested_by === "gemini" &&
       task.workspace_id === workspaceId), true,
     "another MCP client must see the original review after server restart");
+  // Exact acceptance path: after a hard session break another agent says only
+  // "continue LAO"; it supplies neither the original task ID nor workspace.
+  const recoveredContinue = await rpc("tools/call", {name:"lao_continue", arguments:{}},
+    true, 15_000, "claude");
+  assert.equal(recoveredContinue.status, 200);
+  assert.equal(recoveredContinue.data.result?.structuredContent?.tasks?.some(
+    (task:{task_id:string; requested_by:string; latest_run:{status:string}}) =>
+      task.task_id === taskId && task.requested_by === "gemini" &&
+      task.latest_run?.status === "completed"), true);
+  assert.equal(recoveredContinue.data.result?.structuredContent?.changes_applied, false);
+  assert.equal(recoveredContinue.data.result?.structuredContent?.requires_human_review, true);
   const recoveredResume = await rpc("tools/call", {name:"lao_resume", arguments:{task_id:taskId}},
     true, 15_000, "claude");
   assert.equal(recoveredResume.status, 200);
