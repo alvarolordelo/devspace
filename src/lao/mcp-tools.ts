@@ -49,10 +49,22 @@ function toolFailure(error: unknown) {
   // Do not pretend a persisted task can be reviewed if its DevSpace worktree
   // identity was lost (for example after a config/state-dir switch). Fail
   // closed, with a useful code but without leaking paths or stored prompts.
-  const safeCode = error instanceof Error && error.message.startsWith("Unknown workspaceId:")
-    ? "workspace_unavailable"
-    : error instanceof Error && error.name === "LaoOllamaError"
-      ? "ollama_error" : "lao_request_failed";
+  let safeCode = "lao_request_failed";
+  if (error instanceof Error) {
+    if (error.message.startsWith("Unknown workspaceId:")) {
+      safeCode = "workspace_unavailable";
+    } else if (error.name === "LaoOllamaError") {
+      safeCode = "ollama_error";
+    } else if (error.message === "A source checkout is required") {
+      safeCode = "source_checkout_required";
+    } else if (error.message === "Only an authorized feature-branch checkout can be a write source") {
+      safeCode = "source_feature_branch_required";
+    } else if (error.message === "Source checkout must be clean") {
+      safeCode = "source_checkout_dirty";
+    } else if (error.message === "Duplicate write paths") {
+      safeCode = "duplicate_write_paths";
+    }
+  }
   return {
     isError: true,
     content: [{ type: "text" as const, text: safeCode }],

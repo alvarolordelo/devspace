@@ -88,6 +88,13 @@ test("MCP supervisor prepares isolated worktree, runs model patch, persists diff
     assert.equal(invalid.isError, true);
     assert.equal(created, 0, "invalid path must not create worktree");
 
+    writeFileSync(join(repo, "README.md"), "Dirty source\n");
+    const dirtySource = await prepare();
+    assert.equal(dirtySource.isError, true);
+    assert.equal(dirtySource.content[0]?.text, "source_checkout_dirty");
+    assert.equal(created, 0, "dirty source must not create worktree");
+    git(repo, "checkout", "--", "README.md");
+
     const prepared = await prepare();
     assert.equal(prepared.structuredContent.status, "created");
     assert.equal(prepared.structuredContent.shell_allowed, false);
@@ -267,6 +274,7 @@ test("MCP supervisor prepares isolated worktree, runs model patch, persists diff
     git(repo, "branch", "-m", "main");
     const stableBlocked = await prepare();
     assert.equal(stableBlocked.isError, true, "main checkout must not be accepted as a source");
+    assert.equal(stableBlocked.content[0]?.text, "source_feature_branch_required");
     assert.equal(created, 4);
   } finally {
     for (const path of worktrees) {
